@@ -207,3 +207,14 @@ marimo/_lsp/
 __marimo__/
 
 _version.py
+
+*.zip
+*.dbf
+*.shp
+*.prj
+*.shx
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal
+*.csv
+*.parquet

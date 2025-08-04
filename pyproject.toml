@@ -34,7 +34,11 @@ maintainers = [
 ]
 
 dependencies = [
-  "python-dotenv==1.1.0"
+  "python-dotenv==1.1.0",
+  "geopandas==1.1.1",
+  "boto3",
+  "pyarrow==20.0.0",
+  "pyiceberg[s3fs,glue,sql-sqlite]==0.9.1"
 ]
 
 [project.optional-dependencies]
@@ -50,6 +54,7 @@ dev = [
   "mypy==1.15.0",
   "nbstripout==0.8.1",
   "ty==0.0.1-alpha.14",
+  "types-PyYaml",
   "geopandas==1.1.1",
   "numpy==2.2.6",
   "netCDF4==1.7.2",
@@ -136,6 +141,9 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
 warn_unused_ignores = true
+
+[tool.ty.rules]
+possibly-unbound-attribute = "ignore"
 
 [tool.pytest.ini_options]
 rootdir = "."                                                                 # Ensures pytest always treats project root as the root

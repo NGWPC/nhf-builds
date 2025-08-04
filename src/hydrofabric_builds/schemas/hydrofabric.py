@@ -68,6 +68,6 @@ class HydrofabricCRS(Enum):
 
     AK = 3338
     CONUS = 5070
-    GL = "gl_hf"
+    GL = 5070  # TEMP: MAY CHANGE
     HI = 102007
     PRVI = 32161

@@ -23,6 +23,7 @@ repos:
     rev: v1.17.0
     hooks:
       - id: mypy
+        additional_dependencies: ["types-PyYAML==6.0.12.20250516"]
 
   - repo: local
     hooks:
