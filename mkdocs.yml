@@ -48,3 +48,6 @@ plugins:
 nav:
   - Home:
     - index.md
+  - Builds:
+    - builds/index.md
+    - Irrigation: builds/irrigation.md

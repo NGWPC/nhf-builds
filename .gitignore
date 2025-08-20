@@ -218,3 +218,9 @@ _version.py
 *.gpkg-wal
 *.csv
 *.parquet
+*.tif
+*.tfw
+*.aux
+*.htm
+*.ovr
+*.aux.xml
