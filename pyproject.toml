@@ -11,14 +11,13 @@ packages = ["src/hydrofabric_builds", "tools"]
 
 [project]
 name = "hydrofabric-builds"
-version = "2025.7.0"
+dynamic = ["version"]
 description = "Building Hydrofabric(s) + Processing Ancillary Data"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
   { name = "Tadd Bindas", email = "tadd.bindas@ertcorp.com" },
-  { name = "Sylvia Chin", email = "sylvia.c.chin@rtx.com" },
   { name = "Daniel Cumpton", email = "dcumpton@rtx.com" },
   { name = "Quercus Hamlin", email = "qhamlin@asrcfederal.com" },
   { name = "Brock Hinkson", email = "brock.w.hinkson@rtx.com" },
@@ -26,7 +25,6 @@ authors = [
 ]
 maintainers = [
   { name = "Tadd Bindas", email = "tadd.bindas@ertcorp.com" },
-  { name = "Sylvia Chin", email = "sylvia.c.chin@rtx.com" },
   { name = "Daniel Cumpton", email = "dcumpton@rtx.com" },
   { name = "Quercus Hamlin", email = "qhamlin@asrcfederal.com" },
   { name = "Brock Hinkson", email = "brock.w.hinkson@rtx.com" },
@@ -39,6 +37,7 @@ dependencies = [
   "boto3",
   "pyarrow==20.0.0",
   "pyiceberg[s3fs,glue,sql-sqlite]==0.9.1",
+  "pyprojroot==0.3.0",
   "tqdm==4.67.1",
   "folium==0.20.0",
   "matplotlib==3.10.5",
@@ -65,7 +64,6 @@ dev = [
   "ruff==0.11.13",
   "mypy==1.15.0",
   "nbstripout==0.8.1",
-  "ty==0.0.1-alpha.14",
   "types-PyYaml",
   "types-requests==2.32.4.20250611"
 ]
@@ -148,9 +146,3 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
 warn_unused_ignores = true
-
-[tool.ty.rules]
-possibly-unbound-attribute = "ignore"
-
-[tool.pytest.ini_options]
-rootdir = "."                                                                 # Ensures pytest always treats project root as the root

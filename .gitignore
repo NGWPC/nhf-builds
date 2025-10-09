@@ -224,3 +224,5 @@ _version.py
 *.htm
 *.ovr
 *.aux.xml
+
+Pipfile
