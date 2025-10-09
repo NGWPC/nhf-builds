@@ -1,0 +1,2 @@
+mapclassify==2.10.0
+geopandas==1.0.1
