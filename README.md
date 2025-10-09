@@ -1,6 +1,8 @@
 # hydrofabric-builds
 Building Hydrofabric &amp; Processing Ancillary Data
 
+<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/hydrofabric.png" alt="hydrofabric" width="40%" height="40%"/>
+
 ### Getting Started
 This repo is managed through [UV](https://docs.astral.sh/uv/getting-started/installation/) and can be installed through:
 ```sh
