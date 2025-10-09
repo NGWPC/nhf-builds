@@ -226,3 +226,4 @@ _version.py
 *.aux.xml
 
 Pipfile
+.vscode

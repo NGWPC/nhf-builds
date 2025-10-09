@@ -6,51 +6,17 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from dotenv import load_dotenv
 from pydantic import ValidationError
+from pyprojroot import here
 
-from hydrofabric_builds import HFConfig, process_data
+from hydrofabric_builds import HFConfig, TaskInstance
+from hydrofabric_builds.pipeline.download import download_reference_data
+from hydrofabric_builds.pipeline.processing import process_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-
-class TaskInstance:
-    """A Mock TaskInstance for local runners similar to Apache Airflow."""
-
-    def __init__(self) -> None:
-        """Initialize the TaskInstance with empty XCom storage."""
-        self.xcom_storage: dict[str, Any] = {}
-
-    def xcom_push(self, key: str, value: Any) -> None:
-        """
-        Store a value in XCom for retrieval by downstream tasks.
-
-        Parameters
-        ----------
-        key : str
-            Unique identifier for the stored value. Convention is to use '{task_id}.{key_name}' format for namespacing.
-        value : Any
-            The data to store. Can be any Python object.
-        """
-        self.xcom_storage[key] = value
-
-    def xcom_pull(self, task_ids: str, key: str = "return_value") -> Any:
-        """
-        Retrieve a value from XCom that was pushed by an upstream task.
-
-        Parameters
-        ----------
-        task_ids : str
-            The task_id of the task that pushed the value.
-        key : str, default='return_value'
-            The key used when the value was pushed. Default 'return_value' is used for values returned from task functions.
-
-        Returns
-        -------
-        Any
-            The stored value, or None if the key doesn't exist.
-        """
-        return self.xcom_storage.get(f"{task_ids}.{key}")
+load_dotenv(here() / ".env")
 
 
 class LocalRunner:
@@ -168,12 +134,11 @@ def main() -> int:
         Exit code: 0 for success, 1 for failure.
     """
     parser = argparse.ArgumentParser(description="A local runner for hydrofabric data processing")
-    parser.add_argument("--config", default="config.yaml", required=False, help="Config file")
+    parser.add_argument("--config", required=False, help="Config file")
     args = parser.parse_args()
 
     try:
         config = HFConfig.from_yaml(args.config)
-
     except ValidationError as e:
         print("Configuration validation failed:")
         for error in e.errors():
@@ -182,8 +147,12 @@ def main() -> int:
     except FileNotFoundError:
         logger.error(f"Config file not found: {args.config}")
         return 1
+    except TypeError:
+        logger.warning("Config file not specified. Using default config settings")
+        config = HFConfig()
 
     runner = LocalRunner(config)
+    runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
     runner.run_task(task_id="process", python_callable=process_data, op_kwargs={})
 
     print("\n" + "=" * 60)
