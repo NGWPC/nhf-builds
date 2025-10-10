@@ -48,7 +48,7 @@ def setup_glue_catalog() -> Catalog:
         PyIceberg catalog
     """
     load_creds(dir=Path.cwd())
-    pyiceberg_config = load_pyiceberg_config(Path.cwd())
+    # pyiceberg_config = load_pyiceberg_config(Path.cwd())
     return load_catalog("glue", **{"type": "glue", "glue.region": "us-east-1"})
 
 
