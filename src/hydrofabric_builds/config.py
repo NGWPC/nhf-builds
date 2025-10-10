@@ -2,6 +2,7 @@
 
 from typing import Self
 
+import yaml
 from pydantic import BaseModel, Field
 
 
@@ -28,8 +29,6 @@ class HFConfig(BaseModel):
         HFConfig
             A configuration object validated
         """
-        import yaml
-
         with open(path) as f:
             data = yaml.safe_load(f)
         return cls(**data)

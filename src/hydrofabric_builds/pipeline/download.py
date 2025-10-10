@@ -26,7 +26,11 @@ def download_reference_data(**context: dict[str, Any]) -> None:
     cfg = cast(HFConfig, context["config"])
     ti = cast(TaskInstance, context["ti"])
     task_id = cast(str, context["task_id"])
-    reference_flowpaths = gpd.read_file(cfg.reference_fabric_path, layer="reference_flowpaths")
-    reference_divides = gpd.read_file(cfg.reference_fabric_path, layer="reference_divides")
+
+    open_options = {"IMMUTABLE": "YES"}
+    reference_flowpaths = gpd.read_file(
+        cfg.reference_fabric_path, layer="reference_flowpaths", **open_options
+    )
+    reference_divides = gpd.read_file(cfg.reference_fabric_path, layer="reference_divides", **open_options)
     ti.xcom_push(f"{task_id}.reference_flowpaths", reference_flowpaths)
     ti.xcom_push(f"{task_id}.reference_divides", reference_divides)
