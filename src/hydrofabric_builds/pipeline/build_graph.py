@@ -20,6 +20,11 @@ def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any]]:
         - run_id : str identifier for this pipeline run
         - ds : str execution date
         - execution_date : datetime object
+
+    Returns
+    -------
+    dict[str, dict[str, Any]]
+        The upstream dictionary containing upstream and downstream connections
     """
     ti = cast(TaskInstance, context["ti"])
 

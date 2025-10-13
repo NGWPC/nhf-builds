@@ -14,15 +14,19 @@ def task_instance() -> TaskInstance:
 
 
 @pytest.fixture
-def mock_geopackage() -> str:
+def mock_geopackages() -> tuple[str, str]:
     """Create a temporary GeoPackage with test data."""
-    return str(here() / "tests/data/sample.gpkg")
+    return str(here() / "tests/data/sample_divides.parquet"), str(
+        here() / "tests/data/sample_flowpaths.parquet"
+    )
 
 
 @pytest.fixture
-def sample_config(mock_geopackage: str) -> HFConfig:
+def sample_config(mock_geopackages: str) -> HFConfig:
     """Fixture providing a sample HFConfig."""
-    return HFConfig(dx=3000, reference_fabric_path=mock_geopackage)
+    return HFConfig(
+        dx=3000, reference_divides_path=mock_geopackages[0], reference_flowlines_path=mock_geopackages[1]
+    )
 
 
 @pytest.fixture

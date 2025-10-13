@@ -10,9 +10,13 @@ class HFConfig(BaseModel):
     """A config validation class for default build settings"""
 
     dx: float = Field(default=3000, description="Discretization length for segments")
-    reference_fabric_path: str = Field(
-        default="/vsis3/edfs-data/reference/sc_reference_fabric.gpkg",
-        description="The location of the reference fabric. Default is in the NGWPC Test AWS account",
+    reference_divides_path: str = Field(
+        default="s3://edfs-data/reference/super_conus/reference_divides.parquet",
+        description="The location of the reference fabric divides. Default is in the NGWPC Test AWS account",
+    )
+    reference_flowlines_path: str = Field(
+        default="s3://edfs-data/reference/super_conus/reference_flowpaths.parquet",
+        description="The location of the reference fabric flowpaths. Default is in the NGWPC Test AWS account",
     )
 
     @classmethod

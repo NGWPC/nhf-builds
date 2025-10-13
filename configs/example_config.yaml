@@ -1,1 +1,2 @@
-reference_fabric_path: "data/sc_reference_fabric.gpkg"
+reference_divides_path: "data/reference_divides.parquet"
+reference_flowpaths_path: "data/reference_flowpaths.parquet"
