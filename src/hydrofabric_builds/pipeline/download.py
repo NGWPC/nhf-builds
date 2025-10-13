@@ -34,6 +34,6 @@ def download_reference_data(**context: dict[str, Any]) -> dict[str, gpd.GeoDataF
 
     reference_divides = gpd.read_parquet(cfg.reference_divides_path)
     logger.info(f"Download Task: Ingested Reference Divides from: {cfg.reference_divides_path}")
-    reference_flowpaths = gpd.read_parquet(cfg.reference_flowlines_path)
-    logger.info(f"Download Task: Ingested Reference Flowpaths from: {cfg.reference_flowlines_path}")
+    reference_flowpaths = gpd.read_parquet(cfg.reference_flowpaths_path)
+    logger.info(f"Download Task: Ingested Reference Flowpaths from: {cfg.reference_flowpaths_path}")
     return {"reference_flowpaths": reference_flowpaths, "reference_divides": reference_divides}

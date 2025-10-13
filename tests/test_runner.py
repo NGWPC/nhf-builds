@@ -178,10 +178,8 @@ class TestIntegration:
 
         runner.run_task("build_graph", build_graph)
 
-        # Verify all tasks succeeded
         assert all(r["status"] == "success" for r in runner.results.values())
 
-        # Verify download results
         download_result = runner.get_result("download")
         assert download_result["status"] == "success"
 
@@ -193,17 +191,17 @@ class TestIntegration:
         assert len(reference_flowpaths) > 0
         assert len(reference_divides) > 0
 
-        # Verify build_graph results
         graph_result = runner.get_result("build_graph")
         assert graph_result["status"] == "success"
 
         upstream_network = runner.ti.xcom_pull("build_graph", key="upstream_network")
-        # Check that all expected keys are present
         assert set(upstream_network.keys()) == set(expected_graph.keys())
 
-        # Check that each downstream has the correct upstream flowpaths
         for downstream_id, expected_upstreams in expected_graph.items():
             actual_upstreams = upstream_network[downstream_id]
             assert set(actual_upstreams) == set(expected_upstreams), (
                 f"Mismatch for downstream {downstream_id}: expected {expected_upstreams}, got {actual_upstreams}"
             )
+
+        outlets = runner.ti.xcom_pull("build_graph", key="outlets")
+        assert outlets == ["6720797"]  # expected outlet

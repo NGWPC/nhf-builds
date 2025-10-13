@@ -7,6 +7,37 @@ import pandas as pd
 import polars as pl
 
 
+def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:
+    """Find outlets for the river using hydroseq
+
+    Parameters
+    ----------
+    reference_flowpaths : pd.DataFrame
+        the flowpath reference
+
+    Returns
+    -------
+    list[str]
+        all outlets from the reference
+    """
+    df_subset = reference_flowpaths[["flowpath_id", "hydroseq", "dnhydroseq"]].copy()
+    df_pl = pl.from_pandas(df_subset)
+
+    df_with_str_id = df_pl.with_columns(
+        pl.col("flowpath_id").cast(pl.Float64).cast(pl.Int64).cast(pl.Utf8).alias("flowpath_id_str")
+    )
+
+    hydroseq_set = set(df_pl["hydroseq"].to_list())
+
+    outlets_df = df_with_str_id.filter(
+        (pl.col("dnhydroseq") == 0) | ~pl.col("dnhydroseq").is_in(hydroseq_set)
+    )  # dnhydroseq is 0, or doesn't exist in hydroseq
+
+    outlets = outlets_df["flowpath_id_str"].to_list()
+
+    return outlets
+
+
 def _build_graph(reference_flowpaths: pd.DataFrame) -> dict[str, Any]:
     """
     The hydrofabric-related functions for building a graph of upstream flowpath connections

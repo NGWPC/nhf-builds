@@ -2,11 +2,11 @@
 
 from typing import Any, cast
 
-from hydrofabric_builds.hydrofabric.graph import _build_graph
+from hydrofabric_builds.hydrofabric.graph import _build_graph, _find_outlets_by_hydroseq
 from hydrofabric_builds.task_instance import TaskInstance
 
 
-def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any] | list[str]]:
     """
     Builds a graph of all downstream to upstream connectivity
 
@@ -23,13 +23,15 @@ def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
     Returns
     -------
-    dict[str, dict[str, Any]]
-        The upstream dictionary containing upstream and downstream connections
+    dict[str, dict[str, Any] | list[str]]
+        - All outlets from the hydrofabric to trace upstream for connectivity
+        - The upstream dictionary containing upstream and downstream connections
     """
     ti = cast(TaskInstance, context["ti"])
 
     reference_flowpaths = ti.xcom_pull(task_id="download", key="reference_flowpaths")
 
     upstream_dict = _build_graph(reference_flowpaths)
+    outlets = _find_outlets_by_hydroseq(reference_flowpaths)
 
-    return {"upstream_network": upstream_dict}
+    return {"outlets": outlets, "upstream_network": upstream_dict}

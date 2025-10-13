@@ -14,7 +14,7 @@ class HFConfig(BaseModel):
         default="s3://edfs-data/reference/super_conus/reference_divides.parquet",
         description="The location of the reference fabric divides. Default is in the NGWPC Test AWS account",
     )
-    reference_flowlines_path: str = Field(
+    reference_flowpaths_path: str = Field(
         default="s3://edfs-data/reference/super_conus/reference_flowpaths.parquet",
         description="The location of the reference fabric flowpaths. Default is in the NGWPC Test AWS account",
     )
