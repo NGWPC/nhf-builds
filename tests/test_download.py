@@ -18,9 +18,9 @@ class TestDownloadReferenceData:
 
         assert flowpaths is not None
         assert isinstance(flowpaths, gpd.GeoDataFrame)
-        assert len(flowpaths) == 3
-        assert "id" in flowpaths.columns
-        assert "name" in flowpaths.columns
+        assert len(flowpaths) == 12
+        assert "flowpath_id" in flowpaths.columns
+        assert "VPUID" in flowpaths.columns
 
     def test_loads_divides_from_geopackage(self, runner: LocalRunner) -> None:
         """Test that divides are loaded from GeoPackage."""
@@ -33,5 +33,5 @@ class TestDownloadReferenceData:
 
         assert divides is not None
         assert isinstance(divides, gpd.GeoDataFrame)
-        assert len(divides) == 3
+        assert len(divides) == 12
         assert "divide_id" in divides.columns

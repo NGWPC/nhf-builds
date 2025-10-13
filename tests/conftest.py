@@ -1,10 +1,7 @@
 """Conftests for the test suite"""
 
-from pathlib import Path
-
-import geopandas as gpd
 import pytest
-from shapely.geometry import LineString, Point
+from pyprojroot import here
 
 from hydrofabric_builds import HFConfig
 from scripts.hf_runner import LocalRunner, TaskInstance
@@ -17,43 +14,9 @@ def task_instance() -> TaskInstance:
 
 
 @pytest.fixture
-def mock_geopackage(tmp_path: Path) -> str:
+def mock_geopackage() -> str:
     """Create a temporary GeoPackage with test data."""
-    gpkg_path = tmp_path / "test_reference.gpkg"
-
-    flowpaths = gpd.GeoDataFrame(
-        {
-            "id": [1, 2, 3],
-            "name": ["flowpath_1", "flowpath_2", "flowpath_3"],
-            "length": [100.0, 200.0, 150.0],
-        },
-        geometry=[
-            LineString([(0, 0), (1, 1)]),
-            LineString([(1, 1), (2, 2)]),
-            LineString([(2, 2), (3, 3)]),
-        ],
-        crs="EPSG:4326",
-    )
-
-    # Create mock divides layer
-    divides = gpd.GeoDataFrame(
-        {
-            "id": [10, 20, 30],
-            "divide_id": ["div_1", "div_2", "div_3"],
-            "area": [50.0, 75.0, 60.0],
-        },
-        geometry=[
-            Point(0.5, 0.5),
-            Point(1.5, 1.5),
-            Point(2.5, 2.5),
-        ],
-        crs="EPSG:4326",
-    )
-
-    flowpaths.to_file(gpkg_path, layer="reference_flowpaths", driver="GPKG")
-    divides.to_file(gpkg_path, layer="reference_divides", driver="GPKG")
-
-    return str(gpkg_path)
+    return str(here() / "tests/data/sample.gpkg")
 
 
 @pytest.fixture
@@ -66,3 +29,15 @@ def sample_config(mock_geopackage: str) -> HFConfig:
 def runner(sample_config: HFConfig) -> LocalRunner:
     """Fixture providing a LocalRunner instance."""
     return LocalRunner(sample_config)
+
+
+@pytest.fixture
+def expected_graph() -> dict[str, list[str]]:
+    return {
+        "6720675": ["6722501"],
+        "6720683": ["6720773", "6720689"],
+        "6720797": ["6720703", "6720701"],
+        "6720703": ["6720683", "6720651"],
+        "6720689": ["6720681", "6720679"],
+        "6720679": ["6720677", "6720675"],
+    }

@@ -1,0 +1,30 @@
+"""Contains all code for building a graph based on flowpath ids"""
+
+from typing import Any, cast
+
+from hydrofabric_builds.hydrofabric.graph import _build_graph
+from hydrofabric_builds.task_instance import TaskInstance
+
+
+def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """
+    Builds a graph of all downstream to upstream connectivity
+
+    Parameters
+    ----------
+    **context : dict
+        Airflow-compatible context containing:
+        - ti : TaskInstance for XCom operations
+        - config : HFConfig with pipeline configuration
+        - task_id : str identifier for this task
+        - run_id : str identifier for this pipeline run
+        - ds : str execution date
+        - execution_date : datetime object
+    """
+    ti = cast(TaskInstance, context["ti"])
+
+    reference_flowpaths = ti.xcom_pull(task_id="download", key="reference_flowpaths")
+
+    upstream_dict = _build_graph(reference_flowpaths)
+
+    return {"upstream_network": upstream_dict}

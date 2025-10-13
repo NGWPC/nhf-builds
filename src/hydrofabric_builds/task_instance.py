@@ -23,13 +23,13 @@ class TaskInstance:
         """
         self.xcom_storage[key] = value
 
-    def xcom_pull(self, task_ids: str, key: str = "return_value") -> Any:
+    def xcom_pull(self, task_id: str, key: str = "return_value") -> Any:
         """
         Retrieve a value from XCom that was pushed by an upstream task.
 
         Parameters
         ----------
-        task_ids : str
+        task_id : str
             The task_id of the task that pushed the value.
         key : str, default='return_value'
             The key used when the value was pushed. Default 'return_value' is used for values returned from task functions.
@@ -39,4 +39,4 @@ class TaskInstance:
         Any
             The stored value, or None if the key doesn't exist.
         """
-        return self.xcom_storage.get(f"{task_ids}.{key}")
+        return self.xcom_storage.get(f"{task_id}.{key}")

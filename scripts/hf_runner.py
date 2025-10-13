@@ -11,8 +11,8 @@ from pydantic import ValidationError
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig, TaskInstance
+from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.download import download_reference_data
-from hydrofabric_builds.pipeline.processing import process_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -97,7 +97,8 @@ class LocalRunner:
 
         result = python_callable(**kwargs)
 
-        self.ti.xcom_push(f"{task_id}.return_value", result)
+        for k, v in result.items():
+            self.ti.xcom_push(f"{task_id}.{k}", v)
         self.results[task_id] = {"status": "success", "result": result}
 
         logger.info(f"✓ Task {task_id} completed")
@@ -153,7 +154,7 @@ def main() -> int:
 
     runner = LocalRunner(config)
     runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-    runner.run_task(task_id="process", python_callable=process_data, op_kwargs={})
+    runner.run_task(task_id="build_graph", python_callable=build_graph, op_kwargs={})
 
     print("\n" + "=" * 60)
     print("Pipeline completed")

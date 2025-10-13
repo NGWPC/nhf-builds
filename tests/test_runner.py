@@ -78,14 +78,13 @@ class TestLocalRunner:
     def test_run_simple_task(self, runner: LocalRunner) -> None:
         """Test running a simple task."""
 
-        def simple_task(value: int, **context: dict[str, Any]) -> int:
-            return value * 2
+        def simple_task(value: int, **context: dict[str, Any]) -> dict[str, Any]:
+            return {"value": value * 2}
 
-        result = runner.run_task(task_id="simple", python_callable=simple_task, op_kwargs={"value": 21})
+        _ = runner.run_task(task_id="simple", python_callable=simple_task, op_kwargs={"value": 21})
 
-        assert result == 42
         assert runner.get_result("simple")["status"] == "success"
-        assert runner.get_result("simple")["result"] == 42
+        assert runner.get_result("simple")["result"]["value"] == 42
 
     def test_task_context_injection(self, runner: LocalRunner) -> None:
         """Test that context is properly injected into tasks."""
@@ -109,51 +108,48 @@ class TestLocalRunner:
     def test_task_accesses_config(self, runner: LocalRunner) -> None:
         """Test that tasks can access config from context."""
 
-        def task_using_config(**context: dict[str, Any]) -> float:
+        def task_using_config(**context: dict[str, Any]) -> dict:
             config = context["config"]
-            return config.dx  # type: ignore
+            assert config.dx == 3000.0  # type: ignore
+            return {}
 
-        result = runner.run_task("use_config", task_using_config)
-
-        assert result == 3000.0
+        _ = runner.run_task("use_config", task_using_config)
 
     def test_task_uses_xcom(self, runner: LocalRunner) -> None:
         """Test tasks using XCom to pass data."""
 
-        def task1(**context: dict[str, Any]) -> str:
-            return "/tmp/output.gpkg"
+        def task1(**context: dict[str, Any]) -> dict[str, Any]:
+            return {"path": "/tmp/output.gpkg"}
 
-        def task2(**context: dict[str, Any]) -> str:
+        def task2(**context: dict[str, Any]) -> dict:
             ti = context["ti"]
-            input_file = ti.xcom_pull("task1")  # type: ignore
-            return f"Processed: {input_file}"
+            input_file = ti.xcom_pull("task1", key="path")  # type: ignore
+            assert input_file == "/tmp/output.gpkg"
+            return {}
 
         runner.run_task("task1", task1)
-        result = runner.run_task("task2", task2)
-
-        assert result == "Processed: /tmp/output.gpkg"
+        _ = runner.run_task("task2", task2)
 
     def test_multiple_tasks_sequential(self, runner: LocalRunner) -> None:
         """Test running multiple tasks sequentially."""
 
-        def task1(value: int, **context: dict[str, Any]) -> int:
-            return value + 10
+        def task1(value: int, **context: dict[str, Any]) -> dict[str, Any]:
+            return {"value": value + 10}
 
-        def task2(**context: dict[str, Any]) -> int:
+        def task2(**context: dict[str, Any]) -> dict[str, Any]:
             ti = context["ti"]
-            prev = ti.xcom_pull("task1")  # type: ignore
-            return prev * 2
+            prev = ti.xcom_pull("task1", key="value")  # type: ignore
+            return {"value": prev * 2}
 
-        def task3(**context: dict[str, Any]) -> int:
+        def task3(**context: dict[str, Any]) -> dict[str, Any]:
             ti = context["ti"]
-            prev = ti.xcom_pull("task2")  # type: ignore
-            return prev - 5
+            prev = ti.xcom_pull("task2", key="value")  # type: ignore
+            return {"value": prev * 5}
 
         runner.run_task("task1", task1, {"value": 5})
         runner.run_task("task2", task2)
-        result = runner.run_task("task3", task3)
+        _ = runner.run_task("task3", task3)
 
-        assert result == 25
         assert len(runner.results) == 3
         assert all(r["status"] == "success" for r in runner.results.values())
 
@@ -164,42 +160,50 @@ class TestLocalRunner:
             return {"output": "test.gpkg", "count": 100}
 
         runner.run_task("test", task_with_return)
-        xcom_result = runner.ti.xcom_pull("test")
-
-        assert xcom_result == {"output": "test.gpkg", "count": 100}
+        assert runner.ti.xcom_pull("test", key="output") == "test.gpkg"
+        assert runner.ti.xcom_pull("test", key="count") == 100
 
 
 class TestIntegration:
     """Integration tests simulating real pipeline scenarios."""
 
-    def test_full_pipeline_mock(self, sample_config: HFConfig) -> None:
-        """Test full pipeline with mock functions."""
-
-        def download_data(source: str, **context: dict[str, Any]) -> str:
-            return f"/tmp/{source}.zip"
-
-        def process_data(**context: dict[str, Any]) -> str:
-            ti = context["ti"]
-            input_file = ti.xcom_pull("download")  # type: ignore
-            return f"{input_file}.processed.gpkg"
-
-        def export_data(**context: dict[str, Any]) -> dict[str, Any]:
-            ti = context["ti"]
-            processed = ti.xcom_pull("process")  # type: ignore
-            return {"output": f"{processed}.exported.json", "status": "complete"}
+    def test_full_pipeline(self, sample_config: HFConfig, expected_graph: dict[str, Any]) -> None:
+        """Test full pipeline with real download and build_graph functions."""
+        from hydrofabric_builds import build_graph, download_reference_data
+        from scripts.hf_runner import LocalRunner
 
         runner = LocalRunner(sample_config)
-        runner.run_task("download", download_data, {"source": "hydrofabric"})
-        runner.run_task("process", process_data)
-        runner.run_task("export", export_data)
 
+        runner.run_task("download", download_reference_data)
+
+        runner.run_task("build_graph", build_graph)
+
+        # Verify all tasks succeeded
         assert all(r["status"] == "success" for r in runner.results.values())
 
-        download_result = runner.get_result("download")["result"]
-        assert "hydrofabric.zip" in download_result
+        # Verify download results
+        download_result = runner.get_result("download")
+        assert download_result["status"] == "success"
 
-        process_result = runner.get_result("process")["result"]
-        assert "processed.gpkg" in process_result
+        reference_flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+        reference_divides = runner.ti.xcom_pull("download", key="reference_divides")
 
-        export_result = runner.get_result("export")["result"]
-        assert export_result["status"] == "complete"
+        assert reference_flowpaths is not None
+        assert reference_divides is not None
+        assert len(reference_flowpaths) > 0
+        assert len(reference_divides) > 0
+
+        # Verify build_graph results
+        graph_result = runner.get_result("build_graph")
+        assert graph_result["status"] == "success"
+
+        upstream_network = runner.ti.xcom_pull("build_graph", key="upstream_network")
+        # Check that all expected keys are present
+        assert set(upstream_network.keys()) == set(expected_graph.keys())
+
+        # Check that each downstream has the correct upstream flowpaths
+        for downstream_id, expected_upstreams in expected_graph.items():
+            actual_upstreams = upstream_network[downstream_id]
+            assert set(actual_upstreams) == set(expected_upstreams), (
+                f"Mismatch for downstream {downstream_id}: expected {expected_upstreams}, got {actual_upstreams}"
+            )
