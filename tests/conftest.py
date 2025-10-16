@@ -24,9 +24,7 @@ def mock_geopackages() -> tuple[str, str]:
 @pytest.fixture
 def sample_config(mock_geopackages: str) -> HFConfig:
     """Fixture providing a sample HFConfig."""
-    return HFConfig(
-        dx=3000, reference_divides_path=mock_geopackages[0], reference_flowpaths_path=mock_geopackages[1]
-    )
+    return HFConfig(reference_divides_path=mock_geopackages[0], reference_flowpaths_path=mock_geopackages[1])
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from hydrofabric_builds import HFConfig
+from hydrofabric_builds import HFConfig, build_graph, download_reference_data
 from scripts.hf_runner import LocalRunner, TaskInstance
 
 
@@ -47,7 +47,7 @@ class TestTaskInstance:
         """Test XCom with complex data types."""
         complex_data = {
             "paths": ["/path/1", "/path/2"],
-            "config": {"dx": 3000, "enabled": True},
+            "config": {"divide_aggregation_threshold": 3.0, "enabled": True},
             "stats": {"count": 100, "area": 45.6},
         }
 
@@ -110,7 +110,7 @@ class TestLocalRunner:
 
         def task_using_config(**context: dict[str, Any]) -> dict:
             config = context["config"]
-            assert config.dx == 3000.0  # type: ignore
+            assert config.divide_aggregation_threshold == 3.0  # type: ignore
             return {}
 
         _ = runner.run_task("use_config", task_using_config)
@@ -169,14 +169,12 @@ class TestIntegration:
 
     def test_full_pipeline(self, sample_config: HFConfig, expected_graph: dict[str, Any]) -> None:
         """Test full pipeline with real download and build_graph functions."""
-        from hydrofabric_builds import build_graph, download_reference_data
-        from scripts.hf_runner import LocalRunner
 
         runner = LocalRunner(sample_config)
 
         runner.run_task("download", download_reference_data)
-
         runner.run_task("build_graph", build_graph)
+        # runner.run_task("aggregate", aggregate_data)
 
         assert all(r["status"] == "success" for r in runner.results.values())
 

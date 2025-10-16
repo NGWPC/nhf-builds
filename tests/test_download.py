@@ -1,3 +1,5 @@
+"""Tests the download pipeline"""
+
 import geopandas as gpd
 
 from hydrofabric_builds.pipeline.download import download_reference_data

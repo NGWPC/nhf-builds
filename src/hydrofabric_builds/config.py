@@ -9,7 +9,10 @@ from pydantic import BaseModel, Field
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""
 
-    dx: float = Field(default=3000, description="Discretization length for segments")
+    divide_aggregation_threshold: float = Field(
+        default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
+    )
+
     reference_divides_path: str = Field(
         default="s3://edfs-data/reference/super_conus/reference_divides.parquet",
         description="The location of the reference fabric divides. Default is in the NGWPC Test AWS account",

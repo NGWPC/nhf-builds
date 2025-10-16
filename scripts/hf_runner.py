@@ -13,6 +13,7 @@ from pyprojroot import here
 from hydrofabric_builds import HFConfig, TaskInstance
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.download import download_reference_data
+from hydrofabric_builds.pipeline.processing import aggregate_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -155,6 +156,7 @@ def main() -> int:
     runner = LocalRunner(config)
     runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
     runner.run_task(task_id="build_graph", python_callable=build_graph, op_kwargs={})
+    runner.run_task(task_id="aggregate", python_callable=aggregate_data, op_kwargs={})
 
     print("\n" + "=" * 60)
     print("Pipeline completed")
