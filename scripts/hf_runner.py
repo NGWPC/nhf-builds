@@ -13,7 +13,13 @@ from pyprojroot import here
 from hydrofabric_builds import HFConfig, TaskInstance
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.download import download_reference_data
-from hydrofabric_builds.pipeline.processing import aggregate_data
+from hydrofabric_builds.pipeline.processing import (
+    map_build_base_hydrofabric,
+    map_trace_and_aggregate,
+    reduce_calculate_id_ranges,
+    reduce_combine_base_hydrofabric,
+)
+from hydrofabric_builds.pipeline.write import write_base_hydrofabric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -156,7 +162,11 @@ def main() -> int:
     runner = LocalRunner(config)
     runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
     runner.run_task(task_id="build_graph", python_callable=build_graph, op_kwargs={})
-    runner.run_task(task_id="aggregate", python_callable=aggregate_data, op_kwargs={})
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
 
     print("\n" + "=" * 60)
     print("Pipeline completed")

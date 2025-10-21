@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.hydrofabric.schemas import Classifications
+from hydrofabric_builds.schemas.hydrofabric import Classifications
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ def _get_flowpath_info(fp_id: str, fp_indexed: pd.DataFrame) -> dict[str, Any]:
         "length_km": fp_row["lengthkm"],
         "stream_order": fp_row["streamorder"],
         "hydroseq": fp_row["hydroseq"],
+        "mainstemlp": fp_row["mainstemlp"],
         "dnhydroseq": fp_row["dnhydroseq"],
     }
 
@@ -348,18 +349,25 @@ def _rule_aggregate_order2_with_order1s(
     """
     if (
         fp_info["stream_order"] == 2
-        and len(upstream_info) >= 2  # Changed from == 2 to >= 2
+        and len(upstream_info) >= 2
         and all(info["stream_order"] == 1 for info in upstream_info)
     ):
-        # Find the largest upstream by drainage area
-        largest_upstream = max(upstream_info, key=lambda x: x["total_drainage_area_sqkm"])
-        minor_upstreams = [
-            info for info in upstream_info if info["flowpath_id"] != largest_upstream["flowpath_id"]
-        ]
+        # Find the upstream on the same mainstem
+        current_mainstem = fp_info["mainstemlp"]
+        on_mainstem = []
+        off_mainstem = []
+        for info in upstream_info:
+            if info["mainstemlp"] == current_mainstem:
+                on_mainstem.append(info)
+            else:
+                off_mainstem.append(info)
 
         # Trace and aggregate the largest (non-minor) upstream
+        assert len(on_mainstem) == 1, (
+            "Can only have one upstream component on the mainstem. Error in Reference Fabric"
+        )
         _trace_and_aggregate_upstream(
-            current_id=largest_upstream["flowpath_id"],
+            current_id=on_mainstem[0]["flowpath_id"],
             target_id=current_id,
             network_graph=network_graph,
             result=result,
@@ -367,7 +375,7 @@ def _rule_aggregate_order2_with_order1s(
         )
 
         # Trace and aggregate all minor upstreams
-        for minor in minor_upstreams:
+        for minor in off_mainstem:
             _trace_and_aggregate_upstream(
                 current_id=minor["flowpath_id"],
                 target_id=current_id,
@@ -410,23 +418,23 @@ def _rule_aggregate_mixed_upstream_orders(
         True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
     """
     if fp_info["stream_order"] > 1 and len(upstream_info) >= 2:
-        small_order_1_upstreams = [
-            info
-            for info in upstream_info
-            if info["stream_order"] == 1 and info["areasqkm"] < cfg.divide_aggregation_threshold
-        ]
-        large_order_1_upstreams = [
-            info
-            for info in upstream_info
-            if info["stream_order"] == 1 and info["areasqkm"] >= cfg.divide_aggregation_threshold
-        ]
-        higher_order_upstreams = [info for info in upstream_info if info["stream_order"] > 1]
+        current_mainstem = fp_info["mainstemlp"]
 
-        if small_order_1_upstreams and (higher_order_upstreams or large_order_1_upstreams):
-            for order_1 in small_order_1_upstreams:
-                result.minor_flowpaths.append(order_1["flowpath_id"])
-                result.aggregation_pairs.append((order_1["flowpath_id"], current_id))
-            # Note upstream merge point for subdivides
+        on_mainstem = [info for info in upstream_info if info["mainstemlp"] == current_mainstem]
+        off_mainstem_order1 = [
+            info
+            for info in upstream_info
+            if info["stream_order"] == 1 and info["mainstemlp"] != current_mainstem
+        ]
+
+        # Only process if we have off-mainstem order-1 tributaries
+        if off_mainstem_order1 and on_mainstem:
+            for order_1 in off_mainstem_order1:
+                # Check area threshold - only mark as minor if small
+                if order_1["areasqkm"] < cfg.divide_aggregation_threshold:
+                    result.minor_flowpaths.append(order_1["flowpath_id"])
+                    result.aggregation_pairs.append((order_1["flowpath_id"], current_id))
+
             result.upstream_merge_points.append(current_id)
             return True
     return False

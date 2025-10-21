@@ -1,4 +1,4 @@
-"""Contains all code for processing hydrofabric data"""
+"""Contains all code for downloading hydrofabric data"""
 
 import logging
 from typing import Any, cast

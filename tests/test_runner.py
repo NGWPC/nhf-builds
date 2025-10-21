@@ -2,7 +2,16 @@
 
 from typing import Any
 
-from hydrofabric_builds import HFConfig, build_graph, download_reference_data
+from hydrofabric_builds import (
+    HFConfig,
+    build_graph,
+    download_reference_data,
+    map_build_base_hydrofabric,
+    map_trace_and_aggregate,
+    reduce_calculate_id_ranges,
+    reduce_combine_base_hydrofabric,
+    write_base_hydrofabric,
+)
 from scripts.hf_runner import LocalRunner, TaskInstance
 
 
@@ -174,7 +183,11 @@ class TestIntegration:
 
         runner.run_task("download", download_reference_data)
         runner.run_task("build_graph", build_graph)
-        # runner.run_task("aggregate", aggregate_data)
+        runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+        runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+        runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+        runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+        runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
 
         assert all(r["status"] == "success" for r in runner.results.values())
 
@@ -203,3 +216,11 @@ class TestIntegration:
 
         outlets = runner.ti.xcom_pull("build_graph", key="outlets")
         assert outlets == ["6720797"]  # expected outlet
+
+        final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+        final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
+        final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+
+        assert len(final_flowpaths) == 9
+        assert len(final_divides) == 9
+        assert len(final_nexus) == 5

@@ -1,16 +1,28 @@
 """A pydantic basemodel for setting HFConfig defaults"""
 
+from pathlib import Path
 from typing import Self
 
 import yaml
 from pydantic import BaseModel, Field
+from pyprojroot import here
 
 
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""
 
+    crs: str = Field(
+        default="EPSG:5070",
+        description="Coordinate Reference System for the hydrofabric builds. Defaults to Conus Albers",
+    )
+
     divide_aggregation_threshold: float = Field(
         default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
+    )
+
+    output_dir: Path = Field(
+        default=here() / "data/",
+        description="The directory for output files to be saved from Hydrofabric builds",
     )
 
     reference_divides_path: str = Field(

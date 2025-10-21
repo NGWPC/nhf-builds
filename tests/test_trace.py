@@ -96,6 +96,7 @@ def sample_flowpath_data() -> pd.DataFrame:
         "streamorder": [3, 2, 2, 1, 1, 1, 1, 1],
         "hydroseq": [1, 2, 3, 4, 5, 6, 7, 8],
         "dnhydroseq": [0, 1, 1, 2, 3, 4, 4, 5],
+        "mainstemlp": [100, 100, 200, 100, 200, 100, 100, 200],
     }
     return pd.DataFrame(data)
 
@@ -386,20 +387,30 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: stream_order == 2 with two stream_order == 1 upstreams"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0},
-            {"stream_order": 1, "flowpath_id": "up2", "total_drainage_area_sqkm": 5.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 200,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
 
         assert matched
         # Both upstreams aggregated into fp1
-        assert ("up1", "fp1") in result.aggregation_pairs  # Larger upstream
-        assert ("up2", "fp1") in result.aggregation_pairs  # Smaller upstream (minor)
+        assert ("up1", "fp1") in result.aggregation_pairs  # On mainstem
+        assert ("up2", "fp1") in result.aggregation_pairs  # Off mainstem (minor)
         assert "up2" in result.minor_flowpaths
-        assert "up1" not in result.minor_flowpaths  # Larger should NOT be minor
+        assert "up1" not in result.minor_flowpaths  # On mainstem should NOT be minor
         assert "fp1" in result.subdivide_candidates
         assert "fp1" in result.upstream_merge_points
         # Both upstreams and current should be marked as processed
@@ -411,10 +422,20 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: order-2 with order-1 upstreams that each have a single upstream chain"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2"], "up1": ["up1a"], "up2": ["up2a"], "up1a": [], "up2a": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0},
-            {"stream_order": 1, "flowpath_id": "up2", "total_drainage_area_sqkm": 5.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 200,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
@@ -436,10 +457,20 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: stream_order != 2 does NOT trigger rule"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
-        fp_info = {"stream_order": 3, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 3, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0},
-            {"stream_order": 1, "flowpath_id": "up2", "total_drainage_area_sqkm": 5.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 200,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
@@ -450,8 +481,15 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: less than 2 upstreams does NOT trigger rule"""
         result = Classifications()
         network_graph = {"fp1": ["up1"], "up1": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
-        upstream_info = [{"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0}]
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
+        upstream_info = [
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            }
+        ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
 
@@ -461,10 +499,20 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: all upstreams must be order-1 or rule doesn't trigger"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0},
-            {"stream_order": 2, "flowpath_id": "up2", "total_drainage_area_sqkm": 5.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 2,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 100,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
@@ -475,11 +523,26 @@ class TestRule5AggregateOrder2WithOrder1s:
         """Test case: order-2 stream with 3 order-1 upstreams - largest stays non-minor, others become minor"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": ["up1a"], "up2": [], "up3": [], "up1a": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 10.0},  # Largest
-            {"stream_order": 1, "flowpath_id": "up2", "total_drainage_area_sqkm": 5.0},  # Medium
-            {"stream_order": 1, "flowpath_id": "up3", "total_drainage_area_sqkm": 3.0},  # Smallest
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 10.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up3",
+                "total_drainage_area_sqkm": 3.0,
+                "mainstemlp": 300,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
@@ -490,10 +553,10 @@ class TestRule5AggregateOrder2WithOrder1s:
         assert ("up1a", "fp1") in result.aggregation_pairs
         assert ("up2", "fp1") in result.aggregation_pairs
         assert ("up3", "fp1") in result.aggregation_pairs
-        # Only largest (up1) should NOT be minor
+        # Only up1 (on mainstem) should NOT be minor
         assert "up1" not in result.minor_flowpaths
         assert "up1a" not in result.minor_flowpaths
-        # Medium and smallest should be minor
+        # Off-mainstem should be minor
         assert "up2" in result.minor_flowpaths
         assert "up3" in result.minor_flowpaths
         # All should be marked as processed
@@ -507,15 +570,35 @@ class TestRule5AggregateOrder2WithOrder1s:
         assert "fp1" in result.upstream_merge_points
 
     def test_order2_with_four_order1s(self) -> None:
-        """Test case: order-2 stream with 4 order-1 upstreams - largest stays non-minor, all others become minor"""
+        """Test case: order-2 stream with 4 order-1 upstreams - on-mainstem stays non-minor, all others become minor"""
         result = Classifications()
         network_graph = {"fp1": ["up1", "up2", "up3", "up4"], "up1": [], "up2": [], "up3": [], "up4": []}
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "total_drainage_area_sqkm": 15.0},  # Largest
-            {"stream_order": 1, "flowpath_id": "up2", "total_drainage_area_sqkm": 8.0},
-            {"stream_order": 1, "flowpath_id": "up3", "total_drainage_area_sqkm": 5.0},
-            {"stream_order": 1, "flowpath_id": "up4", "total_drainage_area_sqkm": 2.0},  # Smallest
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "total_drainage_area_sqkm": 15.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "total_drainage_area_sqkm": 8.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up3",
+                "total_drainage_area_sqkm": 5.0,
+                "mainstemlp": 300,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up4",
+                "total_drainage_area_sqkm": 2.0,
+                "mainstemlp": 400,
+            },
         ]
 
         matched = _rule_aggregate_order2_with_order1s("fp1", fp_info, upstream_info, network_graph, result)
@@ -526,9 +609,9 @@ class TestRule5AggregateOrder2WithOrder1s:
         assert ("up2", "fp1") in result.aggregation_pairs
         assert ("up3", "fp1") in result.aggregation_pairs
         assert ("up4", "fp1") in result.aggregation_pairs
-        # Only up1 (largest) should NOT be minor
+        # Only up1 (on mainstem) should NOT be minor
         assert "up1" not in result.minor_flowpaths
-        # All others should be minor
+        # All others should be minor (off mainstem)
         assert "up2" in result.minor_flowpaths
         assert "up3" in result.minor_flowpaths
         assert "up4" in result.minor_flowpaths
@@ -541,10 +624,20 @@ class TestRule6AggregateMixedUpstreamOrders:
     def test_mixed_orders_small_order1_becomes_minor(self, sample_config: HFConfig) -> None:
         """Test case: small order-1 upstream becomes minor flowpath aggregated to current"""
         result = Classifications()
-        fp_info = {"stream_order": 3, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 3, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "areasqkm": 1.0},  # Small
-            {"stream_order": 2, "flowpath_id": "up2", "areasqkm": 2.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "areasqkm": 1.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 2,
+                "flowpath_id": "up2",
+                "areasqkm": 2.0,
+                "mainstemlp": 100,
+            },
         ]
 
         matched = _rule_aggregate_mixed_upstream_orders("fp1", fp_info, upstream_info, sample_config, result)
@@ -557,10 +650,20 @@ class TestRule6AggregateMixedUpstreamOrders:
     def test_large_order1_not_minor(self, sample_config: HFConfig) -> None:
         """Test case: large order-1 (areasqkm >= threshold) is NOT marked as minor"""
         result = Classifications()
-        fp_info = {"stream_order": 3, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 3, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "areasqkm": 5.0},  # Large
-            {"stream_order": 2, "flowpath_id": "up2", "areasqkm": 2.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "areasqkm": 5.0,
+                "mainstemlp": 100,
+            },
+            {
+                "stream_order": 2,
+                "flowpath_id": "up2",
+                "areasqkm": 2.0,
+                "mainstemlp": 200,
+            },
         ]
 
         matched = _rule_aggregate_mixed_upstream_orders("fp1", fp_info, upstream_info, sample_config, result)
@@ -569,13 +672,28 @@ class TestRule6AggregateMixedUpstreamOrders:
         assert len(result.minor_flowpaths) == 0
 
     def test_multiple_small_order1s_all_minor(self, sample_config: HFConfig) -> None:
-        """Test case: large order-1 (areasqkm >= threshold) is NOT marked as minor"""
+        """Test case: multiple small order-1s all become minor flowpaths"""
         result = Classifications()
-        fp_info = {"stream_order": 3, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 3, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "areasqkm": 1.0},
-            {"stream_order": 1, "flowpath_id": "up2", "areasqkm": 1.5},
-            {"stream_order": 2, "flowpath_id": "up3", "areasqkm": 2.0},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "areasqkm": 1.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "areasqkm": 1.5,
+                "mainstemlp": 300,
+            },
+            {
+                "stream_order": 2,
+                "flowpath_id": "up3",
+                "areasqkm": 2.0,
+                "mainstemlp": 100,
+            },
         ]
 
         matched = _rule_aggregate_mixed_upstream_orders("fp1", fp_info, upstream_info, sample_config, result)
@@ -586,12 +704,22 @@ class TestRule6AggregateMixedUpstreamOrders:
         assert len(result.minor_flowpaths) == 2
 
     def test_only_order1s_not_mixed(self, sample_config: HFConfig) -> None:
-        """est case: only order-1 upstreams do NOT trigger mixed rule"""
+        """Test case: only order-1 upstreams do NOT trigger mixed rule"""
         result = Classifications()
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "areasqkm": 1.0},
-            {"stream_order": 1, "flowpath_id": "up2", "areasqkm": 1.5},
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "areasqkm": 1.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "areasqkm": 1.5,
+                "mainstemlp": 300,
+            },
         ]
 
         matched = _rule_aggregate_mixed_upstream_orders("fp1", fp_info, upstream_info, sample_config, result)
@@ -601,10 +729,20 @@ class TestRule6AggregateMixedUpstreamOrders:
     def test_small_order1_with_large_order1(self, sample_config: HFConfig) -> None:
         """Test small order-1 with large order-1 upstream triggers rule."""
         result = Classifications()
-        fp_info = {"stream_order": 2, "flowpath_id": "fp1"}
+        fp_info = {"stream_order": 2, "flowpath_id": "fp1", "mainstemlp": 100}
         upstream_info = [
-            {"stream_order": 1, "flowpath_id": "up1", "areasqkm": 1.0},  # Small
-            {"stream_order": 1, "flowpath_id": "up2", "areasqkm": 5.0},  # Large
+            {
+                "stream_order": 1,
+                "flowpath_id": "up1",
+                "areasqkm": 1.0,
+                "mainstemlp": 200,
+            },
+            {
+                "stream_order": 1,
+                "flowpath_id": "up2",
+                "areasqkm": 5.0,
+                "mainstemlp": 100,
+            },
         ]
 
         matched = _rule_aggregate_mixed_upstream_orders("fp1", fp_info, upstream_info, sample_config, result)
@@ -716,6 +854,7 @@ class TestHelperFunctions:
         assert info["areasqkm"] == 5.0
         assert info["length_km"] == 10.0
         assert info["stream_order"] == 3
+        assert info["mainstemlp"] == 100
 
 
 class TestTraceAndAggregateUpstream:
