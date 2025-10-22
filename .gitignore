@@ -224,6 +224,7 @@ _version.py
 *.htm
 *.ovr
 *.aux.xml
+*.nc
 
 Pipfile
 .vscode
