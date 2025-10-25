@@ -4,7 +4,7 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from pyprojroot import here
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Point, Polygon
 
 from hydrofabric_builds import HFConfig
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
@@ -50,6 +50,34 @@ def expected_graph() -> dict[str, list[str]]:
 
 
 @pytest.fixture
+def base_crs() -> str:
+    return "EPSG:4326"
+
+
+@pytest.fixture
+def gages_empty(base_crs: str) -> gpd.GeoDataFrame:
+    cols = ["geometry", "state", "site_no", "name_plain", "name_raw", "description"]
+    gdf = gpd.GeoDataFrame({c: [] for c in cols}, geometry="geometry", crs=base_crs)
+    return gdf
+
+
+@pytest.fixture
+def gages_seed(base_crs: str) -> gpd.GeoDataFrame:
+    gdf = gpd.GeoDataFrame(
+        {
+            "site_no": ["00000001"],
+            "state": ["-"],
+            "name_plain": ["-"],
+            "name_raw": ["seed-name"],
+            "description": ["-"],
+            "geometry": [Point(-100.0, 40.0)],
+        },
+        geometry="geometry",
+        crs=base_crs,
+    )
+    return gdf
+
+
 def sample_flowpath_data() -> pd.DataFrame:
     """Create sample flowpath data for unit testing individual rules."""
     data = {
