@@ -3,11 +3,13 @@
 import logging
 from typing import Any, cast
 
+from tqdm import tqdm
+
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
+from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries, _prepare_dataframes
 from hydrofabric_builds.hydrofabric.build import _build_base_hydrofabric, _order_aggregates_base
 from hydrofabric_builds.hydrofabric.trace import _trace_stack
-from hydrofabric_builds.hydrofabric.utils import _calculate_id_ranges_pure, _combine_hydrofabrics_pure
+from hydrofabric_builds.hydrofabric.utils import _calculate_id_ranges_pure, _combine_hydrofabrics
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 from hydrofabric_builds.task_instance import TaskInstance
 
@@ -39,31 +41,34 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
         raise ValueError("No outlets found. Aborting run")
 
     outlet_aggregations = {}
-    for outlet in outlets:
+    valid_divide_ids = set(reference_divides["divide_id"])  # creates an O(1) lookup table
+    reference_flowpaths = reference_flowpaths.set_index("flowpath_id")
+    fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+    for i, outlet in enumerate(tqdm(outlets, ncols=140, desc="Tracing/Classifying outlets")):
         classifications = _trace_stack(
-            start_id=outlet, network_graph=upstream_network, fp=reference_flowpaths, cfg=cfg
+            start_id=outlet,
+            network_graph=upstream_network,
+            fp=reference_flowpaths,
+            div_ids=valid_divide_ids,
+            cfg=cfg,
         )
         aggregate_data = _aggregate_geometries(
             classifications=classifications,
-            reference_divides=reference_divides,
             reference_flowpaths=reference_flowpaths,
+            fp_geom_lookup=fp_geom_lookup,
+            div_geom_lookup=div_geom_lookup,
         )
         ordered_aggregates = _order_aggregates_base(aggregate_data)
         num_features = len(ordered_aggregates)
 
         outlet_aggregations[outlet] = {
             "outlet": outlet,
-            "classifications": classifications.model_dump(),  # Serialize for XCom
-            "aggregate_data": {
-                "aggregates": aggregate_data.aggregates,
-                "independents": aggregate_data.independents,
-                "connectors": aggregate_data.connectors,
-                "minor_flowpaths": aggregate_data.minor_flowpaths,
-                "small_scale_connectors": aggregate_data.small_scale_connectors,
-            },
+            "classifications": classifications.model_dump(),
+            "aggregate_data": aggregate_data.model_dump(),
             "num_features": num_features,
         }
-
+        if i == cfg.debug_outlet_count:
+            break
     return {
         "outlet_aggregations": outlet_aggregations,
         "total_outlets": len(outlets),
@@ -141,7 +146,9 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
 
     built_hydrofabrics = {}
 
-    for outlet, outlet_data in outlet_aggregations.items():
+    for outlet, outlet_data in tqdm(
+        outlet_aggregations.items(), ncols=140, desc="Building Base Hydrofabric from outlets"
+    ):
         id_config = outlet_id_ranges[outlet]
 
         classifications = Classifications(**outlet_data["classifications"])
@@ -201,4 +208,4 @@ def reduce_combine_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]
     if not built_hydrofabrics:
         raise ValueError("No built hydrofabrics found from build phase")
 
-    return _combine_hydrofabrics_pure(built_hydrofabrics, cfg.crs)
+    return _combine_hydrofabrics(built_hydrofabrics, cfg.crs)

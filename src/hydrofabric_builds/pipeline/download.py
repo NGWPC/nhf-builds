@@ -33,7 +33,11 @@ def download_reference_data(**context: dict[str, Any]) -> dict[str, gpd.GeoDataF
     cfg = cast(HFConfig, context["config"])
 
     reference_divides = gpd.read_parquet(cfg.reference_divides_path)
+    reference_divides["divide_id"] = reference_divides["divide_id"].astype("int").astype("str")
     logger.info(f"Download Task: Ingested Reference Divides from: {cfg.reference_divides_path}")
+
     reference_flowpaths = gpd.read_parquet(cfg.reference_flowpaths_path)
+    reference_flowpaths["flowpath_id"] = reference_flowpaths["flowpath_id"].astype("int").astype("str")
     logger.info(f"Download Task: Ingested Reference Flowpaths from: {cfg.reference_flowpaths_path}")
+
     return {"reference_flowpaths": reference_flowpaths, "reference_divides": reference_divides}

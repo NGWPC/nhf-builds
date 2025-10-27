@@ -7,6 +7,64 @@ import pandas as pd
 import polars as pl
 
 
+def _detect_cycles(upstream_network: dict[str, list[str]]) -> None:
+    """Detect cycles in the upstream network graph.
+
+    Parameters
+    ----------
+    upstream_network : dict[str, list[str]]
+        Dictionary mapping downstream flowpath IDs to lists of upstream flowpath IDs
+
+    Returns
+    -------
+    list[list[str]]
+        List of cycles found, where each cycle is a list of flowpath IDs
+        Returns empty list if no cycles found
+
+    """
+    cycles = []
+    visited = set()
+    rec_stack = set()  # Recursion stack to track current path
+
+    def dfs(node: str, path: list[str]) -> None:
+        """Depth-first search to detect cycles."""
+        visited.add(node)
+        rec_stack.add(node)
+        path.append(node)
+
+        # Check all upstream neighbors
+        for upstream in upstream_network.get(node, []):
+            upstream_str = str(upstream)
+
+            if upstream_str not in visited:
+                # Continue DFS
+                dfs(upstream_str, path.copy())
+            elif upstream_str in rec_stack:
+                # Found a cycle - extract the cycle path
+                cycle_start = path.index(upstream_str)
+                cycle = path[cycle_start:] + [upstream_str]
+                cycles.append(cycle)
+
+        # Backtrack
+        rec_stack.remove(node)
+
+    # Check all nodes (including disconnected components)
+    all_nodes = set(upstream_network.keys())
+    for upstream_list in upstream_network.values():
+        all_nodes.update(str(u) for u in upstream_list)
+
+    for node in all_nodes:
+        if node not in visited:
+            dfs(node, [])
+
+    if cycles:
+        raise ValueError(
+            f"Cycles detected in network! Found {len(cycles)} cycle(s). "
+            f"This likely indicates an error in the reference flowpath data."
+            f"cycles: {cycles}"
+        )
+
+
 def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:
     """Find outlets for the river using hydroseq
 

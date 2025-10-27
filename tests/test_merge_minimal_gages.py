@@ -1,9 +1,39 @@
 from __future__ import annotations
 
 import geopandas as gpd
+import pytest
 from shapely.geometry import Point
 
 from hydrofabric_builds.hydrolocations.usgs_gages_builder import merge_minimal_gages
+
+
+@pytest.fixture
+def base_crs() -> str:
+    return "EPSG:4326"
+
+
+@pytest.fixture
+def gages_empty(base_crs: str) -> gpd.GeoDataFrame:
+    cols = ["geometry", "state", "site_no", "name_plain", "name_raw", "description"]
+    gdf = gpd.GeoDataFrame({c: [] for c in cols}, geometry="geometry", crs=base_crs)
+    return gdf
+
+
+@pytest.fixture
+def gages_seed(base_crs: str) -> gpd.GeoDataFrame:
+    gdf = gpd.GeoDataFrame(
+        {
+            "site_no": ["00000001"],
+            "state": ["-"],
+            "name_plain": ["-"],
+            "name_raw": ["seed-name"],
+            "description": ["-"],
+            "geometry": [Point(-100.0, 40.0)],
+        },
+        geometry="geometry",
+        crs=base_crs,
+    )
+    return gdf
 
 
 def test_merge_minimal_appends_and_fills(gages_empty: gpd.GeoDataFrame) -> None:

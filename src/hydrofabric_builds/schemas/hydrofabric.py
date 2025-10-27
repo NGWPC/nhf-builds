@@ -16,8 +16,14 @@ class Classifications(BaseModel):
             "A list of tuples for flowpaths to be aggregated together. Format: (downstream_id, upstream_id, ...) where downstream merges into upstream"
         ),
     )
-    minor_flowpaths: list[str] = Field(
+    no_divide_connectors: list[str] = Field(
         default_factory=list,
+        description=(
+            "A list of flowpath IDs that do not have divides and connect rivers. These are errors in the reference that will not be carried into the hydrofabric"
+        ),
+    )
+    minor_flowpaths: set[str] = Field(
+        default_factory=set,
         description=(
             "Reference flowpaths classified as 'minor' tributaries. These are flowpaths that are stream-order 1, with a total DA of < threshold where routing will not be run"
         ),
@@ -31,7 +37,7 @@ class Classifications(BaseModel):
     connector_segments: list[str] = Field(
         default_factory=list,
         description=(
-            "Small flowpaths (areasqkm < threshold) that connect two higher-order streams. These have two upstream flowpaths where both have stream_order > 1. They remain independent despite being small because they serve as connectors between large stream branches, and aggregation would present inconsistencies within routing"
+            "Small flowpaths (areasqkm < threshold) that connect two higher-order streams. These have two upstream flowpaths where both have streamorder > 1. They remain independent despite being small because they serve as connectors between large stream branches, and aggregation would present inconsistencies within routing"
         ),
     )
     subdivide_candidates: list[str] = Field(
@@ -77,6 +83,11 @@ class Aggregations(BaseModel):
     )
     minor_flowpaths: list[dict] = Field(
         description=("A list of minor flowpaths and their geometries"),
+    )
+    no_divide_connectors: list[dict] = Field(
+        description=(
+            "A list of flowpaths that connect to multiple upstream components that do not have geometries"
+        ),
     )
     small_scale_connectors: list[dict] = Field(
         description=("A list of small-scale connection segments and their geometries"),

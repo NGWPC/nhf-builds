@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import LineString, Point, Polygon
 
-from hydrofabric_builds.pipeline.processing import _calculate_id_ranges_pure, _combine_hydrofabrics_pure
+from hydrofabric_builds.pipeline.processing import _calculate_id_ranges_pure, _combine_hydrofabrics
 
 
 @pytest.fixture
@@ -104,11 +104,11 @@ def built_hydrofabrics(
 
 
 class TestCombineHydrofabricsPure:
-    """Tests for pure _combine_hydrofabrics_pure function"""
+    """Tests for pure _combine_hydrofabrics function"""
 
     def test_combines_all_layers(self, built_hydrofabrics: dict) -> None:
         """Test that all layers are combined correctly."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         assert "flowpaths" in result
         assert "divides" in result
@@ -120,7 +120,7 @@ class TestCombineHydrofabricsPure:
 
     def test_concatenates_correct_number_of_features(self, built_hydrofabrics: dict) -> None:
         """Test that all features are included in combined output."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         # 2 flowpaths from outlet1 + 3 from outlet2 = 5 total
         assert len(result["flowpaths"]) == 5
@@ -129,7 +129,7 @@ class TestCombineHydrofabricsPure:
 
     def test_preserves_unique_ids(self, built_hydrofabrics: dict) -> None:
         """Test that IDs remain unique after combination."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         fp_ids = result["flowpaths"]["fp_id"].tolist()
         div_ids = result["divides"]["div_id"].tolist()
@@ -148,7 +148,7 @@ class TestCombineHydrofabricsPure:
     def test_preserves_crs(self, built_hydrofabrics: dict) -> None:
         """Test that CRS is preserved in combined output."""
         crs = "EPSG:5070"
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, crs)
+        result = _combine_hydrofabrics(built_hydrofabrics, crs)
 
         assert result["flowpaths"].crs == crs
         assert result["divides"].crs == crs
@@ -157,7 +157,7 @@ class TestCombineHydrofabricsPure:
     def test_raises_when_empty_dict(self) -> None:
         """Test error when empty hydrofabrics dict provided."""
         with pytest.raises(ValueError, match="No built hydrofabrics provided"):
-            _combine_hydrofabrics_pure({}, "EPSG:5070")
+            _combine_hydrofabrics({}, "EPSG:5070")
 
     def test_raises_when_missing_flowpaths_key(self, sample_hydrofabric_outlet1: dict) -> None:
         """Test error when flowpaths key missing from hydrofabric."""
@@ -170,7 +170,7 @@ class TestCombineHydrofabricsPure:
         }
 
         with pytest.raises(KeyError, match="Missing 'flowpaths' for outlet outlet1"):
-            _combine_hydrofabrics_pure(bad_hydrofabric, "EPSG:5070")
+            _combine_hydrofabrics(bad_hydrofabric, "EPSG:5070")
 
     def test_raises_when_missing_divides_key(self, sample_hydrofabric_outlet1: dict) -> None:
         """Test error when divides key missing from hydrofabric."""
@@ -183,7 +183,7 @@ class TestCombineHydrofabricsPure:
         }
 
         with pytest.raises(KeyError, match="Missing 'divides' for outlet outlet1"):
-            _combine_hydrofabrics_pure(bad_hydrofabric, "EPSG:5070")
+            _combine_hydrofabrics(bad_hydrofabric, "EPSG:5070")
 
     def test_raises_when_missing_nexus_key(self, sample_hydrofabric_outlet1: dict) -> None:
         """Test error when nexus key missing from hydrofabric."""
@@ -196,13 +196,13 @@ class TestCombineHydrofabricsPure:
         }
 
         with pytest.raises(KeyError, match="Missing 'nexus' for outlet outlet1"):
-            _combine_hydrofabrics_pure(bad_hydrofabric, "EPSG:5070")
+            _combine_hydrofabrics(bad_hydrofabric, "EPSG:5070")
 
     def test_handles_single_outlet(self, sample_hydrofabric_outlet1: dict) -> None:
         """Test combination with single outlet."""
         single_outlet = {"outlet1": sample_hydrofabric_outlet1}
 
-        result = _combine_hydrofabrics_pure(single_outlet, "EPSG:5070")
+        result = _combine_hydrofabrics(single_outlet, "EPSG:5070")
 
         assert len(result["flowpaths"]) == 2
         assert len(result["divides"]) == 2
@@ -210,7 +210,7 @@ class TestCombineHydrofabricsPure:
 
     def test_preserves_all_columns(self, built_hydrofabrics: dict) -> None:
         """Test that all columns are preserved in combined output."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         # Check flowpaths columns
         assert "fp_id" in result["flowpaths"].columns
@@ -232,7 +232,7 @@ class TestCombineHydrofabricsPure:
 
     def test_preserves_data_types(self, built_hydrofabrics: dict) -> None:
         """Test that data types are preserved after combination."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         # Check types preserved
         assert pd.api.types.is_integer_dtype(result["flowpaths"]["fp_id"])
@@ -242,7 +242,7 @@ class TestCombineHydrofabricsPure:
     def test_handles_different_crs(self, built_hydrofabrics: dict) -> None:
         """Test that output CRS can be different from input."""
         # Input is EPSG:5070, output requested as EPSG:4326
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:4326")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:4326")
 
         # Should have the requested CRS
         assert result["flowpaths"].crs == "EPSG:4326"
@@ -251,7 +251,7 @@ class TestCombineHydrofabricsPure:
 
     def test_resets_index(self, built_hydrofabrics: dict) -> None:
         """Test that indices are reset after concatenation."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         # After concat with ignore_index=True, indices should be 0-4
         assert list(result["flowpaths"].index) == [0, 1, 2, 3, 4]
@@ -260,7 +260,7 @@ class TestCombineHydrofabricsPure:
 
     def test_preserves_geometry_types(self, built_hydrofabrics: dict) -> None:
         """Test that geometry types are correct after combination."""
-        result = _combine_hydrofabrics_pure(built_hydrofabrics, "EPSG:5070")
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
 
         # Check geometry types
         assert all(geom.geom_type == "LineString" for geom in result["flowpaths"].geometry)
@@ -303,7 +303,7 @@ class TestCombineHydrofabricsPure:
                 ),
             }
 
-        result = _combine_hydrofabrics_pure(many_outlets, crs)
+        result = _combine_hydrofabrics(many_outlets, crs)
 
         # 10 outlets * 5 features each = 50 total
         assert len(result["flowpaths"]) == 50
@@ -323,13 +323,8 @@ class TestCombineHydrofabricsPure:
             }
         }
 
-        result = _combine_hydrofabrics_pure(empty_outlet, crs)
-
-        # Should return empty GeoDataFrames with correct CRS
-        assert len(result["flowpaths"]) == 0
-        assert len(result["divides"]) == 0
-        assert len(result["nexus"]) == 0
-        assert result["flowpaths"].crs == crs
+        with pytest.raises(ValueError):
+            _ = _combine_hydrofabrics(empty_outlet, crs)
 
 
 class TestCalculateIdRangesPure:

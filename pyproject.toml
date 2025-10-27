@@ -152,4 +152,5 @@ warn_unused_ignores = true
 filterwarnings = [
     "ignore::DeprecationWarning:pyogrio",
     "ignore:The 'shapely.geos' module is deprecated:DeprecationWarning",
+    "ignore:The behavior of DataFrame concatenation with empty or all-NA entries is deprecated:FutureWarning",
 ]

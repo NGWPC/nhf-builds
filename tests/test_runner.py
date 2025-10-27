@@ -215,12 +215,12 @@ class TestIntegration:
             )
 
         outlets = runner.ti.xcom_pull("build_graph", key="outlets")
-        assert outlets == ["6720797"]  # expected outlet
+        assert "6720879" in outlets  # expected outlet
 
         final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
         final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
         final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
 
-        assert len(final_flowpaths) == 9
-        assert len(final_divides) == 9
-        assert len(final_nexus) == 5
+        assert len(final_flowpaths) == 50
+        assert len(final_divides) == 50
+        assert len(final_nexus) == 38

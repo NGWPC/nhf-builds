@@ -19,7 +19,7 @@ class TestDownloadReferenceData:
 
         assert flowpaths is not None
         assert isinstance(flowpaths, gpd.GeoDataFrame)
-        assert len(flowpaths) == 12
+        assert len(flowpaths) == 85
         assert "flowpath_id" in flowpaths.columns
         assert "VPUID" in flowpaths.columns
 
@@ -34,5 +34,5 @@ class TestDownloadReferenceData:
 
         assert divides is not None
         assert isinstance(divides, gpd.GeoDataFrame)
-        assert len(divides) == 12
+        assert len(divides) == 85
         assert "divide_id" in divides.columns

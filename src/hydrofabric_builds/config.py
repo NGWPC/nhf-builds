@@ -34,6 +34,11 @@ class HFConfig(BaseModel):
         description="The location of the reference fabric flowpaths. Default is in the NGWPC Test AWS account",
     )
 
+    debug_outlet_count: int = Field(
+        default=-1,
+        description="A debug setting to only run a specified number out outlets through the runner. Setting to -1 as a default to avoidd premature activation",
+    )
+
     @classmethod
     def from_yaml(cls, path: str) -> Self:
         """An internal method to read a config from a YAML file

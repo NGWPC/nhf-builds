@@ -2,7 +2,7 @@
 
 from typing import Any, cast
 
-from hydrofabric_builds.hydrofabric.graph import _build_graph, _find_outlets_by_hydroseq
+from hydrofabric_builds.hydrofabric.graph import _build_graph, _detect_cycles, _find_outlets_by_hydroseq
 from hydrofabric_builds.task_instance import TaskInstance
 
 
@@ -32,6 +32,7 @@ def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any] | list[st
     reference_flowpaths = ti.xcom_pull(task_id="download", key="reference_flowpaths")
 
     upstream_dict = _build_graph(reference_flowpaths)
+    _detect_cycles(upstream_dict)
     outlets = _find_outlets_by_hydroseq(reference_flowpaths)
 
     return {"outlets": outlets, "upstream_network": upstream_dict}

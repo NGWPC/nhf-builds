@@ -46,10 +46,10 @@ def _calculate_id_ranges_pure(outlet_aggregations: dict) -> dict[str, Any]:
     }
 
 
-def _combine_hydrofabrics_pure(
+def _combine_hydrofabrics(
     built_hydrofabrics: dict[str, dict[str, Any]], crs: str
 ) -> dict[str, gpd.GeoDataFrame]:
-    """Pure function to combine multiple outlet hydrofabrics (easily testable).
+    """Function to combine multiple outlet hydrofabrics.
 
     Parameters
     ----------
@@ -81,7 +81,11 @@ def _combine_hydrofabrics_pure(
     all_divides = []
     all_nexus = []
 
-    for outlet_id, hf_data in built_hydrofabrics.items():
+    valid_hydrofabrics = {k: v for k, v in built_hydrofabrics.items() if v is not None}
+    if not valid_hydrofabrics:
+        raise ValueError("No valid hydrofabrics to combine (all results were None)")
+
+    for outlet_id, hf_data in valid_hydrofabrics.items():
         if "flowpaths" not in hf_data:
             raise KeyError(f"Missing 'flowpaths' for outlet {outlet_id}")
         if "divides" not in hf_data:
@@ -89,9 +93,19 @@ def _combine_hydrofabrics_pure(
         if "nexus" not in hf_data:
             raise KeyError(f"Missing 'nexus' for outlet {outlet_id}")
 
-        all_flowpaths.append(hf_data["flowpaths"])
-        all_divides.append(hf_data["divides"])
-        all_nexus.append(hf_data["nexus"])
+        if hf_data["flowpaths"] is not None:
+            if not hf_data["flowpaths"].empty:
+                all_flowpaths.append(hf_data["flowpaths"])
+        if hf_data["nexus"] is not None:
+            if not hf_data["nexus"].empty:
+                all_nexus.append(hf_data["nexus"])
+        if hf_data["divides"] is not None:
+            # Making sure that the divides layer geometry isn't empty
+            if not hf_data["divides"].empty and not hf_data["divides"].geometry.is_empty.iloc[0]:
+                all_divides.append(hf_data["divides"])
+
+    if not all_flowpaths:
+        raise ValueError("No non-empty flowpaths to combine across all outlets")
 
     combined_flowpaths = pd.concat(all_flowpaths, ignore_index=True)
     combined_divides = pd.concat(all_divides, ignore_index=True)

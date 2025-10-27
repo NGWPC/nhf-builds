@@ -11,22 +11,12 @@ from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 logger = logging.getLogger(__name__)
 
 
-def _prepare_dataframes(
-    _flowpaths_gdf: gpd.GeoDataFrame, _divides_gdf: gpd.GeoDataFrame
-) -> tuple[gpd.GeoDataFrame, dict, dict]:
-    flowpaths_gdf = _flowpaths_gdf.copy()
-    flowpaths_gdf["flowpath_id"] = flowpaths_gdf["flowpath_id"].astype(str).str.replace(".0", "", regex=False)
-
-    divides_gdf = _divides_gdf.copy()
-    divides_gdf["divide_id"] = divides_gdf["divide_id"].astype(str).str.replace(".0", "", regex=False)
-
-    fp_geom_lookup = dict(
-        zip(flowpaths_gdf["flowpath_id"].astype(str), flowpaths_gdf["geometry"], strict=False)
-    )
+def _prepare_dataframes(flowpaths_gdf: gpd.GeoDataFrame, divides_gdf: gpd.GeoDataFrame) -> tuple[dict, dict]:
+    fp_geom_lookup = dict(zip(flowpaths_gdf.index, flowpaths_gdf["geometry"], strict=False))
 
     div_geom_lookup = dict(zip(divides_gdf["divide_id"].astype(str), divides_gdf["geometry"], strict=False))
 
-    return flowpaths_gdf, fp_geom_lookup, div_geom_lookup
+    return fp_geom_lookup, div_geom_lookup
 
 
 def _merge_tuples_with_common_values(tuples_list: list[tuple[str, ...]]) -> list[list[str]]:
@@ -87,24 +77,24 @@ def _process_aggregation_pairs(
 
     results = []
     for group_ids in groups:
-        group_fps: pd.Series = flowpaths_gdf[flowpaths_gdf["flowpath_id"].isin(group_ids)]
+        group_fps: pd.Series = flowpaths_gdf[flowpaths_gdf.index.isin(group_ids)]
         if group_fps.empty:
             logger.warning(f"Cannot find flowpaths for {group_fps}")
             continue
 
         fp_ids = group_fps.copy()
-        fp_ids = fp_ids[~fp_ids["flowpath_id"].isin(classifications.minor_flowpaths)]
+        fp_ids = fp_ids[~fp_ids.index.isin(classifications.minor_flowpaths)]
         sorted_fps = fp_ids.sort_values("hydroseq")
-        fp_geometry_ids = fp_ids.sort_values("hydroseq", ascending=False)["flowpath_id"].tolist()
-        sorted_ids = sorted_fps["flowpath_id"].tolist()
+        fp_geometry_ids = fp_ids.sort_values("hydroseq", ascending=False).index.tolist()
+        sorted_ids = sorted_fps.index.tolist()
 
-        if len(sorted_ids) >= 2:
-            last_order = sorted_fps.iloc[-1]["streamorder"]
-            second_last_order = sorted_fps.iloc[-2]["streamorder"]
+        # if len(sorted_ids) >= 2:
+        #     last_order = sorted_fps.iloc[-1]["streamorder"]
+        #     second_last_order = sorted_fps.iloc[-2]["streamorder"]
 
-            # If last is order 1 but second-to-last is not, swap them to make sure that the upstream-ID is connected to a river network
-            if last_order == 1 and second_last_order != 1:
-                sorted_ids[-1], sorted_ids[-2] = sorted_ids[-2], sorted_ids[-1]
+        #     # If last is order 1 but second-to-last is not, swap them to make sure that the upstream-ID is connected to a river network
+        #     if last_order == 1 and second_last_order != 1:
+        #         sorted_ids[-1], sorted_ids[-2] = sorted_ids[-2], sorted_ids[-1]
 
         results.append(
             {
@@ -118,11 +108,52 @@ def _process_aggregation_pairs(
                     [fp_geom_lookup[id] for id in fp_geometry_ids if id in fp_geom_lookup]
                 ),
                 "polygon_geometry": unary_union(
-                    [div_geom_lookup[id] for id in group_ids if id in div_geom_lookup]
+                    [div_geom_lookup.get(id, None) for id in group_ids if id in div_geom_lookup]
                 ),
             }
         )
 
+    return results
+
+
+def _process_no_divide_connectors(
+    classifications: Classifications,
+    flowpaths_gdf: gpd.GeoDataFrame,
+    fp_geom_lookup: dict,
+    div_geom_lookup: dict,
+) -> list[dict]:
+    """Process independent flowpaths (no aggregation needed).
+
+    Parameters
+    ----------
+    classifications : Classifications
+        Classification results
+    flowpaths_gdf : gpd.GeoDataFrame
+        Reference flowpaths
+    divides_gdf : gpd.GeoDataFrame
+        Reference divides
+    fp_geom_lookup : dict
+        Flowpath geometry lookup
+    div_geom_lookup : dict
+        Divide geometry lookup
+
+    Returns
+    -------
+    tuple[list[dict], list[dict]]
+        Independent flowpaths and divides
+    """
+    results = []
+    for fp in classifications.no_divide_connectors:
+        upstream_ids = flowpaths_gdf[flowpaths_gdf["flowpath_toid"] == float(fp)].index.values.tolist()
+        downstream_id = flowpaths_gdf.loc[fp]["flowpath_toid"].astype(int).astype(str).item()
+        results.append(
+            {
+                "ref_ids": fp,
+                "dn_id": downstream_id,
+                "up_id": upstream_ids,
+                "line_geometry": fp_geom_lookup[fp],
+            }
+        )
     return results
 
 
@@ -163,8 +194,13 @@ def _process_minor_flowpaths(
 ) -> list[dict]:
     results = []
     for fp in classifications.minor_flowpaths:
+        # If no geometry associated with the minor flowpath, then create an NA
         results.append(
-            {"ref_ids": fp, "line_geometry": fp_geom_lookup[fp], "polygon_geometry": div_geom_lookup[fp]}
+            {
+                "ref_ids": fp,
+                "line_geometry": fp_geom_lookup[fp],
+                "polygon_geometry": div_geom_lookup.get(fp, None),
+            }
         )
 
     return results
@@ -196,14 +232,17 @@ def _process_connectors(
 
 def _aggregate_geometries(
     classifications: Classifications,
-    reference_divides: pd.DataFrame,
-    reference_flowpaths: pd.DataFrame,
+    reference_flowpaths: gpd.GeoDataFrame,
+    fp_geom_lookup: dict,
+    div_geom_lookup: dict,
 ) -> Aggregations:
-    flowpaths_gdf, fp_geom_lookup, div_geom_lookup = _prepare_dataframes(
-        reference_flowpaths, reference_divides
+    aggregates = _process_aggregation_pairs(
+        classifications, reference_flowpaths, fp_geom_lookup, div_geom_lookup
     )
 
-    aggregates = _process_aggregation_pairs(classifications, flowpaths_gdf, fp_geom_lookup, div_geom_lookup)
+    no_divide_connectors = _process_no_divide_connectors(
+        classifications, reference_flowpaths, fp_geom_lookup, div_geom_lookup
+    )
 
     independents = _process_independent_flowpaths(classifications, fp_geom_lookup, div_geom_lookup)
 
@@ -217,6 +256,7 @@ def _aggregate_geometries(
         aggregates=aggregates,
         independents=independents,
         minor_flowpaths=minor_flowpaths,
+        no_divide_connectors=no_divide_connectors,
         small_scale_connectors=small_scale_connectors,
         connectors=connectors,
     )

@@ -1,8 +1,7 @@
-"""A file to hold all tracing/Hydrofabric stack-related codes"""
+"""Tracing and classification module for hydrofabric builds."""
 
 import logging
 from collections import deque
-from typing import Any
 
 import pandas as pd
 
@@ -12,501 +11,609 @@ from hydrofabric_builds.schemas.hydrofabric import Classifications
 logger = logging.getLogger(__name__)
 
 
-def _get_flowpath_info(fp_id: str, fp_indexed: pd.DataFrame) -> dict[str, Any]:
-    """Gets necessary information from the flowpath requested from the reference in dictionary format
+def _get_flowpath_info(flowpath_id: str, fp: pd.DataFrame) -> dict:
+    """Get flowpath information from the dataframe.
 
     Parameters
     ----------
-    fp_id : str
-        The current flowpath ID
-    fp_indexed : pd.DataFrame
-        The flowpath dataframe indexed by ID
+    flowpath_id : str
+        The flowpath ID to look up
+    fp : pd.DataFrame
+        The flowpaths dataframe (indexed by flowpath_id)
 
     Returns
     -------
-    dict[str, Any]
-        The required information from the flowpath
+    dict
+        Dictionary containing flowpath attributes
     """
-    fp_row = fp_indexed.loc[int(float(fp_id))]
+    if flowpath_id not in fp.index:
+        raise ValueError(f"Flowpath {flowpath_id} not found in reference data")
 
+    fp_row = fp.loc[flowpath_id]
     return {
-        "flowpath_id": fp_id,
-        "total_drainage_area_sqkm": fp_row["totdasqkm"],
-        "areasqkm": fp_row["areasqkm_left"],
-        "length_km": fp_row["lengthkm"],
-        "stream_order": fp_row["streamorder"],
-        "hydroseq": fp_row["hydroseq"],
-        "mainstemlp": fp_row["mainstemlp"],
-        "dnhydroseq": fp_row["dnhydroseq"],
+        "flowpath_id": flowpath_id,
+        "areasqkm": float(fp_row["areasqkm"]),
+        "streamorder": int(fp_row["streamorder"]),
+        "length_km": float(fp_row["lengthkm"]),
+        "mainstemlp": float(fp_row.get("mainstemlp", 0)),
     }
 
 
-def _get_unprocessed_upstream_info(
-    upstream_ids: list[str], fp_indexed: pd.DataFrame, processed_flowpaths: set[str]
-) -> list[dict]:
-    """Helper function to get info for unprocessed upstream flowpaths.
+def _get_unprocessed_upstream_info(upstream_ids: list, fp: pd.DataFrame, processed: set) -> list[dict]:
+    """Get info for unprocessed upstream flowpaths.
 
     Parameters
     ----------
-    upstream_ids : list[str]
-        upstream flowpath ids
-    fp_indexed : pd.DataFrame
-        the reference flowpaths dataframe
-    processed_flowpaths : set[str]
-        the set of flowpaths that have been processed
+    upstream_ids : list
+        List of upstream flowpath IDs
+    fp : pd.DataFrame
+        The flowpaths dataframe (indexed by flowpath_id)
+    processed : set
+        Set of already processed flowpath IDs
 
     Returns
     -------
     list[dict]
-        a list of all upstream info / segments to be processed
+        List of flowpath info dictionaries for unprocessed upstreams
     """
-    upstream_info = []
-    for upstream_id in upstream_ids:
-        if upstream_id not in processed_flowpaths:
-            info = _get_flowpath_info(upstream_id, fp_indexed)
-            upstream_info.append(info)
-    return upstream_info
+    unprocessed = []
+    for uid in upstream_ids:
+        # Convert to string to avoid numpy types
+        uid_str = str(uid)
+        if uid_str not in processed and uid_str in fp.index:
+            fp_row = fp.loc[uid_str]
+            unprocessed.append(
+                {
+                    "flowpath_id": uid_str,
+                    "areasqkm": float(fp_row["areasqkm"]),
+                    "streamorder": int(fp_row["streamorder"]),
+                    "length_km": float(fp_row["lengthkm"]),
+                    "mainstemlp": float(fp_row.get("mainstemlp", 0)),
+                }
+            )
+    return unprocessed
 
 
 def _queue_upstream(
-    upstream_ids: list[str], to_process: deque, processed_flowpaths: set[str], unprocessed_only: bool = False
+    upstream_ids: list, to_process: deque, processed: set, unprocessed_only: bool = False
 ) -> None:
-    """Helper function to add unprocessed upstream flowpaths to processing queue.
+    """Queue upstream flowpaths for processing.
 
     Parameters
     ----------
-    upstream_ids : list[str]
-        upstream flowpath ids
+    upstream_ids : list
+        List of upstream flowpath IDs
     to_process : deque
-        the stack data structure
-    processed_flowpaths : set[str]
-        the set of flowpaths that have been processed
-    unprocessed_only: bool
-        will queue only unprocessed segments
+        Queue of flowpaths to process
+    processed : set
+        Set of already processed flowpath IDs
+    unprocessed_only : bool
+        If True, only queue unprocessed flowpaths
     """
-    for upstream_id in upstream_ids:
-        if unprocessed_only:
-            if upstream_id not in processed_flowpaths:
-                to_process.append(upstream_id)
-        else:
-            to_process.append(upstream_id)
+    for uid in upstream_ids:
+        uid_str = str(uid)
+        if not unprocessed_only or uid_str not in processed:
+            to_process.append(uid_str)
 
 
 def _rule_independent_large_area(
     current_id: str, fp_info: dict, cfg: HFConfig, result: Classifications
 ) -> bool:
-    """A Hydrofabric Rule for establishing Independent Divides based on a Large Contributing Area
+    """Rule: Large Area (>threshold) remains independent.
+
+    Large catchments remain independent regardless of stream order
+    because they represent significant hydrologic features.
 
     Parameters
     ----------
     current_id : str
-        The current flowpath ID
+        Current flowpath ID
     fp_info : dict
-        All of the catchment information contained within a flowpath ID
+        Flowpath information
     cfg : HFConfig
-        The config file
+        Configuration
     result : Classifications
-        A container for storing classification references
+        Results container
 
     Returns
     -------
     bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
+        True if flowpath is independent due to large area
     """
     if fp_info["areasqkm"] > cfg.divide_aggregation_threshold:
         result.independent_flowpaths.append(current_id)
         return True
+
     return False
 
 
 def _rule_independent_connector(
     current_id: str,
-    fp_info: dict,
     upstream_info: list[dict],
     cfg: HFConfig,
     network_graph: dict,
     result: Classifications,
+    div_ids: set,
 ) -> bool:
-    """Rule: areasqkm < threshold AND two OR MORE upstream flowpaths where ALL have stream_order > 1 OR: areasqkm < threshold AND has upstream with stream_order == 1 where that upstream's areasqkm > threshold
+    """Rule: Connector where 2+ HIGHER-ORDER streams meet.
 
-    Action: Mark as connector segment, aggregate any small order-1 upstreams
+    True connectors are confluences of significant streams (order 2+).
+    They remain independent regardless of area - critical for network topology.
+    All other order 1 streams here become minor flowpaths
+
+    Criteria:
+    - Has 2+ upstream segments with order > 1
+    - May also have order 1 tributaries (which get aggregated if small)
 
     Parameters
     ----------
     current_id : str
-        The current flowpath ID
+        Current flowpath ID
     fp_info : dict
-        All of the catchment information contained within a flowpath ID
+        Flowpath information
     upstream_info : list[dict]
-        A list of all information for upstream catchments
+        Upstream flowpath information
     cfg : HFConfig
-        The config file
+        Configuration
     network_graph : dict
-        The network graph
+        Network graph
     result : Classifications
-        A container for storing classification references
+        Results container
+    div_ids : set
+        Set of all divide IDs
 
     Returns
     -------
     bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
+        True if this is a connector segment
     """
-    if (
-        fp_info["areasqkm"] < cfg.divide_aggregation_threshold
-        and len(upstream_info) >= 2
-        and all(info["stream_order"] > 1 for info in upstream_info)
-    ):
-        result.connector_segments.append(current_id)
-        return True
+    # Separate upstream by stream order
+    order_1_upstreams = [info for info in upstream_info if info["streamorder"] == 1]
+    higher_order_upstreams = [info for info in upstream_info if info["streamorder"] > 1]
 
-    if fp_info["areasqkm"] < cfg.divide_aggregation_threshold and len(upstream_info) >= 2:
-        # Check if any order-1 upstream is large enough to be independent
-        large_order1_upstreams = [
-            info
-            for info in upstream_info
-            if info["stream_order"] == 1 and info["areasqkm"] > cfg.divide_aggregation_threshold
-        ]
-
-        # Get small order-1 upstreams that should be aggregated
-        small_order1_upstreams = [
-            info
-            for info in upstream_info
-            if info["stream_order"] == 1 and info["areasqkm"] <= cfg.divide_aggregation_threshold
-        ]
-
-        if large_order1_upstreams:
-            result.connector_segments.append(current_id)
-
-            # Trace and aggregate any small order-1 upstreams into current
-            for small_order1 in small_order1_upstreams:
-                _trace_and_aggregate_upstream(
-                    current_id=small_order1["flowpath_id"],
-                    target_id=current_id,
-                    network_graph=network_graph,
-                    result=result,
-                    is_minor=True,
-                )
-
+    # Only create independent connectors for >=2 higher-order streams meeting
+    if len(higher_order_upstreams) >= 2:
+        if current_id not in div_ids:
+            # Classify for later aggregation fixes
+            result.no_divide_connectors.append(current_id)
+            result.processed_flowpaths.add(current_id)
             return True
-    return False
 
+        # Mark as connector
+        result.connector_segments.append(current_id)
 
-def _rule_aggregate_single_upstream(
-    current_id: str, fp_info: dict, upstream_info: list[dict], cfg: HFConfig, result: Classifications
-) -> bool:
-    """Rule: areasqkm < threshold AND one upstream flowpath. Action: Mark to merge into upstream catchment
+        # Aggregate small order 1 tributaries into the connector
+        for order1_info in order_1_upstreams:
+            upstream_id = order1_info["flowpath_id"]
+            while True:
+                result.minor_flowpaths.add(upstream_id)
+                result.aggregation_pairs.append((upstream_id, current_id))
+                result.processed_flowpaths.add(upstream_id)
+                next_upstream_ids = network_graph.get(upstream_id, [])
 
-    Parameters
-    ----------
-    current_id : str
-        The current flowpath ID
-    fp_info : dict
-        All of the catchment information contained within a flowpath ID
-    upstream_info : list[dict]
-        A list of all information for upstream catchments
-    cfg : HFConfig
-        The config file
-    result : Classifications
-        A container for storing classification references
+                # Stop if no upstream (headwater)
+                if not next_upstream_ids:
+                    break
 
-    Returns
-    -------
-    bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
-    """
-    if fp_info["areasqkm"] < cfg.divide_aggregation_threshold and len(upstream_info) == 1:
-        upstream = upstream_info[0]
-        result.aggregation_pairs.append((current_id, upstream["flowpath_id"]))
-
-        cumulative_area = result.cumulative_merge_areas.get(current_id, fp_info["areasqkm"])
-        if cumulative_area is None:
-            cumulative_area = 0
-        result.cumulative_merge_areas[upstream["flowpath_id"]] = (
-            cumulative_area + result.cumulative_merge_areas.get(upstream["flowpath_id"], 0)
-        )
-        return True
-    return False
-
-
-def _aggregate_all_upstream_recursive(
-    start_id: str, target_id: str, network_graph: dict, result: Classifications
-) -> None:
-    """Helper to recursively aggregate all upstream flowpaths into a target. Used for order 1 streams to collect entire headwater network
-
-    Parameters
-    ----------
-    start_id : str
-        the upstream COMID
-    target_id : dict
-        the current_id that upstream segments are aggregated to
-    network_graph : dict
-        A dictionary containing downstream : [upstream] connections
-    result : Classifications
-        A container for storing classification references
-    """
-    upstream_ids = network_graph.get(start_id, [])
-
-    for upstream_id in upstream_ids:
-        if upstream_id not in result.processed_flowpaths:
-            result.aggregation_pairs.append((upstream_id, target_id))
-            result.processed_flowpaths.add(upstream_id)
-            _aggregate_all_upstream_recursive(upstream_id, target_id, network_graph, result)
-
-
-def _trace_and_aggregate_upstream(
-    current_id: str,
-    target_id: str,
-    network_graph: dict,
-    result: Classifications,
-    is_minor: bool = False,
-) -> None:
-    """Recursively trace upstream from a minor flowpath and aggregate all upstream segments into the target. Marks all as processed to prevent independent classification.
-
-    Parameters
-    ----------
-    current_id : str
-        The current_flowpath_id
-    target_id : str
-        The target flowpath that everything aggregates into
-    network_graph : dict
-        Network graph of upstream connections
-    result : Classifications
-        Classification results to update
-    """
-    upstream_ids = network_graph.get(current_id, [])
-    if current_id != target_id:
-        result.aggregation_pairs.append((current_id, target_id))
-    result.processed_flowpaths.add(current_id)
-    if is_minor:
-        result.minor_flowpaths.append(current_id)
-    for upstream_id in upstream_ids:
-        if upstream_id not in result.processed_flowpaths:
-            _trace_and_aggregate_upstream(upstream_id, target_id, network_graph, result, is_minor)
-
-
-def _rule_aggregate_order1_all_upstream(
-    current_id: str, fp_info: dict, upstream_info: list[dict], network_graph: dict, result: Classifications
-) -> bool:
-    """Rule: stream_order == 1 Action: Aggregate all upstream flowpaths into current flowpath
-
-    Parameters
-    ----------
-    current_id : str
-        The current flowpath ID
-    fp_info : dict
-        All of the catchment information contained within a flowpath ID
-    upstream_info : list[dict]
-        A list of all information for upstream catchments
-    cfg : HFConfig
-        The config file
-    result : Classifications
-        A container for storing classification references
-
-    Returns
-    -------
-    bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
-    """
-    if fp_info["stream_order"] == 1 and len(upstream_info) > 0:
-        for upstream in upstream_info:
-            result.aggregation_pairs.append((upstream["flowpath_id"], current_id))
-            result.processed_flowpaths.add(upstream["flowpath_id"])
-
-            # Recursively aggregate all upstream of this upstream
-            _aggregate_all_upstream_recursive(upstream["flowpath_id"], current_id, network_graph, result)
+                next_upstream_id = str(next_upstream_ids[0])
+                upstream_id = next_upstream_id
 
         return True
+
     return False
 
 
 def _rule_aggregate_order2_with_order1s(
-    current_id: str, fp_info: dict, upstream_info: list[dict], network_graph: dict, result: Classifications
+    current_id: str,
+    fp_info: dict,
+    upstream_info: list[dict],
+    network_graph: dict,
+    result: Classifications,
+    div_ids: set,
+    fp: pd.DataFrame,
+    to_process: deque,
 ) -> bool:
-    """Rule: stream_order == 2 AND two OR MORE upstream flowpaths where ALL are stream_order == 1
+    """Rule: Order 2 with all Order 1 upstreams (Subdivide Candidate).
 
-    Action:
-    - Aggregate largest drainage area upstream to current stream
-    - Mark all other upstreams as minor flowpaths to be aggregated to current
-    - Mark for subdivide preservation
+    When an order 2 stream has multiple order 1 tributaries joining,
+    we aggregate them but mark as a potential subdivision point.
 
     Parameters
     ----------
     current_id : str
-        The current flowpath ID
+        Current flowpath ID
     fp_info : dict
-        All of the catchment information contained within a flowpath ID
+        Flowpath information
     upstream_info : list[dict]
-        A list of all information for upstream catchments
+        Upstream flowpath information
     network_graph : dict
-        The network graph
+        Network graph
     result : Classifications
-        A container for storing classification references
+        Results container
+    div_ids : set
+        Set of all divide IDs
+     fp : pd.DataFrame
+         Flowpaths dataframe
+     to_process : deque
+         Queue for processing flowpaths
 
     Returns
     -------
     bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
+        True if rule applies
     """
-    if (
-        fp_info["stream_order"] == 2
-        and len(upstream_info) >= 2
-        and all(info["stream_order"] == 1 for info in upstream_info)
-    ):
+    if fp_info["streamorder"] == 2 and all(info["streamorder"] == 1 for info in upstream_info):
+        # Check if current has divide
+        if current_id not in div_ids:
+            result.no_divide_connectors.append(current_id)
+            result.processed_flowpaths.add(current_id)
+            return True
+
         # Find the upstream on the same mainstem
         current_mainstem = fp_info["mainstemlp"]
-        on_mainstem = []
-        off_mainstem = []
-        for info in upstream_info:
-            if info["mainstemlp"] == current_mainstem:
-                on_mainstem.append(info)
-            else:
-                off_mainstem.append(info)
+        on_mainstem = [info for info in upstream_info if info["mainstemlp"] == current_mainstem]
+        off_mainstem = [info for info in upstream_info if info["mainstemlp"] != current_mainstem]
+        for up_info in off_mainstem:
+            upstream_id = up_info["flowpath_id"]
+            while True:
+                result.minor_flowpaths.add(upstream_id)
+                result.aggregation_pairs.append((upstream_id, current_id))
+                result.processed_flowpaths.add(upstream_id)
+                next_upstream_ids = network_graph.get(upstream_id, [])
 
-        # Trace and aggregate the largest (non-minor) upstream
-        assert len(on_mainstem) == 1, (
-            "Can only have one upstream component on the mainstem. Error in Reference Fabric"
-        )
-        _trace_and_aggregate_upstream(
-            current_id=on_mainstem[0]["flowpath_id"],
-            target_id=current_id,
-            network_graph=network_graph,
-            result=result,
-            is_minor=False,
-        )
+                # Stop if no upstream (headwater)
+                if not next_upstream_ids:
+                    break
 
-        # Trace and aggregate all minor upstreams
-        for minor in off_mainstem:
-            _trace_and_aggregate_upstream(
-                current_id=minor["flowpath_id"],
-                target_id=current_id,
-                network_graph=network_graph,
-                result=result,
-                is_minor=True,
-            )
+                next_upstream_id = str(next_upstream_ids[0])
+                upstream_id = next_upstream_id
 
-        result.processed_flowpaths.add(current_id)
-        result.subdivide_candidates.append(current_id)
-        result.upstream_merge_points.append(current_id)
+        for up_info in on_mainstem:
+            upstream_id = up_info["flowpath_id"]
+            while True:
+                if upstream_id not in fp.index:
+                    break
+
+                # Create aggregation pair
+                result.aggregation_pairs.append((current_id, upstream_id))
+                result.processed_flowpaths.add(upstream_id)
+
+                next_upstream_ids = network_graph.get(upstream_id, [])
+
+                # Stop if no upstream (headwater)
+                if not next_upstream_ids:
+                    break
+
+                next_upstream_id = str(next_upstream_ids[0])
+                upstream_id = next_upstream_id
+
         return True
+
     return False
 
 
 def _rule_aggregate_mixed_upstream_orders(
-    current_id: str, fp_info: dict, upstream_info: list[dict], cfg: HFConfig, result: Classifications
+    current_id: str,
+    fp_info: dict,
+    upstream_info: list[dict],
+    cfg: HFConfig,
+    result: Classifications,
+    div_ids: set,
+    network_graph: dict,
+    fp: pd.DataFrame,
+    to_process: deque,
 ) -> bool:
-    """Rule: stream_order > 1 AND multiple upstream segments where one is stream_order == 1 and another is stream_order > 1
+    """Rule: Mainstem with Order 1 tributaries.
 
-    Action: Mark SMALL order 1 (areasqkm < threshold) as minor flowpath to aggregate into current
-    Note: Large order-1 segments (areasqkm > threshold) are left independent
+    When a mainstem segment has order 1 tributaries joining,
+    aggregate small order 1s as minor flowpaths.
+
+    This handles BASE CASE - checked after edge cases.
 
     Parameters
     ----------
     current_id : str
-        The current flowpath ID
+        Current flowpath ID
     fp_info : dict
-        All of the catchment information contained within a flowpath ID
+        Flowpath information
     upstream_info : list[dict]
-        A list of all information for upstream catchments
+        Upstream flowpath information
     cfg : HFConfig
-        The config file
+        Configuration
     result : Classifications
-        A container for storing classification references
+        Results container
+    div_ids : set
+        Set of all divide IDs
+    network_graph : dict
+        Network graph for tracing
+    fp : pd.DataFrame
+        Flowpaths dataframe
+    to_process : deque
+        Queue for processing flowpaths
 
     Returns
     -------
     bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
+        True if rule applies
     """
-    if fp_info["stream_order"] > 1 and len(upstream_info) >= 2:
-        current_mainstem = fp_info["mainstemlp"]
-
-        on_mainstem = [info for info in upstream_info if info["mainstemlp"] == current_mainstem]
-        off_mainstem_order1 = [
-            info
-            for info in upstream_info
-            if info["stream_order"] == 1 and info["mainstemlp"] != current_mainstem
-        ]
-
-        # Only process if we have off-mainstem order-1 tributaries
-        if off_mainstem_order1 and on_mainstem:
-            for order_1 in off_mainstem_order1:
-                # Check area threshold - only mark as minor if small
-                if order_1["areasqkm"] < cfg.divide_aggregation_threshold:
-                    result.minor_flowpaths.append(order_1["flowpath_id"])
-                    result.aggregation_pairs.append((order_1["flowpath_id"], current_id))
-
-            result.upstream_merge_points.append(current_id)
+    if fp_info["streamorder"] > 1:
+        # Check if current has divide
+        if current_id not in div_ids:
+            result.no_divide_connectors.append(current_id)
+            result.processed_flowpaths.add(current_id)
+            upstream_ids = network_graph.get(current_id, [])
+            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
             return True
-    return False
 
-
-def _rule_aggregate_same_order_small_area(
-    current_id: str, fp_info: dict, upstream_info: list[dict], cfg: HFConfig, result: Classifications
-) -> bool:
-    """Rule: stream_order > 1 AND multiple upstream segments where one is stream_order == 1 and another is stream_order == current AND areasqkm < threshold
-
-    Action:
-    - Mark order 1 as minor flowpath to aggregate into current
-    - Current flowpath merges into same-order upstream
-
-    Parameters
-    ----------
-    current_id : str
-        The current flowpath ID
-    fp_info : dict
-        All of the catchment information contained within a flowpath ID
-    upstream_info : list[dict]
-        A list of all information for upstream catchments
-    cfg : HFConfig
-        The config file
-    result : Classifications
-        A container for storing classification references
-
-    Returns
-    -------
-    bool
-        True means this rule can be applied and classification was done. False if the rule cannot be applied to this flowpath
-    """
-    if (
-        fp_info["stream_order"] > 1
-        and fp_info["areasqkm"] < cfg.divide_aggregation_threshold
-        and len(upstream_info) >= 2
-    ):
-        order_1_upstreams = [info for info in upstream_info if info["stream_order"] == 1]
+        order_1_upstreams = [info for info in upstream_info if info["streamorder"] == 1]
         same_order_upstreams = [
-            info for info in upstream_info if info["stream_order"] == fp_info["stream_order"]
+            info for info in upstream_info if info["streamorder"] == fp_info["streamorder"]
         ]
 
-        if order_1_upstreams and same_order_upstreams:
-            for order_1 in order_1_upstreams:
-                result.minor_flowpaths.append(order_1["flowpath_id"])
-                result.aggregation_pairs.append((order_1["flowpath_id"], current_id))
-            same_order = same_order_upstreams[0]
-            result.aggregation_pairs.append((current_id, same_order["flowpath_id"]))
+        # Only apply if we have both order 1 and same-order upstreams
+        if not (order_1_upstreams and same_order_upstreams):
+            return False
 
-            cumulative_area = result.cumulative_merge_areas.get(current_id, fp_info["areasqkm"])
-            if cumulative_area is None:
-                cumulative_area = 0
-            result.cumulative_merge_areas[same_order["flowpath_id"]] = (
-                cumulative_area + result.cumulative_merge_areas.get(same_order["flowpath_id"], 0)
-            )
-            result.upstream_merge_points.append(current_id)
-            return True
+        for order_1 in order_1_upstreams:
+            upstream_id = order_1["flowpath_id"]
+
+            while True:
+                result.minor_flowpaths.add(upstream_id)
+                result.aggregation_pairs.append((upstream_id, current_id))
+                result.processed_flowpaths.add(upstream_id)
+                next_upstream_ids = network_graph.get(upstream_id, [])
+
+                # Stop if no upstream (headwater)
+                if not next_upstream_ids:
+                    break
+
+                next_upstream_id = str(next_upstream_ids[0])
+                upstream_id = next_upstream_id
+        for order_n in same_order_upstreams:
+            upstream_id = order_n["flowpath_id"]
+            cumulative_area = fp_info["areasqkm"]
+            while True:
+                # Start aggregation chain
+                if upstream_id not in fp.index:
+                    break
+
+                upstream_fp_info = _get_flowpath_info(upstream_id, fp)
+                cumulative_area += upstream_fp_info["areasqkm"]
+
+                # Create aggregation pair
+                result.aggregation_pairs.append((current_id, upstream_id))
+                result.processed_flowpaths.add(upstream_id)
+
+                # Check if we've exceeded threshold - if so, stop and queue upstream
+                if cumulative_area >= cfg.divide_aggregation_threshold:
+                    next_upstream_ids = network_graph.get(upstream_id, [])
+                    for uid in next_upstream_ids:
+                        uid_str = str(uid)
+                        if uid_str not in result.processed_flowpaths:
+                            to_process.append(uid_str)
+                    break
+
+                # Get next upstream
+                next_upstream_ids = network_graph.get(upstream_id, [])
+
+                # Stop if no upstream (headwater)
+                if not next_upstream_ids:
+                    break
+
+                # Stop if multiple upstream (connector/confluence) and queue them
+                if len(next_upstream_ids) > 1:
+                    for uid in next_upstream_ids:
+                        uid_str = str(uid)
+                        if uid_str not in result.processed_flowpaths:
+                            to_process.append(uid_str)
+                    break
+
+                # Get next upstream info
+                next_upstream_id = str(next_upstream_ids[0])
+
+                # Stop if next upstream has different order
+                if next_upstream_id not in fp.index:
+                    break
+
+                next_fp_info = _get_flowpath_info(next_upstream_id, fp)
+                if next_fp_info["streamorder"] != fp_info["streamorder"]:
+                    # Different order - queue it for processing
+                    if next_upstream_id not in result.processed_flowpaths:
+                        to_process.append(next_upstream_id)
+                    break
+
+                # Stop if next upstream lacks divide
+                if next_upstream_id not in div_ids:
+                    # Queue it for processing
+                    if next_upstream_id not in result.processed_flowpaths:
+                        to_process.append(next_upstream_id)
+                    break
+
+                # Continue chaining
+                upstream_id = next_upstream_id
+
+        result.upstream_merge_points.append(current_id)
+        return True
+
     return False
 
 
-def _trace_stack(start_id: str, network_graph: dict, fp: pd.DataFrame, cfg: HFConfig) -> Classifications:
+def _rule_aggregate_single_upstream(
+    current_id: str,
+    fp_info: dict,
+    upstream_info: list[dict],
+    cfg: HFConfig,
+    result: Classifications,
+    div_ids: set,
+    network_graph: dict,
+    fp: pd.DataFrame,
+    to_process: deque,
+) -> bool:
+    """Rule: Single upstream aggregation with three behaviors.
+
+    Handles all single upstream cases:
+    - Current lacks divide → mark as minor
+    - Order 1 → aggregate all upstream
+    - Higher order → cumulative area threshold aggregation
+
+    Parameters
+    ----------
+    current_id : str
+        Current flowpath ID
+    fp_info : dict
+        Flowpath information
+    upstream_info : list[dict]
+        Upstream flowpath information (should have length 1)
+    cfg : HFConfig
+        Configuration
+    result : Classifications
+        Results container
+    div_ids : set
+        Set of all divide IDs
+    network_graph : dict
+        Network graph for tracing
+    fp : pd.DataFrame
+        Flowpaths dataframe
+    to_process : deque
+        Queue for processing flowpaths
+
+    Returns
+    -------
+    bool
+        True if rule applies
     """
-    Trace upstream from a starting flowpath and classify segments according to aggregation rules.
+    # Order 1: Aggregate all upstream
+    if fp_info["streamorder"] == 1:
+        result.processed_flowpaths.add(current_id)
+        upstream_ids = network_graph.get(current_id, [])
+        upstream_id = str(upstream_ids[0])
+        while True:
+            result.aggregation_pairs.append((upstream_id, current_id))
+            result.processed_flowpaths.add(upstream_id)
+            next_upstream_ids = network_graph.get(upstream_id, [])
+
+            # Stop if no upstream (headwater)
+            if not next_upstream_ids:
+                break
+
+            next_upstream_id = str(next_upstream_ids[0])
+            upstream_id = next_upstream_id
+        return True
+
+    # Higher order: Chain with cumulative area threshold OR until connector
+    upstream = upstream_info[0]
+    upstream_id = upstream["flowpath_id"]
+
+    # Check if upstream has divide
+    if upstream_id not in div_ids:
+        # No divide - chain through it
+        result.aggregation_pairs.append((current_id, upstream_id))
+        result.processed_flowpaths.add(upstream_id)
+
+        # Continue chaining through non-divide flowpaths
+        while True:
+            next_upstream_ids = network_graph.get(upstream_id, [])
+
+            # Stop if no upstream (headwater)
+            if not next_upstream_ids:
+                break
+
+            # Stop if multiple upstream (connector/confluence) - queue all
+            if len(next_upstream_ids) > 1:
+                for uid in next_upstream_ids:
+                    uid_str = str(uid)
+                    if uid_str not in result.processed_flowpaths:
+                        to_process.append(uid_str)
+                break
+
+            # Get next upstream
+            next_upstream_id = str(next_upstream_ids[0])
+
+            # Stop if next upstream has a divide - queue it
+            if next_upstream_id in div_ids:
+                if next_upstream_id not in result.processed_flowpaths:
+                    to_process.append(next_upstream_id)
+                break
+
+            # Continue chaining
+            result.aggregation_pairs.append((current_id, next_upstream_id))
+            result.processed_flowpaths.add(next_upstream_id)
+            upstream_id = next_upstream_id
+
+        return True
+
+    # Upstream has divide - chain with cumulative area threshold
+    cumulative_area = fp_info["areasqkm"]
+
+    while True:
+        # Get info for current upstream
+        if upstream_id not in fp.index:
+            break
+
+        upstream_fp_info = _get_flowpath_info(upstream_id, fp)
+        cumulative_area += upstream_fp_info["areasqkm"]
+
+        # Create aggregation pair
+        result.aggregation_pairs.append((current_id, upstream_id))
+        result.processed_flowpaths.add(upstream_id)
+
+        # Check if we've exceeded threshold - stop and queue upstream
+        if cumulative_area >= cfg.divide_aggregation_threshold:
+            next_upstream_ids = network_graph.get(upstream_id, [])
+            for uid in next_upstream_ids:
+                uid_str = str(uid)
+                if uid_str not in result.processed_flowpaths:
+                    to_process.append(uid_str)
+            break
+
+        # Get next upstream
+        next_upstream_ids = network_graph.get(upstream_id, [])
+
+        # Stop if no upstream (headwater)
+        if not next_upstream_ids:
+            break
+
+        # Stop if multiple upstream (connector/confluence) - queue all
+        if len(next_upstream_ids) > 1:
+            for uid in next_upstream_ids:
+                uid_str = str(uid)
+                if uid_str not in result.processed_flowpaths:
+                    to_process.append(uid_str)
+            break
+
+        # Get next upstream info
+        next_upstream_id = str(next_upstream_ids[0])
+
+        # Stop if next upstream lacks divide - queue it
+        if next_upstream_id not in div_ids:
+            if next_upstream_id not in result.processed_flowpaths:
+                to_process.append(next_upstream_id)
+            break
+
+        # Continue chaining
+        upstream_id = next_upstream_id
+
+    return True
+
+
+def _trace_stack(
+    start_id: str, network_graph: dict, fp: pd.DataFrame, div_ids: set, cfg: HFConfig
+) -> Classifications:
+    """Trace upstream from a starting flowpath and classify segments according to aggregation rules.
 
     Rules are applied in order:
-    1. Independent - Large Area (>3km²)
-    2. Independent - Connector Segment (small area, 2 upstream with order > 1)
-    3. Aggregate - Single Upstream (headwater aggregation)
-    4. Aggregate - Order 1 Stream (aggregate all upstream into current)
-    5. Aggregate - Order 2 with Two Order 1s (subdivide candidate)
-    6. Aggregate - Mixed Upstream Orders (order 1 becomes minor)
-    7. Aggregate - Same Order with Small Area (current merges upstream)
+    1. Topology-based rules (check upstream count)
+       - No upstream → Independent headwater
+       - Large area → Independent
+       - Multiple higher-order upstream → Connector
+
+    2. Stream order-based rules (specific to general)
+       - Order 2 with all Order 1s → Subdivide candidate
+       - Same order small area + Order 1s → Edge case
+       - Mixed orders (mainstem + tributaries) → Base case
+
+    3. Simple aggregation
+       - Single upstream with small area → Aggregate
 
     Parameters
     ----------
@@ -516,6 +623,8 @@ def _trace_stack(start_id: str, network_graph: dict, fp: pd.DataFrame, cfg: HFCo
         the graph of all network connections between flowpaths
     fp : pd.DataFrame
         the reference flowpaths dataframe
+    div_ids: set
+        all IDs from the reference divides dataframe
     cfg : HFConfig
         the Hydrofabric config file
 
@@ -529,58 +638,64 @@ def _trace_stack(start_id: str, network_graph: dict, fp: pd.DataFrame, cfg: HFCo
     ValueError
         If one of the flowpaths doesn't pass a rule the workflow will be stopped
     """
-    fp_indexed = fp.set_index("flowpath_id")
     result = Classifications()
     to_process = deque([start_id])
 
     while to_process:
         current_id = to_process.popleft()
+        fp_info = _get_flowpath_info(current_id, fp)
 
-        fp_info = _get_flowpath_info(current_id, fp_indexed)
         upstream_ids = network_graph.get(current_id, [])
-        upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp_indexed, result.processed_flowpaths)
+        upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp, result.processed_flowpaths)
 
+        if len(upstream_info) == 0 and len(upstream_ids) > 0:
+            raise ValueError("no upstream info since this segment was mistakingly queued")
+
+        # Rule 1: No Upstream - Independent Headwater
         if not upstream_ids:
             if current_id not in result.processed_flowpaths:
-                result.independent_flowpaths.append(current_id)
+                # Check if has divide, otherwise mark as minor
+                if current_id in div_ids:
+                    result.independent_flowpaths.append(current_id)
+                else:
+                    result.minor_flowpaths.add(current_id)
                 result.processed_flowpaths.add(current_id)
             continue
 
         result.processed_flowpaths.add(current_id)
 
-        # Rule 1: Independent - Large Area
+        # Rule 2: Independent - Large Area (regardless of upstream count)
         if _rule_independent_large_area(current_id, fp_info, cfg, result):
             _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
             continue
 
-        # Rule 2: Independent - Connector Segment
-        if _rule_independent_connector(current_id, fp_info, upstream_info, cfg, network_graph, result):
-            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
+        # Rule 3: Multiple Upstream - Connector Check (2+ higher-order streams meet)
+        if len(upstream_info) >= 2:
+            if _rule_independent_connector(current_id, upstream_info, cfg, network_graph, result, div_ids):
+                _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
+                continue
 
-        # Rule 3: Aggregate - Single Upstream
-        if _rule_aggregate_single_upstream(current_id, fp_info, upstream_info, cfg, result):
-            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
+        # Rule 4: Order 2 with Multiple Order 1 Upstreams (Subdivide Candidate)
+        if len(upstream_info) >= 2:
+            if _rule_aggregate_order2_with_order1s(
+                current_id, fp_info, upstream_info, network_graph, result, div_ids, fp, to_process
+            ):
+                _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
+                continue
 
-        # Rule 4: Aggregate - Order 1 Stream (All Upstream). This case should be covered by Rule 3
-        if _rule_aggregate_order1_all_upstream(current_id, fp_info, upstream_info, network_graph, result):
-            continue
+        # Rule 5: Mixed Upstream Orders (Mainstem with order 1 tributaries)
+        if len(upstream_info) >= 2:
+            if _rule_aggregate_mixed_upstream_orders(
+                current_id, fp_info, upstream_info, cfg, result, div_ids, network_graph, fp, to_process
+            ):
+                continue
 
-        # Rule 5: Aggregate - Order 2 with Two Order 1s
-        if _rule_aggregate_order2_with_order1s(current_id, fp_info, upstream_info, network_graph, result):
-            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
-
-        # Rule 6: Aggregate - Mixed Upstream Orders
-        if _rule_aggregate_mixed_upstream_orders(current_id, fp_info, upstream_info, cfg, result):
-            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
-
-        # Rule 7: Aggregate - Same Order with Small Area
-        if _rule_aggregate_same_order_small_area(current_id, fp_info, upstream_info, cfg, result):
-            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
+        # Rule 6: Single Upstream Aggregation
+        if len(upstream_info) == 1:
+            if _rule_aggregate_single_upstream(
+                current_id, fp_info, upstream_info, cfg, result, div_ids, network_graph, fp, to_process
+            ):
+                continue
 
         raise ValueError(f"No Rule Matched. Please debug flowpath_id: {current_id}")
 
