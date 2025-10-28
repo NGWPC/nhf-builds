@@ -66,7 +66,7 @@ dev = [
   "mypy==1.15.0",
   "nbstripout==0.8.1",
   "types-PyYaml",
-  "types-requests==2.32.4.20250611"
+  "types-requests==2.32.4.20250611",
 ]
 examples = [
     "ipykernel==6.29.5",
