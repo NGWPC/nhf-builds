@@ -3,8 +3,47 @@
 from collections import defaultdict
 from typing import Any
 
+import geopandas as gpd
+import numpy as np
 import pandas as pd
 import polars as pl
+import rustworkx as rx
+from scipy import sparse
+
+
+def _validate_and_fix_geometries(gdf: gpd.GeoDataFrame, geom_type: str) -> gpd.GeoDataFrame:
+    """
+    Validate and fix invalid geometries in a GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf : gpd.GeoDataFrame
+        GeoDataFrame to validate
+    geom_type : str
+        Description for logging (e.g., "flowpaths", "divides")
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        GeoDataFrame with fixed geometries
+    """
+    invalid_mask = ~gdf.geometry.is_valid
+    invalid_count = invalid_mask.sum()
+
+    if invalid_count == 0:
+        return gdf  # No invalid geometries
+
+    geometries = gdf[invalid_mask].geometry
+    gdf.loc[invalid_mask, "geometry"] = geometries.make_valid()
+
+    if len(gdf[~gdf.geometry.is_valid]) > 0:
+        raise ValueError(f"Could not fix invalid geometries in {geom_type}")
+
+    still_invalid = (~gdf.geometry.is_valid).sum()
+    if still_invalid > 0:
+        raise ValueError(f"Invalid Geometries remain: {gdf[~gdf.geometry.is_valid]}")
+
+    return gdf
 
 
 def _detect_cycles(upstream_network: dict[str, list[str]]) -> None:
@@ -14,55 +53,40 @@ def _detect_cycles(upstream_network: dict[str, list[str]]) -> None:
     ----------
     upstream_network : dict[str, list[str]]
         Dictionary mapping downstream flowpath IDs to lists of upstream flowpath IDs
-
-    Returns
-    -------
-    list[list[str]]
-        List of cycles found, where each cycle is a list of flowpath IDs
-        Returns empty list if no cycles found
-
     """
-    cycles = []
-    visited = set()
-    rec_stack = set()  # Recursion stack to track current path
+    graph = rx.PyDiGraph(check_cycle=True)
+    node_indices = {}
+    for to_edge, from_edges in upstream_network.items():
+        if to_edge not in node_indices:
+            node_indices[to_edge] = graph.add_node(to_edge)
+        for from_edge in from_edges:
+            if from_edge not in node_indices:
+                node_indices[from_edge] = graph.add_node(from_edge)
+    for to_edge, from_edges in upstream_network.items():
+        for from_edge in from_edges:
+            graph.add_edge(node_indices[from_edge], node_indices[to_edge], None)
+    ts_order = rx.topological_sort(graph)  # Reindex the flowpaths based on the topo order
+    id_order = [graph.get_node_data(gidx) for gidx in ts_order]
+    idx_map = {id: idx for idx, id in enumerate(id_order)}
 
-    def dfs(node: str, path: list[str]) -> None:
-        """Depth-first search to detect cycles."""
-        visited.add(node)
-        rec_stack.add(node)
-        path.append(node)
+    col = []
+    row = []
 
-        # Check all upstream neighbors
-        for upstream in upstream_network.get(node, []):
-            upstream_str = str(upstream)
+    for node in ts_order:
+        if graph.out_degree(node) == 0:  # terminal node
+            continue
+        id = graph.get_node_data(node)
+        assert len(graph.successors(node)) == 1, f"Node {id} has multiple successors, not dendritic"
+        id_ds = graph.successors(node)[0]
+        col.append(idx_map[id])
+        row.append(idx_map[id_ds])
 
-            if upstream_str not in visited:
-                # Continue DFS
-                dfs(upstream_str, path.copy())
-            elif upstream_str in rec_stack:
-                # Found a cycle - extract the cycle path
-                cycle_start = path.index(upstream_str)
-                cycle = path[cycle_start:] + [upstream_str]
-                cycles.append(cycle)
+    matrix = sparse.coo_matrix(
+        (np.ones(len(row), dtype=np.uint8), (row, col)), shape=(len(ts_order), len(ts_order)), dtype=np.uint8
+    )
 
-        # Backtrack
-        rec_stack.remove(node)
-
-    # Check all nodes (including disconnected components)
-    all_nodes = set(upstream_network.keys())
-    for upstream_list in upstream_network.values():
-        all_nodes.update(str(u) for u in upstream_list)
-
-    for node in all_nodes:
-        if node not in visited:
-            dfs(node, [])
-
-    if cycles:
-        raise ValueError(
-            f"Cycles detected in network! Found {len(cycles)} cycle(s). "
-            f"This likely indicates an error in the reference flowpath data."
-            f"cycles: {cycles}"
-        )
+    # Ensure matrix is lower triangular
+    assert np.all(matrix.row >= matrix.col), "Matrix is not lower triangular"
 
 
 def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:

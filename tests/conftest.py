@@ -29,6 +29,18 @@ def mock_geopackages() -> tuple[str, str]:
 
 
 @pytest.fixture
+def sample_divides() -> gpd.GeoDataFrame:
+    """Open the sample test data"""
+    return gpd.read_parquet(here() / "tests/data/sample_divides.parquet")
+
+
+@pytest.fixture
+def sample_flowpaths() -> gpd.GeoDataFrame:
+    """Open the sample test data"""
+    return gpd.read_parquet(here() / "tests/data/sample_flowpaths.parquet")
+
+
+@pytest.fixture
 def sample_config(mock_geopackages: tuple[str, str]) -> HFConfig:
     """Fixture providing a sample HFConfig."""
     return HFConfig(reference_divides_path=mock_geopackages[0], reference_flowpaths_path=mock_geopackages[1])

@@ -32,7 +32,10 @@ def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any] | list[st
     reference_flowpaths = ti.xcom_pull(task_id="download", key="reference_flowpaths")
 
     upstream_dict = _build_graph(reference_flowpaths)
+
+    # Validation
     _detect_cycles(upstream_dict)
+
     outlets = _find_outlets_by_hydroseq(reference_flowpaths)
 
     return {"outlets": outlets, "upstream_network": upstream_dict}

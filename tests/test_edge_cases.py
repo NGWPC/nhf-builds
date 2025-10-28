@@ -3,6 +3,7 @@
 import geopandas as gpd
 import numpy as np
 import pytest
+import rustworkx as rx
 from shapely.geometry import LineString
 
 from hydrofabric_builds.config import HFConfig
@@ -123,7 +124,7 @@ class TestNetworkTopology:
         }
 
         # Should raise ValueError about cycle
-        with pytest.raises(ValueError, match="Cycles detected"):
+        with pytest.raises(rx.DAGWouldCycle, match="Adding an edge would cycle"):
             _detect_cycles(upstream_network)
 
     def test_no_cycle_passes_validation(self, sample_config: HFConfig) -> None:
