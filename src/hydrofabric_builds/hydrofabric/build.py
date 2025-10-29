@@ -196,9 +196,12 @@ def _build_base_hydrofabric(
                     downstream_unit_id = ref_id_to_new_id[downstream_ref_id]
 
         # Get or create nexus at the pour point
+        # Check if a nexus already exists at this location for the downstream flowpath
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
+            # Reuse existing nexus - multiple upstream flowpaths converge here
             nexus_id = downstream_fp_to_nexus[downstream_unit_id]
         else:
+            # Create new nexus
             nexus_id = nexus_counter
             nexus_counter += 1
 
@@ -218,6 +221,7 @@ def _build_base_hydrofabric(
                 }
             )
 
+            # Track this nexus for reuse by other flowpaths that also drain to downstream_unit_id
             if downstream_unit_id is not None:
                 downstream_fp_to_nexus[downstream_unit_id] = nexus_id
 
@@ -256,12 +260,14 @@ def _build_base_hydrofabric(
 
     # Fix up_nex_id references
     for fp_entry in fp_data:
-        my_nexus = fp_entry["dn_nex_id"]
-        flowpaths_using_nexus = [
-            other_fp["fp_id"] for other_fp in fp_data if other_fp["dn_nex_id"] == my_nexus
-        ]
-        if len(flowpaths_using_nexus) > 1:
-            fp_entry["up_nex_id"] = my_nexus
+        my_fp_id = fp_entry["fp_id"]
+
+        # Find the nexus where this flowpath is the downstream target
+        for nexus in nexus_data:
+            if nexus.get("downstream_fp_id") == my_fp_id:
+                # This nexus is at the upstream end of this flowpath
+                fp_entry["up_nex_id"] = nexus["nex_id"]
+                break
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
         divides_gdf = gpd.GeoDataFrame(div_data, crs=cfg.crs)

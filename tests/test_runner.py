@@ -2,6 +2,11 @@
 
 from typing import Any
 
+import numpy as np
+import pandas as pd
+import rustworkx as rx
+from scipy import sparse
+
 from hydrofabric_builds import (
     HFConfig,
     build_graph,
@@ -224,3 +229,136 @@ class TestIntegration:
         assert len(final_flowpaths) == 50
         assert len(final_divides) == 50
         assert len(final_nexus) == 38
+
+        flowpath_ids = set(final_flowpaths["fp_id"])
+        divide_ids = set(final_divides["div_id"])
+        assert flowpath_ids == divide_ids, (
+            f"Flowpath IDs and Divide IDs don't match.\n"
+            f"Missing in divides: {flowpath_ids - divide_ids}\n"
+            f"Missing in flowpaths: {divide_ids - flowpath_ids}"
+        )
+        # Test connectivity using nexus points
+        self._verify_nexus_connectivity(final_flowpaths, final_nexus)
+
+    def _verify_nexus_connectivity(self, flowpaths_gdf: pd.DataFrame, nexus_gdf: pd.DataFrame) -> None:
+        """Verify that nexus connectivity forms a valid dendritic network.
+
+        Parameters
+        ----------
+        flowpaths_gdf : pd.DataFrame (GeoDataFrame)
+            Flowpaths with fp_id, up_nex_id, dn_nex_id columns
+
+        Raises
+        ------
+        AssertionError
+            If connectivity is invalid (cycles, non-dendritic, or broken links)
+        """
+        graph = rx.PyDiGraph(check_cycle=True)
+        fp_id_to_node = {}
+
+        # Add all flowpaths as nodes
+        for fp_id in flowpaths_gdf["fp_id"]:
+            fp_id_to_node[fp_id] = graph.add_node(fp_id)
+
+        # Verify all flowpaths are represented as nodes
+        assert len(graph) == len(flowpaths_gdf), (
+            f"Graph has {len(graph)} nodes but there are {len(flowpaths_gdf)} flowpaths"
+        )
+
+        # Build edges based on shared nexus points
+        # If flowpath A's dn_nex_id == flowpath B's up_nex_id, then A flows into B
+        edge_count = 0
+        for _, row in flowpaths_gdf.iterrows():
+            fp_id = row["fp_id"]
+            dn_nex_id = row["dn_nex_id"]
+
+            # Skip if no downstream nexus
+            if pd.isna(dn_nex_id):
+                continue
+
+            # Find downstream flowpath(s) that have this nexus as their up_nex_id
+            downstream_fps = flowpaths_gdf[flowpaths_gdf["up_nex_id"] == dn_nex_id]
+
+            for _, dn_row in downstream_fps.iterrows():
+                dn_fp_id = dn_row["fp_id"]
+                # Add edge from current flowpath to downstream flowpath
+                graph.add_edge(fp_id_to_node[fp_id], fp_id_to_node[dn_fp_id], None)
+                edge_count += 1
+
+        all_nexus_ids = set()
+        for val in flowpaths_gdf["dn_nex_id"]:
+            if not pd.isna(val):
+                all_nexus_ids.add(val)
+        for val in flowpaths_gdf["up_nex_id"]:
+            if not pd.isna(val):
+                all_nexus_ids.add(val)
+
+        # Number of edges should equal number of non-terminal flowpaths
+        # (i.e., flowpaths with at least one downstream connection)
+        assert graph.num_edges() == edge_count, (
+            f"Graph has {graph.num_edges()} edges but created {edge_count} edges"
+        )
+
+        print(
+            f"Graph statistics: {len(graph)} nodes, {graph.num_edges()} edges, "
+            f"{len(all_nexus_ids)} unique nexus points"
+        )
+
+        # Verify the network structure
+        self._verify_graph_structure(graph)
+
+    def _verify_graph_structure(self, graph: rx.PyDiGraph) -> None:
+        """Verify dendritic structure and topological ordering.
+
+        Parameters
+        ----------
+        graph : rx.PyDiGraph
+            Graph representing flowpath connectivity
+
+        Raises
+        ------
+        AssertionError
+            If the network has cycles, is not dendritic, or is not in lower triangular ordering
+        """
+        # Check for cycles
+        try:
+            ts_order = rx.topological_sort(graph)
+        except rx.DAGHasCycle as e:
+            raise AssertionError("Network contains cycles - not a valid dendritic network") from e
+
+        id_order = [graph.get_node_data(gidx) for gidx in ts_order]
+        idx_map = {id_val: idx for idx, id_val in enumerate(id_order)}
+
+        col = []
+        row = []
+
+        for node in ts_order:
+            if graph.out_degree(node) == 0:  # terminal node
+                continue
+
+            node_id = graph.get_node_data(node)
+            successor_indices = graph.successor_indices(node)
+
+            # Verify dendritic structure (each flowpath has at most one downstream)
+            assert len(successor_indices) == 1, (
+                f"Flowpath {node_id} has {len(successor_indices)} successors, "
+                f"network is not dendritic (should have exactly 1 downstream)"
+            )
+
+            downstream_node_idx = successor_indices[0]
+            downstream_id = graph.get_node_data(downstream_node_idx)
+
+            col.append(idx_map[node_id])
+            row.append(idx_map[downstream_id])
+
+        # Create sparse matrix
+        matrix = sparse.coo_matrix(
+            (np.ones(len(row), dtype=np.uint8), (row, col)),
+            shape=(len(ts_order), len(ts_order)),
+            dtype=np.uint8,
+        )
+
+        # Ensure matrix is lower triangular (proper topological ordering)
+        assert np.all(matrix.row >= matrix.col), (
+            "Adjacency matrix is not lower triangular - flowpaths are not in proper topological order"
+        )
