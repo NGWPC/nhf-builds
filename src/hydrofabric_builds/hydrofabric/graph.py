@@ -5,15 +5,13 @@ from typing import Any
 
 import geopandas as gpd
 import numpy as np
-import pandas as pd
 import polars as pl
 import rustworkx as rx
 from scipy import sparse
 
 
 def _validate_and_fix_geometries(gdf: gpd.GeoDataFrame, geom_type: str) -> gpd.GeoDataFrame:
-    """
-    Validate and fix invalid geometries in a GeoDataFrame.
+    """Validate and fix invalid geometries in a GeoDataFrame.
 
     Parameters
     ----------
@@ -53,6 +51,11 @@ def _detect_cycles(upstream_network: dict[str, list[str]]) -> None:
     ----------
     upstream_network : dict[str, list[str]]
         Dictionary mapping downstream flowpath IDs to lists of upstream flowpath IDs
+
+    Raises
+    ------
+    AssertionError
+        The flowpaths are not in a lower triangular ordering
     """
     graph = rx.PyDiGraph(check_cycle=True)
     node_indices = {}
@@ -89,12 +92,12 @@ def _detect_cycles(upstream_network: dict[str, list[str]]) -> None:
     assert np.all(matrix.row >= matrix.col), "Matrix is not lower triangular"
 
 
-def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:
+def _find_outlets_by_hydroseq(reference_flowpaths: pl.DataFrame) -> list[str]:
     """Find outlets for the river using hydroseq
 
     Parameters
     ----------
-    reference_flowpaths : pd.DataFrame
+    reference_flowpaths : pl.DataFrame
         the flowpath reference
 
     Returns
@@ -102,8 +105,7 @@ def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:
     list[str]
         all outlets from the reference
     """
-    df_subset = reference_flowpaths[["flowpath_id", "hydroseq", "dnhydroseq"]].copy()
-    df_pl = pl.from_pandas(df_subset)
+    df_pl = reference_flowpaths.select(pl.col(["flowpath_id", "hydroseq", "dnhydroseq"]))
 
     df_with_str_id = df_pl.with_columns(
         pl.col("flowpath_id").cast(pl.Float64).cast(pl.Int64).cast(pl.Utf8).alias("flowpath_id_str")
@@ -120,13 +122,12 @@ def _find_outlets_by_hydroseq(reference_flowpaths: pd.DataFrame) -> list[str]:
     return outlets
 
 
-def _build_graph(reference_flowpaths: pd.DataFrame) -> dict[str, Any]:
-    """
-    The hydrofabric-related functions for building a graph of upstream flowpath connections
+def _build_graph(reference_flowpaths: pl.DataFrame) -> dict[str, Any]:
+    """The hydrofabric-related functions for building a graph of upstream flowpath connections
 
     Parameters
     ----------
-    reference_flowpaths : pd.DataFrame
+    reference_flowpaths : pl.DataFrame
         The reference flowpaths
 
     Returns
@@ -136,9 +137,7 @@ def _build_graph(reference_flowpaths: pd.DataFrame) -> dict[str, Any]:
     """
     upstream_network = defaultdict(list)
 
-    df_subset = reference_flowpaths[["flowpath_id", "hydroseq", "dnhydroseq"]].copy()
-
-    pl_reference_flowpaths = pl.from_pandas(df_subset)
+    pl_reference_flowpaths = reference_flowpaths.select(pl.col(["flowpath_id", "hydroseq", "dnhydroseq"]))
 
     df = (
         pl_reference_flowpaths.select(

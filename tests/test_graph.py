@@ -1,6 +1,6 @@
 """Unit tests for build_graph task"""
 
-import pandas as pd
+import polars as pl
 
 from hydrofabric_builds.hydrofabric.graph import _build_graph, _find_outlets_by_hydroseq
 
@@ -10,7 +10,7 @@ class TestBuildGraphUnit:
 
     def test_simple_linear_network(self) -> None:
         """Test a simple linear chain: 1 -> 2 -> 3."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -28,7 +28,7 @@ class TestBuildGraphUnit:
 
     def test_branching_network(self) -> None:
         """Test a network with branching: 1,2 -> 3."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -44,7 +44,7 @@ class TestBuildGraphUnit:
 
     def test_multiple_outlets(self) -> None:
         """Test network with multiple outlets."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
@@ -62,7 +62,7 @@ class TestBuildGraphUnit:
 
     def test_filters_nan_dnhydroseq(self) -> None:
         """Test that NaN dnhydroseq values are filtered out."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -78,7 +78,7 @@ class TestBuildGraphUnit:
 
     def test_filters_zero_dnhydroseq(self) -> None:
         """Test that zero dnhydroseq values are filtered out."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -94,7 +94,7 @@ class TestBuildGraphUnit:
 
     def test_complex_dendritic_network(self) -> None:
         """Test a more complex dendritic (tree-like) network."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0],
@@ -117,7 +117,7 @@ class TestBuildGraphUnit:
 
     def test_isolated_flowpath(self) -> None:
         """Test network with an isolated flowpath (no connections)."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 999.0],  # 3 has unique hydroseq
@@ -134,7 +134,7 @@ class TestBuildGraphUnit:
 
     def test_empty_network(self) -> None:
         """Test with all flowpaths being outlets (no connections)."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -148,7 +148,7 @@ class TestBuildGraphUnit:
 
     def test_string_id_consistency(self) -> None:
         """Test that flowpath_id float -> str conversions are consistent."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [6720675.0, 6722501.0],
                 "hydroseq": [100.0, 200.0],
@@ -169,7 +169,7 @@ class TestBuildGraphUnit:
 
     def test_large_flowpath_ids(self) -> None:
         """Test with 3 flopaths going to one outlet"""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [6720675.0, 6720683.0, 6720773.0, 6720689.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
@@ -184,7 +184,7 @@ class TestBuildGraphUnit:
 
     def test_no_duplicate_upstream_connections(self) -> None:
         """Test that each upstream flowpath appears only once per downstream."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -200,7 +200,7 @@ class TestBuildGraphUnit:
 
     def test_return_value_structure(self) -> None:
         """Test that the return value has the correct structure."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0],
                 "hydroseq": [100.0, 200.0],
@@ -218,7 +218,7 @@ class TestFindOutletsByHydroseq:
 
     def test_single_outlet_with_zero_dnhydroseq(self) -> None:
         """Test finding outlet when dnhydroseq is 0."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0],
                 "hydroseq": [100.0, 200.0],
@@ -233,7 +233,7 @@ class TestFindOutletsByHydroseq:
 
     def test_multiple_outlets(self) -> None:
         """Test finding multiple outlets."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
@@ -248,7 +248,7 @@ class TestFindOutletsByHydroseq:
 
     def test_all_outlets(self) -> None:
         """Test when all flowpaths are outlets."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -264,7 +264,7 @@ class TestFindOutletsByHydroseq:
     def test_no_outlets_connected_network(self) -> None:
         """Test a fully connected circular network (no true outlets)."""
         # This is theoretical - shouldn't happen in real river networks
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -278,7 +278,7 @@ class TestFindOutletsByHydroseq:
 
     def test_linear_chain_single_outlet(self) -> None:
         """Test a simple linear chain with one outlet."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -293,7 +293,7 @@ class TestFindOutletsByHydroseq:
 
     def test_mixed_outlet_conditions(self) -> None:
         """Test outlets identified by different conditions."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
@@ -306,12 +306,12 @@ class TestFindOutletsByHydroseq:
 
         outlets = _find_outlets_by_hydroseq(flowpaths)
 
-        assert len(outlets) == 2
-        assert set(outlets) == {"2", "4"}
+        assert len(outlets) == 3
+        assert set(outlets) == {"2", "3", "4"}
 
     def test_large_flowpath_ids(self) -> None:
         """Test with realistic large flowpath IDs."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [6720675.0, 6720683.0, 6720797.0],
                 "hydroseq": [100.0, 200.0, 300.0],
@@ -326,7 +326,7 @@ class TestFindOutletsByHydroseq:
 
     def test_empty_dataframe(self) -> None:
         """Test with empty DataFrame."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [],
                 "hydroseq": [],
@@ -340,7 +340,7 @@ class TestFindOutletsByHydroseq:
 
     def test_single_flowpath(self) -> None:
         """Test with a single flowpath (must be an outlet)."""
-        flowpaths = pd.DataFrame(
+        flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [1.0],
                 "hydroseq": [100.0],

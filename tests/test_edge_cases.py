@@ -2,6 +2,7 @@
 
 import geopandas as gpd
 import numpy as np
+import polars as pl
 import pytest
 import rustworkx as rx
 from shapely.geometry import LineString
@@ -280,6 +281,8 @@ class TestEmptyInputs:
     ) -> None:
         """Test handling of empty classifications."""
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         empty_classifications = Classifications(
             aggregation_pairs=[],

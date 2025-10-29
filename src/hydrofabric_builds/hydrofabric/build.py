@@ -5,8 +5,9 @@ from collections import deque
 from typing import Any
 
 import geopandas as gpd
-import pandas as pd
-from shapely import Point, unary_union
+import polars as pl
+from shapely import Point
+from shapely.ops import unary_union
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
@@ -55,14 +56,13 @@ def _build_base_hydrofabric(
     start_id: str,
     aggregate_data: Aggregations,
     classifications: Classifications,
-    reference_divides: pd.DataFrame,
-    reference_flowpaths: pd.DataFrame,
+    reference_divides: pl.DataFrame,
+    reference_flowpaths: pl.DataFrame,
     upstream_network: dict[str, Any],
     cfg: HFConfig,
     id_offset: int = 0,
 ) -> dict[str, gpd.GeoDataFrame | list[dict] | None]:
-    """
-    Builds the base hydrofabric layers with no-divide connector patching.
+    """Builds the base hydrofabric layers with no-divide connector patching
 
     No-divide connectors are flowpaths without catchment polygons that connect
     upstream to downstream segments. We "patch" them by:
@@ -160,33 +160,37 @@ def _build_base_hydrofabric(
             unary_union(line_geoms_to_merge) if len(line_geoms_to_merge) > 1 else unit["line_geometry"]
         )
 
-        original_fps = reference_flowpaths[reference_flowpaths["flowpath_id"].isin(ref_ids)]
+        original_fps = reference_flowpaths.filter(pl.col("flowpath_id").cast(pl.Utf8).is_in(ref_ids))
 
-        if len(original_fps) == 0:
+        if original_fps.height == 0:
             logger.warning(f"No flowpaths found for unit {ref_ids}")
             continue
 
+        # Find outlet flowpath
         if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
             dn_id = unit_info["dn_id"]
-            outlet_fp = original_fps[original_fps["flowpath_id"] == float(dn_id)]
-            if len(outlet_fp) == 0:
-                outlet_fp = original_fps.loc[original_fps["hydroseq"].idxmin()]
+            outlet_fp = original_fps.filter(pl.col("flowpath_id") == dn_id)
+            if outlet_fp.height == 0:
+                # Get row with minimum hydroseq
+                min_hydroseq_idx = original_fps["hydroseq"].arg_min()
+                outlet_fp = original_fps[min_hydroseq_idx]
             else:
-                outlet_fp = outlet_fp.iloc[0]
+                outlet_fp = outlet_fp[0]
         else:
-            outlet_fp = (
-                original_fps.iloc[0]
-                if len(original_fps) == 1
-                else original_fps.loc[original_fps["hydroseq"].idxmin()]
-            )
+            if original_fps.height == 1:
+                outlet_fp = original_fps[0]
+            else:
+                # Get row with minimum hydroseq
+                min_hydroseq_idx = original_fps["hydroseq"].arg_min()
+                outlet_fp = original_fps[min_hydroseq_idx]
 
-        dn_hydroseq = outlet_fp["dnhydroseq"]
+        dn_hydroseq = outlet_fp["dnhydroseq"][0] if outlet_fp.height > 0 else None
         downstream_unit_id = None
 
-        if pd.notna(dn_hydroseq) and dn_hydroseq != 0:
-            downstream_fp = reference_flowpaths[reference_flowpaths["hydroseq"] == dn_hydroseq]
-            if len(downstream_fp) > 0:
-                downstream_ref_id = str(int(downstream_fp.iloc[0]["flowpath_id"]))
+        if dn_hydroseq is not None and dn_hydroseq != 0 and not pl.Series([dn_hydroseq]).is_null()[0]:
+            downstream_fp = reference_flowpaths.filter(pl.col("hydroseq") == dn_hydroseq)
+            if downstream_fp.height > 0:
+                downstream_ref_id = str(int(downstream_fp["flowpath_id"][0]))
 
                 if downstream_ref_id in ref_id_to_new_id:
                     downstream_unit_id = ref_id_to_new_id[downstream_ref_id]
@@ -236,8 +240,9 @@ def _build_base_hydrofabric(
 
         fp_data.append(fp_entry)
 
-        if not unit["polygon_geometry"].is_empty:
-            div_data.append({"div_id": new_id, "type": unit_type, "geometry": unit["polygon_geometry"]})
+        polygon_geom = unit.get("polygon_geometry")
+        if polygon_geom is not None and not polygon_geom.is_empty:
+            div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
         new_id += 1
 
         # Queue upstream segments

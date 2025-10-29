@@ -3,7 +3,7 @@
 import logging
 from collections import deque
 
-import pandas as pd
+import polars as pl
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.schemas.hydrofabric import Classifications
@@ -11,43 +11,44 @@ from hydrofabric_builds.schemas.hydrofabric import Classifications
 logger = logging.getLogger(__name__)
 
 
-def _get_flowpath_info(flowpath_id: str, fp: pd.DataFrame) -> dict:
-    """Get flowpath information from the dataframe.
+def _get_flowpath_info(flowpath_id: str, fp: pl.DataFrame) -> dict:
+    """Get flowpath information from the Polars dataframe.
 
     Parameters
     ----------
     flowpath_id : str
         The flowpath ID to look up
-    fp : pd.DataFrame
-        The flowpaths dataframe (indexed by flowpath_id)
+    fp : pl.DataFrame
+        The flowpaths Polars dataframe
 
     Returns
     -------
     dict
         Dictionary containing flowpath attributes
     """
-    if flowpath_id not in fp.index:
+    fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == flowpath_id)
+
+    if fp_row.height == 0:
         raise ValueError(f"Flowpath {flowpath_id} not found in reference data")
 
-    fp_row = fp.loc[flowpath_id]
     return {
         "flowpath_id": flowpath_id,
-        "areasqkm": float(fp_row["areasqkm"]),
-        "streamorder": int(fp_row["streamorder"]),
-        "length_km": float(fp_row["lengthkm"]),
-        "mainstemlp": float(fp_row.get("mainstemlp", 0)),
+        "areasqkm": float(fp_row["areasqkm"][0]),
+        "streamorder": int(fp_row["streamorder"][0]),
+        "length_km": float(fp_row["lengthkm"][0]),
+        "mainstemlp": float(fp_row["mainstemlp"][0] if "mainstemlp" in fp_row.columns else 0),
     }
 
 
-def _get_unprocessed_upstream_info(upstream_ids: list, fp: pd.DataFrame, processed: set) -> list[dict]:
+def _get_unprocessed_upstream_info(upstream_ids: list, fp: pl.DataFrame, processed: set) -> list[dict]:
     """Get info for unprocessed upstream flowpaths.
 
     Parameters
     ----------
     upstream_ids : list
         List of upstream flowpath IDs
-    fp : pd.DataFrame
-        The flowpaths dataframe (indexed by flowpath_id)
+    fp : pl.DataFrame
+        The flowpaths Polars dataframe
     processed : set
         Set of already processed flowpath IDs
 
@@ -58,19 +59,19 @@ def _get_unprocessed_upstream_info(upstream_ids: list, fp: pd.DataFrame, process
     """
     unprocessed = []
     for uid in upstream_ids:
-        # Convert to string to avoid numpy types
         uid_str = str(uid)
-        if uid_str not in processed and uid_str in fp.index:
-            fp_row = fp.loc[uid_str]
-            unprocessed.append(
-                {
-                    "flowpath_id": uid_str,
-                    "areasqkm": float(fp_row["areasqkm"]),
-                    "streamorder": int(fp_row["streamorder"]),
-                    "length_km": float(fp_row["lengthkm"]),
-                    "mainstemlp": float(fp_row.get("mainstemlp", 0)),
-                }
-            )
+        if uid_str not in processed:
+            fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == uid_str)
+            if fp_row.height > 0:
+                unprocessed.append(
+                    {
+                        "flowpath_id": uid_str,
+                        "areasqkm": float(fp_row["areasqkm"][0]),
+                        "streamorder": int(fp_row["streamorder"][0]),
+                        "length_km": float(fp_row["lengthkm"][0]),
+                        "mainstemlp": float(fp_row["mainstemlp"][0] if "mainstemlp" in fp_row.columns else 0),
+                    }
+                )
     return unprocessed
 
 
@@ -210,7 +211,7 @@ def _rule_aggregate_order2_with_order1s(
     network_graph: dict,
     result: Classifications,
     div_ids: set,
-    fp: pd.DataFrame,
+    fp: pl.DataFrame,
     to_process: deque,
 ) -> bool:
     """Rule: Order 2 with all Order 1 upstreams (Subdivide Candidate).
@@ -232,8 +233,8 @@ def _rule_aggregate_order2_with_order1s(
         Results container
     div_ids : set
         Set of all divide IDs
-     fp : pd.DataFrame
-         Flowpaths dataframe
+     fp : pl.DataFrame
+         Flowpaths Polars dataframe
      to_process : deque
          Queue for processing flowpaths
 
@@ -253,6 +254,7 @@ def _rule_aggregate_order2_with_order1s(
         current_mainstem = fp_info["mainstemlp"]
         on_mainstem = [info for info in upstream_info if info["mainstemlp"] == current_mainstem]
         off_mainstem = [info for info in upstream_info if info["mainstemlp"] != current_mainstem]
+
         for up_info in off_mainstem:
             upstream_id = up_info["flowpath_id"]
             while True:
@@ -271,7 +273,9 @@ def _rule_aggregate_order2_with_order1s(
         for up_info in on_mainstem:
             upstream_id = up_info["flowpath_id"]
             while True:
-                if upstream_id not in fp.index:
+                # Check if upstream exists in dataframe
+                fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == upstream_id)
+                if fp_row.height == 0:
                     break
 
                 # Create aggregation pair
@@ -300,7 +304,7 @@ def _rule_aggregate_mixed_upstream_orders(
     result: Classifications,
     div_ids: set,
     network_graph: dict,
-    fp: pd.DataFrame,
+    fp: pl.DataFrame,
     to_process: deque,
 ) -> bool:
     """Rule: Mainstem with Order 1 tributaries.
@@ -308,7 +312,7 @@ def _rule_aggregate_mixed_upstream_orders(
     When a mainstem segment has order 1 tributaries joining,
     aggregate small order 1s as minor flowpaths.
 
-    This handles BASE CASE - checked after edge cases.
+    This is a base case for any connectors that are not handled
 
     Parameters
     ----------
@@ -326,8 +330,8 @@ def _rule_aggregate_mixed_upstream_orders(
         Set of all divide IDs
     network_graph : dict
         Network graph for tracing
-    fp : pd.DataFrame
-        Flowpaths dataframe
+    fp : pl.DataFrame
+        Flowpaths Polars dataframe
     to_process : deque
         Queue for processing flowpaths
 
@@ -369,12 +373,15 @@ def _rule_aggregate_mixed_upstream_orders(
 
                 next_upstream_id = str(next_upstream_ids[0])
                 upstream_id = next_upstream_id
+
         for order_n in same_order_upstreams:
             upstream_id = order_n["flowpath_id"]
             cumulative_area = fp_info["areasqkm"]
+
             while True:
-                # Start aggregation chain
-                if upstream_id not in fp.index:
+                # Check if upstream exists
+                fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == upstream_id)
+                if fp_row.height == 0:
                     break
 
                 upstream_fp_info = _get_flowpath_info(upstream_id, fp)
@@ -412,7 +419,8 @@ def _rule_aggregate_mixed_upstream_orders(
                 next_upstream_id = str(next_upstream_ids[0])
 
                 # Stop if next upstream has different order
-                if next_upstream_id not in fp.index:
+                next_fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == next_upstream_id)
+                if next_fp_row.height == 0:
                     break
 
                 next_fp_info = _get_flowpath_info(next_upstream_id, fp)
@@ -429,7 +437,7 @@ def _rule_aggregate_mixed_upstream_orders(
                         to_process.append(next_upstream_id)
                     break
 
-                # Continue chaining
+                # Continue chaining upstream divides
                 upstream_id = next_upstream_id
 
         result.upstream_merge_points.append(current_id)
@@ -446,7 +454,7 @@ def _rule_aggregate_single_upstream(
     result: Classifications,
     div_ids: set,
     network_graph: dict,
-    fp: pd.DataFrame,
+    fp: pl.DataFrame,
     to_process: deque,
 ) -> bool:
     """Rule: Single upstream aggregation with three behaviors.
@@ -472,8 +480,8 @@ def _rule_aggregate_single_upstream(
         Set of all divide IDs
     network_graph : dict
         Network graph for tracing
-    fp : pd.DataFrame
-        Flowpaths dataframe
+    fp : pl.DataFrame
+        Flowpaths Polars dataframe
     to_process : deque
         Queue for processing flowpaths
 
@@ -487,6 +495,7 @@ def _rule_aggregate_single_upstream(
         result.processed_flowpaths.add(current_id)
         upstream_ids = network_graph.get(current_id, [])
         upstream_id = str(upstream_ids[0])
+
         while True:
             result.aggregation_pairs.append((upstream_id, current_id))
             result.processed_flowpaths.add(upstream_id)
@@ -510,7 +519,7 @@ def _rule_aggregate_single_upstream(
         result.aggregation_pairs.append((current_id, upstream_id))
         result.processed_flowpaths.add(upstream_id)
 
-        # Continue chaining through non-divide flowpaths
+        # Continue chaining upstream divides through non-divide flowpaths
         while True:
             next_upstream_ids = network_graph.get(upstream_id, [])
 
@@ -535,7 +544,7 @@ def _rule_aggregate_single_upstream(
                     to_process.append(next_upstream_id)
                 break
 
-            # Continue chaining
+            # Continue chaining upstream divides
             result.aggregation_pairs.append((current_id, next_upstream_id))
             result.processed_flowpaths.add(next_upstream_id)
             upstream_id = next_upstream_id
@@ -547,7 +556,8 @@ def _rule_aggregate_single_upstream(
 
     while True:
         # Get info for current upstream
-        if upstream_id not in fp.index:
+        fp_row = fp.filter(pl.col("flowpath_id").cast(pl.Utf8) == upstream_id)
+        if fp_row.height == 0:
             break
 
         upstream_fp_info = _get_flowpath_info(upstream_id, fp)
@@ -590,14 +600,14 @@ def _rule_aggregate_single_upstream(
                 to_process.append(next_upstream_id)
             break
 
-        # Continue chaining
+        # Continue chaining upstream divides
         upstream_id = next_upstream_id
 
     return True
 
 
 def _trace_stack(
-    start_id: str, network_graph: dict, fp: pd.DataFrame, div_ids: set, cfg: HFConfig
+    start_id: str, network_graph: dict, fp: pl.DataFrame, div_ids: set, cfg: HFConfig
 ) -> Classifications:
     """Trace upstream from a starting flowpath and classify segments according to aggregation rules.
 
@@ -621,8 +631,8 @@ def _trace_stack(
         the outlet flowpath ID
     network_graph : dict
         the graph of all network connections between flowpaths
-    fp : pd.DataFrame
-        the reference flowpaths dataframe
+    fp : pl.DataFrame
+        the reference flowpaths Polars dataframe
     div_ids: set
         all IDs from the reference divides dataframe
     cfg : HFConfig
@@ -669,13 +679,13 @@ def _trace_stack(
             _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
             continue
 
-        # Rule 3: Multiple Upstream - Connector Check (2+ higher-order streams meet)
+        # Rule 3: Multiple Upstream - Connector Check (2+ higher-order streams meet. May or may not have a stream order 1)
         if len(upstream_info) >= 2:
             if _rule_independent_connector(current_id, upstream_info, cfg, network_graph, result, div_ids):
                 _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
                 continue
 
-        # Rule 4: Order 2 with Multiple Order 1 Upstreams (Subdivide Candidate)
+        # Rule 4: Order 2 stream with Multiple Order 1 Upstreams (Subdivide Candidate)
         if len(upstream_info) >= 2:
             if _rule_aggregate_order2_with_order1s(
                 current_id, fp_info, upstream_info, network_graph, result, div_ids, fp, to_process
@@ -683,7 +693,7 @@ def _trace_stack(
                 _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
                 continue
 
-        # Rule 5: Mixed Upstream Orders (Mainstem with order 1 tributaries)
+        # Rule 5: Mixed Upstream Orders (One upstream is >=2 order, one upstream is order 1)
         if len(upstream_info) >= 2:
             if _rule_aggregate_mixed_upstream_orders(
                 current_id, fp_info, upstream_info, cfg, result, div_ids, network_graph, fp, to_process

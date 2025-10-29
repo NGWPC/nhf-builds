@@ -1,3 +1,3 @@
 reference_divides_path: "data/reference_divides.parquet"
 reference_flowpaths_path: "data/reference_flowpaths.parquet"
-# debug_outlet_count: 100
+debug_outlet_count: 100

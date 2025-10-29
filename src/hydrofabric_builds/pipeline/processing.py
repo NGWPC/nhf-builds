@@ -3,6 +3,7 @@
 import logging
 from typing import Any, cast
 
+import polars as pl
 from tqdm import tqdm
 
 from hydrofabric_builds.config import HFConfig
@@ -41,9 +42,10 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
         raise ValueError("No outlets found. Aborting run")
 
     outlet_aggregations = {}
-    valid_divide_ids = set(reference_divides["divide_id"])  # creates an O(1) lookup table
-    reference_flowpaths = reference_flowpaths.set_index("flowpath_id")
+
+    valid_divide_ids = set(reference_divides["divide_id"].cast(pl.Utf8).to_list())
     fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+
     for i, outlet in enumerate(tqdm(outlets, ncols=140, desc="Tracing/Classifying outlets")):
         classifications = _trace_stack(
             start_id=outlet,
@@ -52,12 +54,14 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
             div_ids=valid_divide_ids,
             cfg=cfg,
         )
+
         aggregate_data = _aggregate_geometries(
             classifications=classifications,
             reference_flowpaths=reference_flowpaths,
             fp_geom_lookup=fp_geom_lookup,
             div_geom_lookup=div_geom_lookup,
         )
+
         ordered_aggregates = _order_aggregates_base(aggregate_data)
         num_features = len(ordered_aggregates)
 
@@ -67,8 +71,10 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
             "aggregate_data": aggregate_data.model_dump(),
             "num_features": num_features,
         }
+
         if i == cfg.debug_outlet_count:
             break
+
     return {
         "outlet_aggregations": outlet_aggregations,
         "total_outlets": len(outlets),
@@ -134,11 +140,14 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     """
     ti = cast(TaskInstance, context["ti"])
     cfg = cast(HFConfig, context["config"])
+
+    # These are now Polars DataFrames
     reference_flowpaths = ti.xcom_pull(task_id="download", key="reference_flowpaths")
     reference_divides = ti.xcom_pull(task_id="download", key="reference_divides")
     upstream_network = ti.xcom_pull(task_id="build_graph", key="upstream_network")
     outlet_aggregations = ti.xcom_pull(task_id="map_flowpaths", key="outlet_aggregations")
     outlet_id_ranges = ti.xcom_pull(task_id="reduce_flowpaths", key="outlet_id_ranges")
+
     if not outlet_aggregations:
         raise ValueError("Missing outlet aggregations")
     if not outlet_id_ranges:
@@ -153,6 +162,7 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
 
         classifications = Classifications(**outlet_data["classifications"])
         aggregate_data = Aggregations(**outlet_data["aggregate_data"])
+
         hydrofabric = _build_base_hydrofabric(
             start_id=outlet,
             aggregate_data=aggregate_data,

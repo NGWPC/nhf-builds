@@ -1,9 +1,12 @@
 """Contains all code for building a graph based on flowpath ids"""
 
+import logging
 from typing import Any, cast
 
 from hydrofabric_builds.hydrofabric.graph import _build_graph, _detect_cycles, _find_outlets_by_hydroseq
 from hydrofabric_builds.task_instance import TaskInstance
+
+logger = logging.getLogger(__name__)
 
 
 def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any] | list[str]]:
@@ -33,8 +36,8 @@ def build_graph(**context: dict[str, Any]) -> dict[str, dict[str, Any] | list[st
 
     upstream_dict = _build_graph(reference_flowpaths)
 
-    # Validation
     _detect_cycles(upstream_dict)
+    logger.info("Build Graph Task: No cycles detected when creating upstream network connections")
 
     outlets = _find_outlets_by_hydroseq(reference_flowpaths)
 

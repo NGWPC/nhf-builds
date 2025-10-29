@@ -3,6 +3,7 @@
 from typing import Any
 
 import geopandas as gpd
+import polars as pl
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
 from hydrofabric_builds import HFConfig
@@ -234,8 +235,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -274,8 +275,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -314,15 +315,15 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
 
-        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()
-        div_ids: list[Any] = result["divides"]["div_id"].tolist()
-        nex_ids: list[Any] = result["nexus"]["nex_id"].tolist()
+        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()  # type: ignore
+        div_ids: list[Any] = result["divides"]["div_id"].tolist()  # type: ignore
+        nex_ids: list[Any] = result["nexus"]["nex_id"].tolist()  # type: ignore
 
         # All IDs should be unique within each layer
         assert len(fp_ids) == len(set(fp_ids))
@@ -358,13 +359,13 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
 
-        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()
+        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()  # type: ignore
         assert min(fp_ids) == 1
 
     def test_respects_id_offset(
@@ -397,14 +398,14 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
             id_offset=offset,
         )
 
-        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()
+        fp_ids: list[Any] = result["flowpaths"]["fp_id"].tolist()  # type: ignore
         assert min(fp_ids) == offset + 1
 
     def test_flowpaths_have_required_columns(
@@ -436,8 +437,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -476,8 +477,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -516,8 +517,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -556,8 +557,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -599,8 +600,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -644,8 +645,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -686,8 +687,8 @@ class TestBuildBaseHydrofabric:
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=reference_divides,
-            reference_flowpaths=reference_flowpaths,
+            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
+            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
             upstream_network=expected_graph,
             cfg=sample_config,
         )
@@ -727,6 +728,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
         fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
@@ -755,6 +758,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
         fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
@@ -791,6 +796,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
         fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
@@ -822,6 +829,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Ensure we have aggregation pairs
         assert len(sample_classifications.aggregation_pairs) > 0
@@ -854,6 +863,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Ensure we have independents
         assert len(sample_classifications.independent_flowpaths) > 0
@@ -887,6 +898,8 @@ class TestAggregateGeometries:
     #         Reference flowpaths and divides
     #     """
     #     reference_flowpaths, reference_divides = sample_reference_data
+    # reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+    # reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
     #     # Ensure we have connectors
     #     assert len(sample_classifications.connector_segments) > 0
@@ -896,7 +909,7 @@ class TestAggregateGeometries:
 
     #     result = _aggregate_geometries(
     #         classifications=sample_classifications,
-    #         reference_flowpaths=reference_flowpaths,
+    #         reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
     #         fp_geom_lookup=fp_geom_lookup,
     #         div_geom_lookup=div_geom_lookup,
     #     )
@@ -915,6 +928,8 @@ class TestAggregateGeometries:
             Reference flowpaths and divides
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        reference_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+        reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         empty_classifications = Classifications(
             aggregation_pairs=[],

@@ -2,7 +2,7 @@
 
 from collections import deque
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from hydrofabric_builds.config import HFConfig
@@ -17,7 +17,7 @@ from hydrofabric_builds.schemas.hydrofabric import Classifications
 
 
 @pytest.fixture
-def sample_flowpath_data() -> pd.DataFrame:
+def sample_flowpath_data() -> pl.DataFrame:
     """Create sample flowpath data for unit testing individual rules."""
     data = {
         "flowpath_id": ["1", "2", "3", "4", "5", "6", "7", "8"],
@@ -27,15 +27,13 @@ def sample_flowpath_data() -> pd.DataFrame:
         "streamorder": [3, 2, 2, 1, 1, 1, 1, 1],
         "hydroseq": [1, 2, 3, 4, 5, 6, 7, 8],
         "dnhydroseq": [0, 1, 1, 2, 3, 4, 4, 5],
-        "mainstemlp": [300, 300, 100, 50, 100, 100, 300, 300],
+        "mainstemlp": [300.0, 300.0, 100.0, 50.0, 100.0, 100.0, 300.0, 300.0],
     }
-    return pd.DataFrame(data)
+    return pl.DataFrame(data)
 
 
-def test_get_flowpath_info(sample_flowpath_data: pd.DataFrame) -> None:
+def test_get_flowpath_info(sample_flowpath_data: pl.DataFrame) -> None:
     """Test getting flowpath information."""
-    sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
     result = _get_flowpath_info("1", sample_flowpath_data)
 
     assert result["flowpath_id"] == "1"
@@ -45,11 +43,9 @@ def test_get_flowpath_info(sample_flowpath_data: pd.DataFrame) -> None:
 
 
 def test_connector_aggregates_small_order1_upstreams(
-    sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+    sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
 ) -> None:
     """Test that connector aggregates small order 1 upstreams."""
-    sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
     network_graph = {
         "fp1": ["up1", "up2", "up3"],
         "up1": [],
@@ -60,9 +56,9 @@ def test_connector_aggregates_small_order1_upstreams(
     div_ids = {"fp1", "up1", "up2", "up3"}
 
     upstream_info = [
-        {"flowpath_id": "up1", "areasqkm": 5.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 101},
-        {"flowpath_id": "up2", "areasqkm": 5.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 100},
-        {"flowpath_id": "up3", "areasqkm": 0.3, "streamorder": 1, "length_km": 0.8, "mainstemlp": 8},
+        {"flowpath_id": "up1", "areasqkm": 5.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 101.0},
+        {"flowpath_id": "up2", "areasqkm": 5.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 100.0},
+        {"flowpath_id": "up3", "areasqkm": 0.3, "streamorder": 1, "length_km": 0.8, "mainstemlp": 8.0},
     ]
 
     result = Classifications()
@@ -87,11 +83,9 @@ class TestRuleAggregateSingleUpstream:
     """Tests for _rule_aggregate_single_upstream function."""
 
     def test_single_upstream_aggregation(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test basic single upstream aggregation."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"5": ["6"], "6": []}
         div_ids = {"5", "6"}
         to_process: deque = deque()
@@ -102,11 +96,11 @@ class TestRuleAggregateSingleUpstream:
             "areasqkm": 2.0,
             "streamorder": 1,
             "length_km": 3.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "6", "areasqkm": 1.0, "streamorder": 1, "length_km": 2.0, "mainstemlp": 100}
+            {"flowpath_id": "6", "areasqkm": 1.0, "streamorder": 1, "length_km": 2.0, "mainstemlp": 100.0}
         ]
 
         success = _rule_aggregate_single_upstream(
@@ -125,11 +119,9 @@ class TestRuleAggregateSingleUpstream:
         assert ("6", "5") in result.aggregation_pairs
 
     def test_cumulative_area_tracking(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test cumulative area tracking stops at threshold."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1"], "up1": ["up2"], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -140,11 +132,11 @@ class TestRuleAggregateSingleUpstream:
             "areasqkm": 8.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 3.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 50}
+            {"flowpath_id": "up1", "areasqkm": 3.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 50.0}
         ]
 
         success = _rule_aggregate_single_upstream(
@@ -162,11 +154,9 @@ class TestRuleAggregateSingleUpstream:
         assert success
 
     def test_large_area_not_aggregated(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test large area upstream not aggregated."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1"], "up1": []}
         div_ids = {"fp1", "up1"}
         to_process: deque = deque()
@@ -177,11 +167,11 @@ class TestRuleAggregateSingleUpstream:
             "areasqkm": 5.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 15.0, "streamorder": 2, "length_km": 8.0, "mainstemlp": 80}
+            {"flowpath_id": "up1", "areasqkm": 15.0, "streamorder": 2, "length_km": 8.0, "mainstemlp": 80.0}
         ]
 
         success = _rule_aggregate_single_upstream(
@@ -203,11 +193,9 @@ class TestRuleAggregateOrder2WithOrder1s:
     """Tests for _rule_aggregate_order2_with_order1s function."""
 
     def test_order2_with_two_order1s(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 2 with two order 1 upstreams."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -218,12 +206,12 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 5.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60.0},
         ]
 
         success = _rule_aggregate_order2_with_order1s(
@@ -240,11 +228,9 @@ class TestRuleAggregateOrder2WithOrder1s:
         assert success
 
     def test_order2_with_upstream_branches(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 2 with branching order 1 upstreams."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {
             "fp1": ["up1", "up2"],
             "up1": ["up1a", "up1b"],
@@ -261,12 +247,12 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 8.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 3.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.0, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40},
+            {"flowpath_id": "up1", "areasqkm": 3.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.0, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40.0},
         ]
 
         success = _rule_aggregate_order2_with_order1s(
@@ -282,10 +268,8 @@ class TestRuleAggregateOrder2WithOrder1s:
 
         assert success
 
-    def test_not_order2(self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig) -> None:
+    def test_not_order2(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
         """Test function returns False when not order 2."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -296,12 +280,12 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 10.0,
             "streamorder": 3,  # Not order 2
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60.0},
         ]
 
         success = _rule_aggregate_order2_with_order1s(
@@ -317,10 +301,8 @@ class TestRuleAggregateOrder2WithOrder1s:
 
         assert not success
 
-    def test_not_all_order1(self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig) -> None:
+    def test_not_all_order1(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
         """Test function returns False when not all upstreams are order 1."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -331,17 +313,17 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 10.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
             {
                 "flowpath_id": "up2",
                 "areasqkm": 5.0,
                 "streamorder": 2,
                 "length_km": 8.0,
-                "mainstemlp": 80,
+                "mainstemlp": 80.0,
             },  # Order 2
         ]
 
@@ -359,11 +341,9 @@ class TestRuleAggregateOrder2WithOrder1s:
         assert not success
 
     def test_order2_with_three_order1s(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 2 with three order 1 upstreams."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
         div_ids = {"fp1", "up1", "up2", "up3"}
         to_process: deque = deque()
@@ -374,13 +354,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 8.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60},
-            {"flowpath_id": "up3", "areasqkm": 1.5, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60.0},
+            {"flowpath_id": "up3", "areasqkm": 1.5, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40.0},
         ]
 
         success = _rule_aggregate_order2_with_order1s(
@@ -397,11 +377,9 @@ class TestRuleAggregateOrder2WithOrder1s:
         assert success
 
     def test_order2_with_four_order1s(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 2 with four order 1 upstreams."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {
             "fp1": ["up1", "up2", "up3", "up4"],
             "up1": [],
@@ -418,14 +396,14 @@ class TestRuleAggregateOrder2WithOrder1s:
             "areasqkm": 10.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60},
-            {"flowpath_id": "up3", "areasqkm": 1.5, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40},
-            {"flowpath_id": "up4", "areasqkm": 1.0, "streamorder": 1, "length_km": 3.0, "mainstemlp": 30},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60.0},
+            {"flowpath_id": "up3", "areasqkm": 1.5, "streamorder": 1, "length_km": 4.0, "mainstemlp": 40.0},
+            {"flowpath_id": "up4", "areasqkm": 1.0, "streamorder": 1, "length_km": 3.0, "mainstemlp": 30.0},
         ]
 
         success = _rule_aggregate_order2_with_order1s(
@@ -446,11 +424,9 @@ class TestRuleAggregateMixedUpstreamOrders:
     """Tests for _rule_aggregate_mixed_upstream_orders function."""
 
     def test_mixed_orders_small_order1_becomes_minor(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test mixed orders with small order 1 becoming minor."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -461,7 +437,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 15.0,
             "streamorder": 3,  # Order 3
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
@@ -470,14 +446,14 @@ class TestRuleAggregateMixedUpstreamOrders:
                 "areasqkm": 0.5,
                 "streamorder": 1,
                 "length_km": 1.0,
-                "mainstemlp": 10,
+                "mainstemlp": 10.0,
             },  # Order 1
             {
                 "flowpath_id": "up2",
                 "areasqkm": 8.0,
                 "streamorder": 3,
                 "length_km": 8.0,
-                "mainstemlp": 100,
+                "mainstemlp": 100.0,
             },  # Same order (3)
         ]
 
@@ -498,11 +474,9 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert ("up1", "fp1") in result.aggregation_pairs
 
     def test_large_order1_not_minor(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test that function still works with large order 1 (area doesn't matter for this rule)."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -513,7 +487,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 20.0,
             "streamorder": 3,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
@@ -522,14 +496,14 @@ class TestRuleAggregateMixedUpstreamOrders:
                 "areasqkm": 12.0,
                 "streamorder": 1,
                 "length_km": 8.0,
-                "mainstemlp": 80,
+                "mainstemlp": 80.0,
             },  # Large order 1
             {
                 "flowpath_id": "up2",
                 "areasqkm": 8.0,
                 "streamorder": 3,
                 "length_km": 7.0,
-                "mainstemlp": 100,
+                "mainstemlp": 100.0,
             },  # Same order
         ]
 
@@ -550,11 +524,9 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert "up1" in result.minor_flowpaths
 
     def test_multiple_small_order1s_all_minor(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test multiple order 1s all marked as minor with same-order upstream."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
         div_ids = {"fp1", "up1", "up2", "up3"}
         to_process: deque = deque()
@@ -565,7 +537,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 25.0,
             "streamorder": 3,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
@@ -574,21 +546,21 @@ class TestRuleAggregateMixedUpstreamOrders:
                 "areasqkm": 0.5,
                 "streamorder": 1,
                 "length_km": 1.0,
-                "mainstemlp": 10,
+                "mainstemlp": 10.0,
             },  # Order 1
             {
                 "flowpath_id": "up2",
                 "areasqkm": 0.8,
                 "streamorder": 1,
                 "length_km": 1.5,
-                "mainstemlp": 15,
+                "mainstemlp": 15.0,
             },  # Order 1
             {
                 "flowpath_id": "up3",
                 "areasqkm": 15.0,
                 "streamorder": 3,
                 "length_km": 9.0,
-                "mainstemlp": 100,
+                "mainstemlp": 100.0,
             },  # Same order
         ]
 
@@ -610,11 +582,9 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert "fp1" in result.upstream_merge_points
 
     def test_only_order1s_not_mixed(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test function returns False when all upstreams are order 1 (no same-order upstream)."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -625,12 +595,12 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 10.0,
             "streamorder": 2,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
-            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50},
-            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60},
+            {"flowpath_id": "up1", "areasqkm": 2.0, "streamorder": 1, "length_km": 5.0, "mainstemlp": 50.0},
+            {"flowpath_id": "up2", "areasqkm": 2.5, "streamorder": 1, "length_km": 6.0, "mainstemlp": 60.0},
         ]
 
         success = _rule_aggregate_mixed_upstream_orders(
@@ -649,11 +619,9 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert not success
 
     def test_only_same_order_not_mixed(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test function returns False when no order 1 upstreams (only same-order)."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -664,7 +632,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 30.0,
             "streamorder": 3,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
@@ -673,14 +641,14 @@ class TestRuleAggregateMixedUpstreamOrders:
                 "areasqkm": 15.0,
                 "streamorder": 3,
                 "length_km": 8.0,
-                "mainstemlp": 80,
+                "mainstemlp": 80.0,
             },  # Same order
             {
                 "flowpath_id": "up2",
                 "areasqkm": 12.0,
                 "streamorder": 3,
                 "length_km": 7.0,
-                "mainstemlp": 70,
+                "mainstemlp": 70.0,
             },  # Same order
         ]
 
@@ -700,11 +668,9 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert not success
 
     def test_small_order1_with_same_order(
-        self, sample_flowpath_data: pd.DataFrame, sample_config: HFConfig
+        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 1 tributary with same-order mainstem."""
-        sample_flowpath_data = sample_flowpath_data.set_index("flowpath_id", drop=False)
-
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
@@ -715,7 +681,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             "areasqkm": 1.0,
             "streamorder": 3,
             "length_km": 10.0,
-            "mainstemlp": 100,
+            "mainstemlp": 100.0,
         }
 
         upstream_info = [
@@ -724,14 +690,14 @@ class TestRuleAggregateMixedUpstreamOrders:
                 "areasqkm": 0.5,
                 "streamorder": 1,
                 "length_km": 1.0,
-                "mainstemlp": 10,
+                "mainstemlp": 10.0,
             },  # Small order 1
             {
                 "flowpath_id": "up2",
                 "areasqkm": 2.0,
                 "streamorder": 3,
                 "length_km": 9.0,
-                "mainstemlp": 100,
+                "mainstemlp": 100.0,
             },  # Same order
         ]
 

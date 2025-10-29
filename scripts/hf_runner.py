@@ -27,8 +27,7 @@ load_dotenv(here() / ".env")
 
 
 class LocalRunner:
-    """
-    Execute pipeline tasks locally with Airflow-compatible API.
+    """Execute pipeline tasks locally with Airflow-like interface.
 
     Parameters
     ----------
@@ -51,8 +50,7 @@ class LocalRunner:
     """
 
     def __init__(self, config: HFConfig, run_id: str | None = None) -> None:
-        """
-        Initialize the LocalRunner.
+        """Initialize the LocalRunner.
 
         Parameters
         ----------
@@ -72,8 +70,7 @@ class LocalRunner:
         python_callable: Callable[..., Any],
         op_kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        """
-        Execute a single task with Airflow-compatible context.
+        """Execute a single task.
 
         Parameters
         ----------
@@ -112,8 +109,7 @@ class LocalRunner:
         return result
 
     def get_result(self, task_id: str) -> dict[str, Any]:
-        """
-        Retrieve execution results for a specific task.
+        """Retrieve execution results for a specific task.
 
         Parameters
         ----------
@@ -133,8 +129,7 @@ class LocalRunner:
 
 
 def main() -> int:
-    """
-    Main entry point for the hydrofabric pipeline CLI.
+    """Main entry point for the hydrofabric-build pipeline CLI.
 
     Returns
     -------
