@@ -320,58 +320,66 @@ def divide_attributes_pipeline_parallel(config_yaml: str, processes: int) -> Non
     processes : int
         number CPU processes
     """
-    t0 = perf_counter()
-    model_cfg = _config_reader(config_yaml)
-    tmp_dir = model_cfg.tmp_dir
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        t0 = perf_counter()
+        model_cfg = _config_reader(config_yaml)
+        tmp_dir = model_cfg.tmp_dir
+        tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Confirm model should be run in parallel
-    if not model_cfg.split_vpu and not model_cfg.divides_path_list:
-        raise ValueError(
-            "Config did not include instructions to split by VPU (`split_vpu`) or a list of divides (`divides_path_list`)"
-            " The model cannot be run in parallel. Either run `divide_attributes_pipeline_single` or add `split_vpu` or"
-            "`divides_path_list` keys"
-        )
-    # creates gpkg for each VPU
-    if model_cfg.split_vpu:
-        model_cfg.divides_path_list = _vpu_splitter(model_cfg)
+        # Confirm model should be run in parallel
+        if not model_cfg.split_vpu and not model_cfg.divides_path_list:
+            raise ValueError(
+                "Config did not include instructions to split by VPU (`split_vpu`) or a list of divides (`divides_path_list`)"
+                " The model cannot be run in parallel. Either run `divide_attributes_pipeline_single` or add `split_vpu` or"
+                "`divides_path_list` keys"
+            )
+        # creates gpkg for each VPU
+        if model_cfg.split_vpu:
+            model_cfg.divides_path_list = _vpu_splitter(model_cfg)
 
-    # processing loop: 1 attribute for multiple divides layers at a time
-    for cfg in model_cfg.attributes:
-        n_divides = len(model_cfg.divides_path_list)  # type: ignore[arg-type]
+        # processing loop: 1 attribute for multiple divides layers at a time
+        for cfg in model_cfg.attributes:
+            n_divides = len(model_cfg.divides_path_list)  # type: ignore[arg-type]
 
-        # prep rasters and config files
-        raster_list = _prep_multiprocessing_rasters(
-            processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir
-        )
-        config_list = _prep_multiprocessing_configs(
-            processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir, raster_list=raster_list
-        )
+            # prep rasters and config files
+            raster_list = _prep_multiprocessing_rasters(
+                processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir
+            )
+            config_list = _prep_multiprocessing_configs(
+                processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir, raster_list=raster_list
+            )
 
-        # multiprocess each divide
-        args = zip(
-            [model_cfg for _ in range(n_divides)],
-            config_list,
-            model_cfg.divides_path_list,  # type: ignore[arg-type]
-            strict=False,
-        )
-        with multiprocessing.Pool(processes=processes) as pool:
-            pool.starmap(_calculate_attribute, args)
+            # multiprocess each divide
+            args = zip(
+                [model_cfg for _ in range(n_divides)],
+                config_list,
+                model_cfg.divides_path_list,  # type: ignore[arg-type]
+                strict=False,
+            )
+            with multiprocessing.Pool(processes=processes) as pool:
+                pool.starmap(_calculate_attribute, args)
 
-        for f in raster_list:
-            f.unlink(missing_ok=True)
+            for f in raster_list:
+                f.unlink(missing_ok=True)
 
-    # concatenate the separate attributes to a single file per divide
-    t1 = perf_counter()
-    _merge_divide_attributes_parallel(model_cfg)
-    t2 = perf_counter()
-    logger.info(f"merge attributes for each divide: {round((t2 - t1) / 60, 2)} min")
+        # concatenate the separate attributes to a single file per divide
+        t1 = perf_counter()
+        _merge_divide_attributes_parallel(model_cfg)
+        t2 = perf_counter()
+        logger.info(f"merge attributes for each divide: {round((t2 - t1) / 60, 2)} min")
 
-    # concatenate the final output file
-    _concatenate_divides_parallel(model_cfg)
-    logger.info(f"concatenate divides: {round((perf_counter() - t2) / 60, 2)} min")
+        # concatenate the final output file
+        _concatenate_divides_parallel(model_cfg)
+        logger.info(f"concatenate divides: {round((perf_counter() - t2) / 60, 2)} min")
 
-    # delete all tmp files
-    _teardown(tmp_dir)
+        # delete all tmp files
+        _teardown(tmp_dir)
 
-    logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
+        logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
+
+    except Exception as e:
+        raise RuntimeError(f"Error creating divide attributes: {e}") from e
+
+    finally:
+        if not model_cfg.debug:
+            _teardown(model_cfg.tmp_dir)

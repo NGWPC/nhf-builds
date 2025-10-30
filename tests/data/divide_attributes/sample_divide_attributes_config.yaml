@@ -1,10 +1,10 @@
 data_dir: "./tests/data/divide_attributes"
 divides_path: "./tests/data/divide_attributes/divide_attributes_divides.gpkg"
 divide_id: "divide_id"
-epsg: 5070
 output: "./tests/data/divide_attributes_divides.gpkg"
 tmp_dir: "./tests/data/divide_attributes/tmp/divide-attributes"
 split_vpu: True
+debug: False
 attributes:
   bexp1:
     file_name: 'bexp_0.tif'

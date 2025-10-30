@@ -338,7 +338,6 @@ class DivideAttributeModelConfig(BaseModel):
     data_dir: Path = Field(description="Directory of all input data")
     divides_path: Path = Field(description="Divides path for entire domain")
     divide_id: str = Field(description="Field name for unique divide id", default="divide_id")
-    crs: int = Field(description="CRS for data", default=5070)
     attributes: list[DivideAttributeConfig] = Field(
         description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
     )
@@ -354,6 +353,10 @@ class DivideAttributeModelConfig(BaseModel):
         description="If running in parallel, this will split the domain divides file into separate files."
         "Each VPU can be run separately and will be stitched at end."
         "This will replace anything input to the `divides_path_list`",
+        default=False,
+    )
+    debug: bool = Field(
+        description="Setting debug to true will save all temporary files. Setting to false will delete files if run fails.",
         default=False,
     )
 

@@ -68,12 +68,12 @@ class TestDivideAttributesSchemas:
             data_dir="./data",
             divides_path="./data/divides.gpkg",
             divide_id="div_id",
-            crs=4326,
             output="./data/divides.gpkg",
             divides_path_list=["./data/div1.gpkg", "./data/div2.gpkg"],
             tmp_dir=tmp_dir,
             attributes=attributes,
             split_vpu=False,
+            debug=True,
         )
 
         # model validator creates tmp folder
@@ -82,12 +82,12 @@ class TestDivideAttributesSchemas:
         assert model.data_dir == Path("./data")
         assert model.divides_path == Path("./data/divides.gpkg")
         assert model.divide_id == "div_id"
-        assert model.crs == 4326
         assert model.attributes == attributes
         assert model.output == Path("./data/divides.gpkg")
         assert model.divides_path_list == [Path("./data/div1.gpkg"), Path("./data/div2.gpkg")]
         assert model.tmp_dir == Path("./data/tmp/divide-attributes")
         assert model.split_vpu is False
+        assert model.debug is True
 
         # teardown
         if tmp_dir.is_dir():
@@ -117,12 +117,12 @@ class TestDivideAttributesSchemas:
         assert model.data_dir == Path("./data")
         assert model.divides_path == Path("./data/divides.gpkg")
         assert model.divide_id == "divide_id"  # default
-        assert model.crs == 5070  # default
         assert model.attributes == attributes
         assert model.output == Path("./data/divides_output.gpkg")  # default
         assert model.divides_path_list is None  # default
         assert model.tmp_dir == Path("/tmp/divide-attributes")  # default
         assert model.split_vpu is False  # default
+        assert model.debug is False  # default
 
         # teardown
         if tmp_dir.is_dir():
@@ -249,25 +249,6 @@ class TestDivideAttributes:
         finally:
             divide_attributes_dksat["config"].tmp.unlink(missing_ok=True)
 
-    # TODO
-    def test_concatenate_attributes(self, divide_attributes_model_config: DivideAttributeModelConfig) -> None:
-        # test gdf has multiple fields of correct names
-        return
-
-    # TODO
-    def test_merge_divide_attributes_parallel(
-        self, divide_attributes_model_config: DivideAttributeModelConfig
-    ) -> None:
-        # test gdf tmp file has fields from each attribute
-        return
-
-    # TODO
-    def test_concatenate_divides_parallel(
-        self, divide_attributes_model_config: DivideAttributeModelConfig
-    ) -> None:
-        # test that the divides file has multiple vpus and all field names
-        return
-
     multiprocessing_raster_data = [
         pytest.param(
             2,
@@ -381,7 +362,7 @@ class TestDivideAttributes:
     def test_divide_attributes_pipeline_single(
         self, divide_attributes_config_yaml: Path, pipeline_results: pd.DataFrame
     ) -> None:
-        # test single pipeline creates file
+        """Single pipeline"""
         try:
             cfg = _config_reader(str(divide_attributes_config_yaml))
             divide_attributes_pipeline_single(str(divide_attributes_config_yaml))
@@ -403,7 +384,6 @@ class TestDivideAttributes:
             )
 
         finally:
-            # teardown
             path_list = cfg.tmp_dir.glob("*")
             for f in path_list:
                 f.unlink(missing_ok=True)
