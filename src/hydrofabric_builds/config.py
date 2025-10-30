@@ -44,7 +44,7 @@ class HFConfig(BaseModel):
         default=os.cpu_count(),
     )
     divide_attributes_config_path: str = Field(
-        default=here() / "configs/divide_attributes_config.yaml",
+        default=here() / "configs/example_divide_attributes_config.yaml",
         description="YAML model definition for building divide attributes",
     )
 
