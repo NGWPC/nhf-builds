@@ -135,10 +135,16 @@ class TestDivideAttributesSchemas:
 class TestDivideAttributes:
     test_tmp_dir = here() / "tests/data/divide_attributes/tmp/divide-attributes"
 
-    # TODO: last after config is sure
     def test_config_reader(self, divide_attributes_config_yaml: str) -> None:
-        # data = _config_reader(divide_attributes_config_yaml)
-        return
+        """Check path logic"""
+        data = _config_reader(divide_attributes_config_yaml)
+
+        assert data.attributes[0].file_name == Path("./tests/data/divide_attributes/bexp_0.tif")
+        assert data.attributes[1].file_name == Path("./tests/data/divide_attributes/dksat_0.tif")
+        assert data.attributes[2].file_name == Path(
+            "./tests/data/divide_attributes/usgs_250m_aspect_5070.tif"
+        )
+        assert data.attributes[3].file_name == Path("./tests/data/divide_attributes/twi.tif")
 
     def test_vpu_splitter(self, divide_attributes_model_config: DivideAttributeModelConfig) -> None:
         """VPU spliter splits gpkg with 2 VPUs"""
