@@ -1,0 +1,377 @@
+"""Functions to compute zonal statistics for divides."""
+
+import logging
+import multiprocessing
+import shutil
+from pathlib import Path
+from time import perf_counter
+
+import geopandas as gpd
+import pandas as pd
+import xarray as xr
+import yaml
+from exactextract import exact_extract
+
+from hydrofabric_builds.schemas.hydrofabric import (
+    DivideAttributeConfig,
+    DivideAttributeModelConfig,
+    get_operation,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _config_reader(config_yaml: str) -> DivideAttributeModelConfig:
+    """Reads model config and list of attributes
+
+    Parameters
+    ----------
+    config_yaml : str
+        Path to Divide Attributes Model Config
+
+    Returns
+    -------
+    DivideAttributeModelConfig
+        Pydantic model for full model config
+    """
+    with open(config_yaml) as f:
+        data = yaml.safe_load(f)
+
+    # prepare attribute list
+    attributes = []
+    for _, val in enumerate(data["attributes"]):
+        data["attributes"][val]["file_name"] = Path(data["data_dir"]) / data["attributes"][val]["file_name"]
+        attr = DivideAttributeConfig.model_validate(data["attributes"][val])
+        attributes.append(attr)
+    data["attributes"] = attributes
+
+    return DivideAttributeModelConfig.model_validate(data)
+
+
+def _vpu_splitter(model_cfg: DivideAttributeModelConfig) -> list[Path]:
+    """Splits the model config's divides file into separate file per VPU for parallel processing
+
+    Temp files deleted upon script completion
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributeModelConfig
+        Pydantic model for full model config
+
+    Returns
+    -------
+    list[Path]
+        list of temp VPU files created to be used in model_cfg's `divides_path_list`
+    """
+    gdf = gpd.read_file(model_cfg.divides_path)
+    vpus = gdf["vpuid"].unique()
+    for vpu in vpus:
+        gdf_temp = gdf[gdf["vpuid"] == vpu].copy()
+        gdf_temp.to_file(model_cfg.tmp_dir / f"vpu_{vpu}.gpkg", layer="divides")
+        del gdf_temp
+
+    return [model_cfg.tmp_dir / f"vpu_{vpu}.gpkg" for vpu in vpus]
+
+
+def _calculate_attribute(
+    model_cfg: DivideAttributeModelConfig,
+    attribute_cfg: DivideAttributeConfig,
+    alt_divides_path: Path | None = None,
+) -> None:
+    """Read divides, data, and calculate. Save to disk for future assembly
+
+    Use alt_divides_path to specify a path other than model_cfg main divides path
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributeModelConfig
+        Pydantic model for full model config
+    attribute_cfg : DivideAttributeConfig
+        Pydantic model for divide attribute
+    alt_divides_path : Path | None, optional
+        specify a path other than model_cfg main divides path, by default None
+    """
+    t0 = perf_counter()
+    if alt_divides_path:
+        divides = gpd.read_file(alt_divides_path, layer="divides")
+        logger.info(f"Calculating for {alt_divides_path}")
+    else:
+        divides = gpd.read_file(model_cfg.divides_path, layer="divides")
+        logger.info(f"Calculating for {model_cfg.divides_path}")
+
+    ds = xr.open_dataarray(attribute_cfg.file_name)
+
+    df = exact_extract(
+        ds,
+        divides,
+        ops=get_operation(attribute_cfg.agg_type.value),
+        include_cols=[model_cfg.divide_id],
+        include_geom=False,
+        output="pandas",
+    )
+
+    if attribute_cfg.agg_type.value == "quartile_dist":
+        df = df.rename(
+            columns={
+                "quantile_25": "twi_q25",
+                "quantile_50": "twi_q50",
+                "quantile_75": "twi_q75",
+                "quantile_100": "twi_q100",
+            }
+        )
+    else:
+        df = df.rename(columns={attribute_cfg.agg_type.value: attribute_cfg.field_name})
+    df.to_parquet(
+        attribute_cfg.tmp,
+        compression="snappy",
+    )
+    del df, ds, divides
+    logger.info(f"{attribute_cfg.tmp}: {round((perf_counter() - t0) / 60, 2)} min")
+
+
+def _concatenate_attributes(model_cfg: DivideAttributeModelConfig) -> None:
+    """For non-parallel use: Read all saved parquets and aggregates to single divide gdf
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributeModelConfig
+        Pydantic model for full model config
+    """
+    t0 = perf_counter()
+    gdf = gpd.read_file(model_cfg.divides_path, layer="divides")
+    for cfg in model_cfg.attributes:
+        df_temp = pd.read_parquet(cfg.tmp)
+        gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
+        del df_temp
+    gdf.to_file(model_cfg.output, layer="divides")
+    del gdf
+    logger.info(f"{model_cfg.output}: {round((perf_counter() - t0) / 60, 2)} min")
+
+
+def _merge_divide_attributes_parallel(model_cfg: DivideAttributeModelConfig) -> None:
+    """If divides were processed in parallel, merge the attributes for each divide and save to gpkg
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributeModelConfig
+        Pydantic model for full model config
+    """
+    n_divides = len(model_cfg.divides_path_list)  # type: ignore[arg-type]
+
+    # looks like: [[tmp_slope_1.parquet, tmp_slope_2.parquet], [tmp_soil_1.parquet, tmp_soil_2.parquet]]
+    list_files = []
+    for attr in model_cfg.attributes:
+        list_files.append(
+            [model_cfg.tmp_dir / f"tmp_{attr.field_name}_{i}.parquet" for i in range(n_divides)]
+        )
+
+    # itterate through each divides file and join the corresponding attribute parquet
+    for i, divides in enumerate(model_cfg.divides_path_list):  # type: ignore[arg-type]
+        gdf = gpd.read_file(divides, layer="divides")
+        for list_f in list_files:
+            df_temp = pd.read_parquet(list_f[i])
+            gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
+        tmp_file = model_cfg.tmp_dir / f"tmp_{divides.name}"
+        gdf.to_file(tmp_file, layer="divides")
+        logger.info(f"{tmp_file} created")
+
+
+def _concatenate_divides_parallel(model_cfg: DivideAttributeModelConfig) -> None:
+    """Concatenate the set of temporary divide files with attributes to final file
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributeModelConfig
+        Pydantic model for full model config
+    """
+    t0 = perf_counter()
+    file_list = [model_cfg.tmp_dir / f"tmp_{divides.name}" for divides in model_cfg.divides_path_list]  # type: ignore[union-attr]
+    gdfs = [gpd.read_file(f, layer="divides") for f in file_list]
+    gdf = pd.concat(gdfs, axis=0, ignore_index=True)
+    gdf.to_file(model_cfg.output, layer="divides")
+    logger.info(f"{model_cfg.output}: {round((perf_counter() - t0) / 60, 2)} min")
+
+
+def _prep_multiprocessing_rasters(
+    processes: int, cfg: DivideAttributeConfig, n_divides: int, tmp_dir: Path
+) -> list[Path]:
+    """Create copies of rasters for multiprocessing. Ensures all processes can start without read conflicts.
+
+    Parameters
+    ----------
+    processes : int
+        number processes
+    cfg : DivideAttributeConfig
+        config of current divide attribute
+    n_divides : int
+        number divides files
+    tmp_dir : Path
+        temp directory to save to
+
+    Returns
+    -------
+    list[Path]
+        list of raster paths
+    """
+    raster_list = []
+    copies = processes if processes < n_divides else n_divides
+
+    for i in range(copies):
+        # Looks like: /tmp_path/file_name_{i}.tif
+        new_path = tmp_dir / f"{cfg.file_name.name.split('.')[0]}_{i}.tif"
+        shutil.copy(cfg.file_name, new_path)
+        raster_list.append(new_path)
+        logger.info(f"Copied raster to {new_path}")
+
+    return raster_list
+
+
+def _prep_multiprocessing_configs(
+    processes: int, cfg: DivideAttributeConfig, n_divides: int, tmp_dir: Path, raster_list: list[Path]
+) -> list[DivideAttributeConfig]:
+    """Prepare attribute config files for multiprocessing
+
+    Parameters
+    ----------
+    processes : int
+        number processes
+    cfg : DivideAttributeConfig
+       config of current divide attribute
+    n_divides : int
+        number divides files
+    tmp_dir : Path
+        temp directory to save to
+    raster_list : list[Path]
+        list of duplicated rasters for multiprocessing
+
+    Returns
+    -------
+    list[DivideAttributeConfig]
+        list of updated divide attribute configs
+    """
+    # set up tmp paths and raster copies for each divide output
+    tmp_c_divides = [cfg for _ in range(n_divides)]
+    c_divides = []
+    for i, c in enumerate(tmp_c_divides):
+        _c = c.model_copy()
+        _c.tmp = tmp_dir / f"tmp_{_c.field_name}_{i}.parquet"
+
+        # get the duplicated raster file name based on amount of processes. +/- 1 to handle python 0-indexing
+        # Note: There still may be some waiting of processes but this ensures all processes can start
+        _c.file_name = raster_list[((i + 1) % processes) - 1]
+        c_divides.append(_c)
+
+    return c_divides
+
+
+def _teardown(tmpdir: Path) -> None:
+    """Delete tmp paths from tmp directory
+
+    Parameters
+    ----------
+    tmpdir : Path
+        tmp directory
+    """
+    path_list = tmpdir.glob("*")
+    for f in path_list:
+        f.unlink(missing_ok=True)
+
+
+def divide_attributes_pipeline_single(config_yaml: str) -> None:
+    """A pipeline to calculate divide attributes for a single divides file
+
+    Parameters
+    ----------
+    config_yaml : str
+        Path to Divide Attributes Model Config
+    """
+    t0 = perf_counter()
+    model_cfg = _config_reader(config_yaml)
+
+    for cfg in model_cfg.attributes:
+        _calculate_attribute(model_cfg, cfg)
+
+    _concatenate_attributes(model_cfg)
+
+    _teardown(model_cfg.tmp_dir)
+    logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
+
+
+def divide_attributes_pipeline_parallel(config_yaml: str, processes: int) -> None:
+    """A pipeline to calculate divide attributes for multiple divides files in parallel
+
+    Notes
+    -----
+    - `split_vpu` or `divides_path_list` must be in config
+    `split_vpu` will split `divides_path` into separate files to run in parallel
+    `divides_path_list` can be any list of divides files to be run in parallel
+
+    - Attributes are not run in parallel. Parallel running is for multiple divides files for each attribute.
+
+    - tmp files will be deleted upon successful completion
+
+    - for each process, a raster copy will be made to ensure all processes can start without conflicting reads
+
+
+    Parameters
+    ----------
+    config_yaml : str
+        Path to Divide Attributes Model Config
+    processes : int
+        number CPU processes
+    """
+    t0 = perf_counter()
+    model_cfg = _config_reader(config_yaml)
+    tmp_dir = model_cfg.tmp_dir
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Confirm model should be run in parallel
+    if not model_cfg.split_vpu and not model_cfg.divides_path_list:
+        raise ValueError(
+            "Config did not include instructions to split by VPU (`split_vpu`) or a list of divides (`divides_path_list`)"
+            " The model cannot be run in parallel. Either run `divide_attributes_pipeline_single` or add `split_vpu` or"
+            "`divides_path_list` keys"
+        )
+    # creates gpkg for each VPU
+    if model_cfg.split_vpu:
+        model_cfg.divides_path_list = _vpu_splitter(model_cfg)
+
+    # processing loop: 1 attribute for multiple divides layers at a time
+    for cfg in model_cfg.attributes:
+        n_divides = len(model_cfg.divides_path_list)  # type: ignore[arg-type]
+
+        # prep rasters and config files
+        raster_list = _prep_multiprocessing_rasters(
+            processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir
+        )
+        config_list = _prep_multiprocessing_configs(
+            processes=processes, cfg=cfg, n_divides=n_divides, tmp_dir=tmp_dir, raster_list=raster_list
+        )
+
+        # multiprocess each divide
+        args = zip(
+            [model_cfg for _ in range(n_divides)],
+            config_list,
+            model_cfg.divides_path_list,  # type: ignore[arg-type]
+            strict=False,
+        )
+        with multiprocessing.Pool(processes=processes) as pool:
+            pool.starmap(_calculate_attribute, args)
+
+        for f in raster_list:
+            f.unlink(missing_ok=True)
+
+    # concatenate the separate attributes to a single file per divide
+    t1 = perf_counter()
+    _merge_divide_attributes_parallel(model_cfg)
+    t2 = perf_counter()
+    logger.info(f"merge attributes for each divide: {round((t2 - t1) / 60, 2)} min")
+
+    # concatenate the final output file
+    _concatenate_divides_parallel(model_cfg)
+    logger.info(f"concatenate divides: {round((perf_counter() - t2) / 60, 2)} min")
+
+    # delete all tmp files
+    _teardown(tmp_dir)
+
+    logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")

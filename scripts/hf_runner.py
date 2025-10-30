@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig, TaskInstance
+from hydrofabric_builds.pipeline.build_divide_attributes import build_divide_attributes
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.download import download_reference_data
 from hydrofabric_builds.pipeline.processing import (
@@ -162,6 +163,7 @@ def main() -> int:
     runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
     runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
     runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="divide_attributes", python_callable=build_divide_attributes, op_kwargs={})
 
     print("\n" + "=" * 60)
     print("Pipeline completed")

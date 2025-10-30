@@ -52,6 +52,7 @@ dependencies = [
   "rasterio==1.4.3",
   "rustworkx==0.17.1",
   "dask==2025.7.0",
+  "exactextract==0.2.2"
 ]
 
 [project.optional-dependencies]
@@ -76,6 +77,7 @@ examples = [
 tests = [
     "pytest==8.4.1",
     "pytest-cov==6.1.1",
+    "astropy==7.1.0"
 ]
 
 [tool.uv]

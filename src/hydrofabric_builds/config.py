@@ -38,6 +38,13 @@ class HFConfig(BaseModel):
         default=-1,
         description="A debug setting to only run a specified number out outlets through the runner. Setting to -1 as a default to avoidd premature activation",
     )
+    divide_attributes_processes: int = Field(
+        default=11, description="Number of processes to run during multiprocessing for divide attributes"
+    )
+    divide_attributes_config_path: str = Field(
+        default=here() / "configs/divide_attributes_config.yaml",
+        description="YAML model definition for building divide attributes",
+    )
 
     @classmethod
     def from_yaml(cls, path: str) -> Self:

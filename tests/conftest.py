@@ -1,16 +1,24 @@
 """Extended conftest for test_trace.py with edge case fixtures."""
 
 from collections import deque
+from pathlib import Path
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from pyprojroot import here
 from shapely.geometry import LineString, Polygon
 
 from hydrofabric_builds import HFConfig
-from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
+from hydrofabric_builds.schemas.hydrofabric import (
+    Aggregations,
+    Classifications,
+    DivideAttributeConfig,
+    DivideAttributeModelConfig,
+)
 from scripts.hf_runner import LocalRunner, TaskInstance
 
 
@@ -912,3 +920,170 @@ def to_process() -> deque:
     from collections import deque
 
     return deque(["fp1", "fp2"])
+
+
+@pytest.fixture
+def divide_attributes_config_yaml() -> Path:
+    return here() / "tests/data/divide_attributes/sample_divide_attributes_config.yaml"
+
+
+@pytest.fixture
+def divide_attribute_tmp_dir() -> Path:
+    tmp_dir = here() / "tests/data/divide_attributes/tmp/divide-attributes"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    return tmp_dir
+
+
+@pytest.fixture
+def divide_attributes_model_config() -> DivideAttributeModelConfig:
+    (here() / "tests/data/divide_attributes/tmp/divide-attributes").mkdir(exist_ok=True)
+
+    with open(here() / "tests/data/divide_attributes/sample_divide_attributes_config.yaml") as f:
+        data = yaml.safe_load(f)
+
+    # prepare attribute list
+    attributes = []
+    for _, val in enumerate(data["attributes"]):
+        data["attributes"][val]["file_name"] = Path(data["data_dir"]) / data["attributes"][val]["file_name"]
+        attr = DivideAttributeConfig.model_validate(data["attributes"][val])
+        attributes.append(attr)
+    data["attributes"] = attributes
+
+    model = DivideAttributeModelConfig.model_validate(data)
+    return model
+
+
+@pytest.fixture
+def divide_attributes_bexp() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/bexp_0.tif", agg_type="mode", field_name="bexp_mode"
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(data={"bexp_mode": [3.8358047008514404] * 3})
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_twi() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/twi.tif",
+        agg_type="quartile_dist",
+        field_name="twi_quartile",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "twi_q25": [2.694071054458618, 3.019684076309204, 2.3839735984802246],
+            "twi_q50": [3.398449182510376, 3.584394693374634, 3.3415729999542236],
+            "twi_q75": [4.452366352081299, 4.816798686981201, 4.956294059753418],
+            "twi_q100": [9.391340255737305, 9.557568550109863, 9.391340255737305],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_aspect() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
+        agg_type="weighted_circular_mean",
+        field_name="aspect_circmean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "aspect_circmean": [2.99664231374856, 1.49115191281852, 1.93281955851195],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_dksat() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/dksat_0.tif",
+        agg_type="weighted_geometric_mean",
+        field_name="dksat_geomean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "dksat_geomean": [7.41350989298916e-06, 1.34066861468563e-05, 1.17470439333527e-05],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def pipeline_results() -> dict[str, Any]:
+    return pd.DataFrame(
+        data={
+            "bexp_mode": [
+                3.83580470085144,
+                3.83580470085144,
+                3.83580470085144,
+                6.04997158050537,
+                8.37030601501465,
+                3.83580470085144,
+                9.27090930938721,
+            ],
+            "dksat_geomean": [
+                7.41350989298916e-06,
+                1.34066861468563e-05,
+                1.17470439333527e-05,
+                1.38974877995705e-06,
+                4.46308076016753e-06,
+                5.91530080981635e-06,
+                2.30610919442801e-06,
+            ],
+            "twi_q25": [
+                2.69407105445862,
+                3.0196840763092,
+                2.38397359848022,
+                3.51079273223877,
+                3.25145959854126,
+                3.64542818069458,
+                3.2723867893219,
+            ],
+            "twi_q50": [
+                3.39844918251038,
+                3.58439469337463,
+                3.34157299995422,
+                4.04998207092285,
+                3.90506148338318,
+                3.95171666145325,
+                4.1548490524292,
+            ],
+            "twi_q75": [
+                4.4523663520813,
+                4.8167986869812,
+                4.95629405975342,
+                6.03084325790405,
+                5.51765108108521,
+                4.64258718490601,
+                5.35527324676514,
+            ],
+            "twi_q100": [
+                9.39134025573731,
+                9.55756855010986,
+                9.39134025573731,
+                14.7246837615967,
+                12.0086498260498,
+                7.19441413879395,
+                7.29458808898926,
+            ],
+            "aspect_circmean": [
+                2.99664231374856,
+                1.49115191281852,
+                1.93281955851195,
+                -2.35675646702983,
+                -2.21318957597644,
+                -2.20789058997582,
+                -1.79286152557521,
+            ],
+        }
+    )

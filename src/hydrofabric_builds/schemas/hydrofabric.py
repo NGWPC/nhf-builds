@@ -1,9 +1,13 @@
 """A file to host all Hydrofabric Schemas"""
 
 from enum import Enum, StrEnum
+from pathlib import Path
+from typing import Any, Self
 
 import pyarrow as pa
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 
 
 class Classifications(BaseModel):
@@ -269,3 +273,92 @@ class HydrofabricCRS(Enum):
     GL = 5070  # TEMP: MAY CHANGE
     HI = 102007
     PRVI = 32161
+
+
+class AggTypeEnum(StrEnum):
+    """Zonal statistics aggregation types"""
+
+    mean = "mean"
+    mode = "mode"
+    max = "max"
+    circular_mean = "weighted_circular_mean"
+    quartile_dist = "quartile_dist"
+    geom_mean = "weighted_geometric_mean"
+
+
+def get_operation(op: str) -> Any:
+    """Helper to return zonal statistics aggregation type
+
+    Parameters
+    ----------
+    op : str
+        requested operation
+
+    Returns
+    -------
+    Any
+        string operation, list of string operations, or callable custom function
+    """
+    assert op in AggTypeEnum, ValueError("Invalid aggregation type")
+
+    # make a mapping from the Enum keys where {key: key}
+    mapping = dict(zip(AggTypeEnum.__members__.keys(), AggTypeEnum.__members__.keys(), strict=False))
+    mapping.update(
+        {
+            "weighted_circular_mean": weighted_circular_mean,  # type: ignore[dict-item]
+            "weighted_geometric_mean": weighted_geometric_mean,  # type: ignore[dict-item]
+            "quartile_dist": ["quantile(q=0.25)", "quantile(q=0.5)", "quantile(q=0.75)", "quantile(q=1)"],  # type: ignore[dict-item]
+        }
+    )
+
+    return mapping[op]
+
+
+class DivideAttributeConfig(BaseModel):
+    """Pydantic model for divide attributes attribute configuration"""
+
+    agg_type: AggTypeEnum = Field(description="Zonal stats aggregation type")
+    field_name: str = Field(description="Output field name for divide attribute")
+    file_name: Path = Field(description="File path of attribute raster")
+    tmp: Path = Field(
+        description="Temp file path for parquet",
+        default_factory=lambda data: Path("/tmp/divide-attributes") / f"tmp_{data['field_name']}.parquet",
+    )
+
+    @model_validator(mode="after")
+    def make_tmp_dir(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Model validator to create a temp directory if it does not exist"""
+        self.tmp.parents[0].mkdir(parents=True, exist_ok=True)
+        return self
+
+
+class DivideAttributeModelConfig(BaseModel):
+    """Pydantic model for divide attributes model configuration"""
+
+    data_dir: Path = Field(description="Directory of all input data")
+    divides_path: Path = Field(description="Divides path for entire domain")
+    divide_id: str = Field(description="Field name for unique divide id", default="divide_id")
+    crs: int = Field(description="CRS for data", default=5070)
+    attributes: list[DivideAttributeConfig] = Field(
+        description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
+    )
+    output: Path = Field(
+        description="Output file path", default_factory=lambda data: data["data_dir"] / "divides_output.gpkg"
+    )
+    divides_path_list: list[Path] | None | None = Field(
+        description="List of divides paths to use for parallel run. ex. list of VPU subsets.",
+        default=None,
+    )
+    tmp_dir: Path = Field(description="Temp path for saving files", default=Path("/tmp/divide-attributes"))
+    split_vpu: bool | None = Field(
+        description="If running in parallel, this will split the domain divides file into separate files."
+        "Each VPU can be run separately and will be stitched at end."
+        "This will replace anything input to the `divides_path_list`",
+        default=False,
+    )
+
+    @model_validator(mode="after")
+    def make_tmp_dir(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Model validator to create a temp directory if it does not exist"""
+        self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        return self

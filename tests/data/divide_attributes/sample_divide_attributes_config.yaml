@@ -1,0 +1,24 @@
+data_dir: "./tests/data/divide_attributes"
+divides_path: "./tests/data/divide_attributes/divide_attributes_divides.gpkg"
+divide_id: "divide_id"
+epsg: 5070
+output: "./tests/data/divide_attributes_divides.gpkg"
+tmp_dir: "./tests/data/divide_attributes/tmp/divide-attributes"
+split_vpu: True
+attributes:
+  bexp1:
+    file_name: 'bexp_0.tif'
+    agg_type: 'mode'
+    field_name: 'bexp_mode'
+  dksat:
+    file_name: 'dksat_0.tif'
+    agg_type: 'weighted_geometric_mean'
+    field_name: 'dksat_geomean'
+  aspect:
+    file_name: 'usgs_250m_aspect_5070.tif'
+    agg_type: 'weighted_circular_mean'
+    field_name: 'aspect_circmean'
+  twi:
+    file_name: 'twi.tif'
+    agg_type: 'quartile_dist'
+    field_name: 'twi_quartile'
