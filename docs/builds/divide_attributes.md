@@ -29,3 +29,8 @@ Final output will always merge all divides.
     For small test cases, using a single process is recommended to avoid overhead of copying rasters. Multiprocessing is recommended for full pipeline runs.
 
 4. Run using the `hf_runner.py` script: `python scripts/hf_runner.py --config ./configs/example_config.yaml`
+
+Config file notes:
+- The `file_name` will be appended to `data_dir` during pipeline. Thus, `data_dir` should be root data folder and subfolders for attributes should be included in the `file_name`. e.g. `data_dir: "data/divide_attributes"` and `file_name: "nwm/bexp_0.tif"` will be concatenated in the pipeline to the full path `data/divide_attributes/nwm/bexp_0.tif`.
+
+- Aggregation type (`agg_type`) must be found in `hydrofabric_builds.schemas.hydrofabric.AggTypeEnum` options
