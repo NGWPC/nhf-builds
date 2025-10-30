@@ -14,7 +14,7 @@ name = "hydrofabric-builds"
 dynamic = ["version"]
 description = "Building Hydrofabric(s) + Processing Ancillary Data"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [
   { name = "Tadd Bindas", email = "tadd.bindas@ertcorp.com" },
