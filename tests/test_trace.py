@@ -4,6 +4,7 @@ from collections import deque
 
 import polars as pl
 import pytest
+from conftest import dict_to_graph
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.trace import (
@@ -52,6 +53,7 @@ def test_connector_aggregates_small_order1_upstreams(
         "up2": [],
         "up3": [],
     }
+    graph, node_indices = dict_to_graph(network_graph)
 
     div_ids = {"fp1", "up1", "up2", "up3"}
 
@@ -68,9 +70,10 @@ def test_connector_aggregates_small_order1_upstreams(
         current_id="fp1",
         upstream_info=upstream_info,
         cfg=sample_config,
-        network_graph=network_graph,
         result=result,
         div_ids=div_ids,
+        graph=graph,
+        node_indices=node_indices,
     )
 
     assert is_connector
@@ -90,6 +93,7 @@ class TestRuleAggregateSingleUpstream:
         div_ids = {"5", "6"}
         to_process: deque = deque()
         result = Classifications()
+        graph, node_indices = dict_to_graph(network_graph)
 
         fp_info = {
             "flowpath_id": "5",
@@ -110,9 +114,10 @@ class TestRuleAggregateSingleUpstream:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
             fp=sample_flowpath_data,
             to_process=to_process,
+            graph=graph,
+            node_indices=node_indices,
         )
 
         assert success
@@ -123,6 +128,7 @@ class TestRuleAggregateSingleUpstream:
     ) -> None:
         """Test cumulative area tracking stops at threshold."""
         network_graph = {"fp1": ["up1"], "up1": ["up2"], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -146,7 +152,8 @@ class TestRuleAggregateSingleUpstream:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -158,6 +165,7 @@ class TestRuleAggregateSingleUpstream:
     ) -> None:
         """Test large area upstream not aggregated."""
         network_graph = {"fp1": ["up1"], "up1": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1"}
         to_process: deque = deque()
         result = Classifications()
@@ -181,7 +189,8 @@ class TestRuleAggregateSingleUpstream:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -197,6 +206,7 @@ class TestRuleAggregateOrder2WithOrder1s:
     ) -> None:
         """Test order 2 with two order 1 upstreams."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -218,7 +228,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -238,6 +249,7 @@ class TestRuleAggregateOrder2WithOrder1s:
             "up1a": [],
             "up1b": [],
         }
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2", "up1a", "up1b"}
         to_process: deque = deque()
         result = Classifications()
@@ -259,7 +271,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -271,6 +284,7 @@ class TestRuleAggregateOrder2WithOrder1s:
     def test_not_order2(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
         """Test function returns False when not order 2."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -292,7 +306,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -304,6 +319,7 @@ class TestRuleAggregateOrder2WithOrder1s:
     def test_not_all_order1(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
         """Test function returns False when not all upstreams are order 1."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -331,7 +347,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -345,6 +362,7 @@ class TestRuleAggregateOrder2WithOrder1s:
     ) -> None:
         """Test order 2 with three order 1 upstreams."""
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2", "up3"}
         to_process: deque = deque()
         result = Classifications()
@@ -367,7 +385,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -387,6 +406,7 @@ class TestRuleAggregateOrder2WithOrder1s:
             "up3": [],
             "up4": [],
         }
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2", "up3", "up4"}
         to_process: deque = deque()
         result = Classifications()
@@ -410,7 +430,8 @@ class TestRuleAggregateOrder2WithOrder1s:
             current_id="fp1",
             fp_info=fp_info,
             upstream_info=upstream_info,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             result=result,
             div_ids=div_ids,
             fp=sample_flowpath_data,
@@ -428,6 +449,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     ) -> None:
         """Test mixed orders with small order 1 becoming minor."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -464,7 +486,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -478,6 +501,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     ) -> None:
         """Test that function still works with large order 1 (area doesn't matter for this rule)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -514,7 +538,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -528,6 +553,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     ) -> None:
         """Test multiple order 1s all marked as minor with same-order upstream."""
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2", "up3"}
         to_process: deque = deque()
         result = Classifications()
@@ -571,7 +597,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -586,6 +613,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     ) -> None:
         """Test function returns False when all upstreams are order 1 (no same-order upstream)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -610,7 +638,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -623,6 +652,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     ) -> None:
         """Test function returns False when no order 1 upstreams (only same-order)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
+        graph, node_indices = dict_to_graph(network_graph)
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
@@ -659,7 +689,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )
@@ -675,7 +706,7 @@ class TestRuleAggregateMixedUpstreamOrders:
         div_ids = {"fp1", "up1", "up2"}
         to_process: deque = deque()
         result = Classifications()
-
+        graph, node_indices = dict_to_graph(network_graph)
         fp_info = {
             "flowpath_id": "fp1",
             "areasqkm": 1.0,
@@ -708,7 +739,8 @@ class TestRuleAggregateMixedUpstreamOrders:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            network_graph=network_graph,
+            graph=graph,
+            node_indices=node_indices,
             fp=sample_flowpath_data,
             to_process=to_process,
         )

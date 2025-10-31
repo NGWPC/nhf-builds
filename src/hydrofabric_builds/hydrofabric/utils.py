@@ -4,6 +4,39 @@ from typing import Any
 
 import geopandas as gpd
 import pandas as pd
+import rustworkx as rx
+
+
+def _get_upstream_ids_for_outlet(
+    outlet: str,
+    graph: rx.PyDiGraph,
+    node_indices: dict[str, int],
+) -> set[str]:
+    """Get all upstream flowpath IDs for an outlet using rustworkx graph traversal.
+
+    Parameters
+    ----------
+    outlet : str
+        The outlet flowpath ID
+    graph : rx.PyDiGraph
+        The rustworkx graph object
+    node_indices : dict[str, int]
+        Mapping of flowpath_id to graph node index
+
+    Returns
+    -------
+    set[str]
+        Set of all flowpath IDs in this outlet's upstream tree
+    """
+    if outlet not in node_indices:
+        return {outlet}
+
+    outlet_node = node_indices[outlet]
+    upstream_nodes = rx.ancestors(graph, outlet_node)
+    upstream_nodes.add(outlet_node)
+    upstream_ids = {graph.get_node_data(node) for node in upstream_nodes}
+
+    return upstream_ids
 
 
 def _calculate_id_ranges_pure(outlet_aggregations: dict) -> dict[str, Any]:

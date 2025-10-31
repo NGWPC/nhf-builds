@@ -15,6 +15,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 300.0, 0.0],  # 1->2->3, 3 is outlet
+                "totdasqkm": [10.0, 50.0, 100.0],  # Drainage area increases downstream
             }
         )
 
@@ -33,6 +34,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [300.0, 300.0, 0.0],  # Both 1 and 2 flow to 3
+                "totdasqkm": [25.0, 30.0, 80.0],  # 3 has combined drainage
             }
         )
 
@@ -49,6 +51,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
                 "dnhydroseq": [200.0, 0.0, 400.0, 0.0],  # 1->2(outlet), 3->4(outlet)
+                "totdasqkm": [15.0, 45.0, 20.0, 60.0],
             }
         )
 
@@ -67,6 +70,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 300.0, float("nan")],  # 3 has NaN
+                "totdasqkm": [10.0, 40.0, 25.0],
             }
         )
 
@@ -83,6 +87,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 0.0, 0.0],  # 2 and 3 have zero (outlets)
+                "totdasqkm": [15.0, 50.0, 30.0],
             }
         )
 
@@ -101,6 +106,7 @@ class TestBuildGraphUnit:
                 "dnhydroseq": [300.0, 300.0, 600.0, 500.0, 600.0, 0.0],
                 # 1,2 -> 3 -> 6(outlet)
                 #        4 -> 5 -> 6(outlet)
+                "totdasqkm": [15.0, 20.0, 50.0, 10.0, 30.0, 120.0],
             }
         )
 
@@ -122,6 +128,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 999.0],  # 3 has unique hydroseq
                 "dnhydroseq": [200.0, 0.0, 0.0],  # 1->2, 3 is isolated
+                "totdasqkm": [10.0, 35.0, 15.0],
             }
         )
 
@@ -139,6 +146,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [0.0, 0.0, 0.0],  # All outlets
+                "totdasqkm": [25.0, 40.0, 15.0],
             }
         )
 
@@ -153,6 +161,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [6720675.0, 6722501.0],
                 "hydroseq": [100.0, 200.0],
                 "dnhydroseq": [200.0, 0.0],
+                "totdasqkm": [45.0, 120.0],
             }
         )
 
@@ -168,12 +177,13 @@ class TestBuildGraphUnit:
         assert "6720675" in network["6722501"]
 
     def test_large_flowpath_ids(self) -> None:
-        """Test with 3 flopaths going to one outlet"""
+        """Test with 3 flowpaths going to one outlet"""
         flowpaths = pl.DataFrame(
             {
                 "flowpath_id": [6720675.0, 6720683.0, 6720773.0, 6720689.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
                 "dnhydroseq": [200.0, 0.0, 200.0, 200.0],  # Multiple flowing to 683
+                "totdasqkm": [30.0, 150.0, 25.0, 35.0],
             }
         )
 
@@ -189,6 +199,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [300.0, 300.0, 0.0],
+                "totdasqkm": [20.0, 25.0, 70.0],
             }
         )
 
@@ -205,6 +216,7 @@ class TestBuildGraphUnit:
                 "flowpath_id": [1.0, 2.0],
                 "hydroseq": [100.0, 200.0],
                 "dnhydroseq": [200.0, 0.0],
+                "totdasqkm": [15.0, 45.0],
             }
         )
 
@@ -223,6 +235,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0, 2.0],
                 "hydroseq": [100.0, 200.0],
                 "dnhydroseq": [200.0, 0.0],  # 2 is outlet
+                "totdasqkm": [20.0, 55.0],
             }
         )
 
@@ -238,6 +251,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0, 2.0, 3.0, 4.0],
                 "hydroseq": [100.0, 200.0, 300.0, 400.0],
                 "dnhydroseq": [200.0, 0.0, 400.0, 0.0],  # 2 and 4 are outlets
+                "totdasqkm": [15.0, 45.0, 25.0, 80.0],  # 4 is largest outlet
             }
         )
 
@@ -245,6 +259,9 @@ class TestFindOutletsByHydroseq:
 
         assert len(outlets) == 2
         assert set(outlets) == {"2", "4"}
+        # # Check that outlets are sorted by drainage area (largest first)
+        # assert outlets[0] == "4"  # 80 sqkm
+        # assert outlets[1] == "2"  # 45 sqkm
 
     def test_all_outlets(self) -> None:
         """Test when all flowpaths are outlets."""
@@ -253,6 +270,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [0.0, 0.0, 0.0],  # All outlets
+                "totdasqkm": [25.0, 60.0, 15.0],  # 2 is largest
             }
         )
 
@@ -260,6 +278,10 @@ class TestFindOutletsByHydroseq:
 
         assert len(outlets) == 3
         assert set(outlets) == {"1", "2", "3"}
+        # # Verify sorted by drainage area
+        # assert outlets[0] == "2"  # 60
+        # assert outlets[1] == "1"  # 25
+        # assert outlets[2] == "3"  # 15
 
     def test_no_outlets_connected_network(self) -> None:
         """Test a fully connected circular network (no true outlets)."""
@@ -269,6 +291,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 300.0, 100.0],  # Circular: 1->2->3->1
+                "totdasqkm": [30.0, 30.0, 30.0],
             }
         )
 
@@ -283,6 +306,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0, 2.0, 3.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 300.0, 0.0],  # 1->2->3, 3 is outlet
+                "totdasqkm": [10.0, 35.0, 75.0],
             }
         )
 
@@ -301,6 +325,7 @@ class TestFindOutletsByHydroseq:
                 # 1 -> 2 (zero)
                 # 3 (NaN)
                 # 4 (non-existent downstream)
+                "totdasqkm": [20.0, 65.0, 30.0, 15.0],  # 2 is largest
             }
         )
 
@@ -308,6 +333,10 @@ class TestFindOutletsByHydroseq:
 
         assert len(outlets) == 3
         assert set(outlets) == {"2", "3", "4"}
+        # Verify sorting
+        assert outlets[0] == "2"  # 65
+        assert outlets[1] == "3"  # 30
+        assert outlets[2] == "4"  # 15
 
     def test_large_flowpath_ids(self) -> None:
         """Test with realistic large flowpath IDs."""
@@ -316,6 +345,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [6720675.0, 6720683.0, 6720797.0],
                 "hydroseq": [100.0, 200.0, 300.0],
                 "dnhydroseq": [200.0, 300.0, 0.0],
+                "totdasqkm": [25.0, 75.0, 150.0],
             }
         )
 
@@ -331,6 +361,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [],
                 "hydroseq": [],
                 "dnhydroseq": [],
+                "totdasqkm": [],
             }
         )
 
@@ -345,6 +376,7 @@ class TestFindOutletsByHydroseq:
                 "flowpath_id": [1.0],
                 "hydroseq": [100.0],
                 "dnhydroseq": [0.0],
+                "totdasqkm": [50.0],
             }
         )
 
@@ -352,3 +384,19 @@ class TestFindOutletsByHydroseq:
 
         assert len(outlets) == 1
         assert "1" in outlets
+
+    # def test_drainage_area_sorting(self) -> None:
+    #     """Test that outlets are sorted by drainage area (largest first)."""
+    #     flowpaths = pl.DataFrame(
+    #         {
+    #             "flowpath_id": [1.0, 2.0, 3.0, 4.0, 5.0],
+    #             "hydroseq": [100.0, 200.0, 300.0, 400.0, 500.0],
+    #             "dnhydroseq": [0.0, 0.0, 0.0, 0.0, 0.0],  # All outlets
+    #             "totdasqkm": [50.0, 200.0, 25.0, 150.0, 75.0],
+    #         }
+    #     )
+
+    #     outlets = _find_outlets_by_hydroseq(flowpaths)
+
+    #     # Should be sorted: 2(200), 4(150), 5(75), 1(50), 3(25)
+    #     assert outlets == ["2", "4", "5", "1", "3"]

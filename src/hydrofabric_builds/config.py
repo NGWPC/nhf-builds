@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pyprojroot import here
 
 
@@ -19,6 +19,10 @@ class HFConfig(BaseModel):
 
     divide_aggregation_threshold: float = Field(
         default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
+    )
+
+    num_agg_workers: int | None = Field(
+        default=None, description="Number of dask workers to use as a default for multiprocessing"
     )
 
     output_dir: Path = Field(
@@ -35,9 +39,9 @@ class HFConfig(BaseModel):
         description="The location of the reference fabric flowpaths. Default is in the NGWPC Test AWS account",
     )
 
-    debug_outlet_count: int = Field(
-        default=-1,
-        description="A debug setting to only run a specified number out outlets through the runner. Setting to -1 as a default to avoidd premature activation",
+    debug_outlet_count: int | None = Field(
+        default=None,
+        description="Debug setting to limit the number of outlets processed. None (default) processes all outlets. Set to a positive integer to limit for testing.",
     )
     divide_attributes_processes: int = Field(
         description="Number of processes to run during multiprocessing for divide attributes",
@@ -47,6 +51,37 @@ class HFConfig(BaseModel):
         default=here() / "configs/example_divide_attributes_config.yaml",
         description="YAML model definition for building divide attributes",
     )
+
+    run_divide_attributes_task: bool = Field(
+        default=True, description="Decides if we want to run the divide attributes task"
+    )
+
+    enable_dask_dashboard: bool = Field(
+        default=True,
+        description="Enable Dask dashboard for monitoring parallel tasks. Disable for testing or to avoid port conflicts.",
+    )
+
+    dask_dashboard_port: int | None = Field(
+        default=8787,
+        description="Port for Dask dashboard. Set to None for automatic port selection. Default is 8787.",
+    )
+
+    @field_validator("debug_outlet_count")
+    @classmethod
+    def validate_debug_outlet_count(cls, v: int | None) -> int | None:
+        """Validate debug_outlet_count is None or positive."""
+        if v is not None and v <= 0:
+            raise ValueError("debug_outlet_count must be None (for all outlets) or a positive integer")
+        return v
+
+    @property
+    def dask_dashboard_address(self) -> str | None:
+        """Get the dashboard address for Dask client."""
+        if not self.enable_dask_dashboard:
+            return None
+        if self.dask_dashboard_port is None:
+            return ":0"  # Let Dask choose a random available port
+        return f":{self.dask_dashboard_port}"
 
     @classmethod
     def from_yaml(cls, path: str) -> Self:

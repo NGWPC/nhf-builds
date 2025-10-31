@@ -8,6 +8,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
+import rustworkx as rx
 import yaml
 from pyprojroot import here
 from shapely.geometry import LineString, Polygon
@@ -19,7 +20,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     DivideAttributeConfig,
     DivideAttributeModelConfig,
 )
-from scripts.hf_runner import LocalRunner, TaskInstance
+from scripts.hf_runner import TaskInstance
 
 
 @pytest.fixture
@@ -39,25 +40,28 @@ def mock_geopackages() -> tuple[str, str]:
 @pytest.fixture
 def sample_divides() -> gpd.GeoDataFrame:
     """Open the sample test data"""
-    return gpd.read_parquet(here() / "tests/data/sample_divides.parquet")
+    _gdf = gpd.read_parquet(here() / "tests/data/sample_divides.parquet")
+    _gdf["divide_id"] = _gdf["divide_id"].astype("int").astype("str")
+    return _gdf
 
 
 @pytest.fixture
 def sample_flowpaths() -> gpd.GeoDataFrame:
     """Open the sample test data"""
-    return gpd.read_parquet(here() / "tests/data/sample_flowpaths.parquet")
+    _gdf = gpd.read_parquet(here() / "tests/data/sample_flowpaths.parquet")
+    _gdf["flowpath_id"] = _gdf["flowpath_id"].astype("int").astype("str")
+    return _gdf
 
 
 @pytest.fixture
 def sample_config(mock_geopackages: tuple[str, str]) -> HFConfig:
     """Fixture providing a sample HFConfig."""
-    return HFConfig(reference_divides_path=mock_geopackages[0], reference_flowpaths_path=mock_geopackages[1])
-
-
-@pytest.fixture
-def runner(sample_config: HFConfig) -> LocalRunner:
-    """Fixture providing a LocalRunner instance."""
-    return LocalRunner(sample_config)
+    return HFConfig(
+        reference_divides_path=mock_geopackages[0],
+        reference_flowpaths_path=mock_geopackages[1],
+        num_agg_workers=1,
+        enable_dask_dashboard=False,
+    )
 
 
 @pytest.fixture
@@ -920,6 +924,87 @@ def to_process() -> deque:
     from collections import deque
 
     return deque(["fp1", "fp2"])
+
+
+@pytest.fixture
+def sample_network_graph() -> rx.PyDiGraph:
+    """Create a sample PyDiGraph from network dictionary for testing."""
+    graph = rx.PyDiGraph()
+
+    # Create nodes
+    node_map = {}
+    network_dict = {
+        "fp1": ["fp2", "fp3"],
+        "fp2": ["fp4"],
+        "fp3": ["fp5"],
+        "fp4": [],
+        "fp5": [],
+    }
+
+    # Add all nodes first
+    for node_id in network_dict.keys():
+        node_map[node_id] = graph.add_node(node_id)
+
+    # Add edges based on upstream relationships
+    for downstream, upstreams in network_dict.items():
+        for upstream in upstreams:
+            if upstream in node_map:
+                graph.add_edge(node_map[downstream], node_map[upstream], None)
+
+    return graph
+
+
+@pytest.fixture
+def circular_network_dict() -> dict[str, list[str]]:
+    """Network dictionary with a circular reference."""
+    return {
+        "fp1": ["fp2"],
+        "fp2": ["fp3"],
+        "fp3": ["fp1"],  # Creates cycle
+    }
+
+
+@pytest.fixture
+def valid_network_dict() -> dict[str, list[str]]:
+    """Valid network dictionary without cycles."""
+    return {
+        "fp1": ["fp2", "fp3"],
+        "fp2": ["fp4"],
+        "fp3": ["fp5"],
+        "fp4": [],
+        "fp5": [],
+    }
+
+
+def dict_to_graph(network_dict: dict[str, list[str]]) -> tuple[rx.PyDiGraph, dict]:
+    """Helper function to convert network dict to PyDiGraph.
+
+    Parameters
+    ----------
+    network_dict : dict[str, list[str]]
+        Dictionary mapping downstream nodes to lists of upstream nodes
+
+    Returns
+    -------
+    rx.PyDiGraph
+        Graph representation of the network
+    dict
+        The node inidices map
+    """
+    graph = rx.PyDiGraph()
+    node_map = {}
+
+    # Add all nodes
+    for node_id in network_dict.keys():
+        node_map[node_id] = graph.add_node(node_id)
+
+    # Add edges
+    for downstream, upstreams in network_dict.items():
+        for upstream in upstreams:
+            if upstream in node_map:
+                graph.add_edge(node_map[upstream], node_map[downstream], None)
+
+    return graph, node_map
 
 
 @pytest.fixture

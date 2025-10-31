@@ -2,10 +2,10 @@
 
 import logging
 from collections import deque
-from typing import Any
 
 import geopandas as gpd
 import polars as pl
+import rustworkx as rx
 from shapely import Point
 from shapely.ops import unary_union
 
@@ -58,7 +58,8 @@ def _build_base_hydrofabric(
     classifications: Classifications,
     reference_divides: pl.DataFrame,
     reference_flowpaths: pl.DataFrame,
-    upstream_network: dict[str, Any],
+    graph: rx.PyDiGraph,
+    node_indices: dict[str, int],
     cfg: HFConfig,
     id_offset: int = 0,
 ) -> dict[str, gpd.GeoDataFrame | list[dict] | None]:
@@ -69,6 +70,32 @@ def _build_base_hydrofabric(
     1. Merging their line geometry into the downstream flowpath
     2. Redirecting upstream connections through them
     3. Not creating separate units for them
+
+    Parameters
+    ----------
+    start_id : str
+        The outlet flowpath ID
+    aggregate_data : Aggregations
+        Aggregation data
+    classifications : Classifications
+        Classification data
+    reference_divides : pl.DataFrame
+        Reference divides dataframe
+    reference_flowpaths : pl.DataFrame
+        Reference flowpaths dataframe
+    graph : rx.PyDiGraph
+        The rustworkx directed graph
+    node_indices : dict[str, int]
+        Mapping of flowpath IDs to node indices
+    cfg : HFConfig
+        Hydrofabric build config
+    id_offset : int
+        Starting ID offset for this outlet
+
+    Returns
+    -------
+    dict[str, gpd.GeoDataFrame | list[dict] | None]
+        Built hydrofabric data
     """
     ref_id_to_unit = _order_aggregates_base(aggregate_data)
 
@@ -249,14 +276,19 @@ def _build_base_hydrofabric(
             div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
         new_id += 1
 
-        # Queue upstream segments
+        # Queue upstream segments using graph
         if unit_info["type"] == "aggregate":
-            upstream_ids = upstream_network.get(unit_info["up_id"], [])
+            lookup_id = unit_info["up_id"]
         else:
-            upstream_ids = upstream_network.get(current_ref_id, [])
+            lookup_id = current_ref_id
 
-        for upstream_id in upstream_ids:
-            to_process.append(upstream_id)
+        # Get upstream using graph
+        if lookup_id in node_indices:
+            lookup_idx = node_indices[lookup_id]
+            upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
+
+            for upstream_id in upstream_ids:
+                to_process.append(upstream_id)
 
     # Fix up_nex_id references
     for fp_entry in fp_data:
@@ -277,7 +309,7 @@ def _build_base_hydrofabric(
         divides_gdf = None
         nexus_gdf = None
     return {
-        "flowpaths": flowpaths_gdf,  # TODO add ref_id crosswalk table
+        "flowpaths": flowpaths_gdf,
         "divides": divides_gdf,
         "nexus": nexus_gdf,
         "base_minor_flowpaths": base_minor_data,

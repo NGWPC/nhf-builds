@@ -6,6 +6,7 @@ import pytest
 from shapely import from_wkb
 from shapely.geometry import MultiPolygon, Polygon
 
+from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.pipeline.download import _validate_and_fix_geometries, download_reference_data
 from scripts.hf_runner import LocalRunner
 
@@ -119,13 +120,14 @@ class TestGeometryValidation:
 class TestDownloadReferenceData:
     """Tests for download_reference_data function with Polars output."""
 
-    def test_loads_flowpaths(self, runner: LocalRunner) -> None:
+    def test_loads_flowpaths(self, sample_config: HFConfig) -> None:
         """Test that flowpaths are loaded and converted to Polars with WKB geometries."""
         # Run the task
-        runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+        with LocalRunner(sample_config) as runner:
+            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
 
-        # Check XCom for flowpaths
-        flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+            # Check XCom for flowpaths
+            flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
 
         assert flowpaths is not None
         assert isinstance(flowpaths, pl.DataFrame), "Should return Polars DataFrame"
@@ -144,13 +146,13 @@ class TestDownloadReferenceData:
         assert first_geom is not None, "Should be able to convert WKB back to geometry"
         assert first_geom.is_valid, "Geometry should be valid"
 
-    def test_loads_divides(self, runner: LocalRunner) -> None:
+    def test_loads_divides(self, sample_config: HFConfig) -> None:
         """Test that divides are loaded and converted to Polars with WKB geometries."""
         # Run the task
-        runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-
-        # Check XCom for divides
-        divides = runner.ti.xcom_pull("download", key="reference_divides")
+        with LocalRunner(sample_config) as runner:
+            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+            # Check XCom for divides
+            divides = runner.ti.xcom_pull("download", key="reference_divides")
 
         assert divides is not None
         assert isinstance(divides, pl.DataFrame), "Should return Polars DataFrame"
@@ -168,12 +170,12 @@ class TestDownloadReferenceData:
         assert first_geom is not None, "Should be able to convert WKB back to geometry"
         assert first_geom.is_valid, "Geometry should be valid"
 
-    def test_all_geometries_valid_after_conversion(self, runner: LocalRunner) -> None:
+    def test_all_geometries_valid_after_conversion(self, sample_config: HFConfig) -> None:
         """Test that all geometries remain valid after WKB conversion."""
-        runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-
-        flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
-        divides = runner.ti.xcom_pull("download", key="reference_divides")
+        with LocalRunner(sample_config) as runner:
+            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+            flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+            divides = runner.ti.xcom_pull("download", key="reference_divides")
 
         # Convert all WKB geometries back to shapely and check validity
         flowpath_geometries = [from_wkb(wkb) for wkb in flowpaths["geometry"].to_list()]
@@ -182,12 +184,12 @@ class TestDownloadReferenceData:
         assert all(geom.is_valid for geom in flowpath_geometries), "All flowpath geometries should be valid"
         assert all(geom.is_valid for geom in divide_geometries), "All divide geometries should be valid"
 
-    def test_preserves_non_geometry_columns(self, runner: LocalRunner) -> None:
+    def test_preserves_non_geometry_columns(self, sample_config: HFConfig) -> None:
         """Test that non-geometry columns are preserved in Polars conversion."""
-        runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-
-        flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
-        divides = runner.ti.xcom_pull("download", key="reference_divides")
+        with LocalRunner(sample_config) as runner:
+            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+            flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+            divides = runner.ti.xcom_pull("download", key="reference_divides")
 
         # Check that important columns exist and have correct types
         assert flowpaths["flowpath_id"].dtype == pl.Utf8, "flowpath_id should be string type"
@@ -197,12 +199,12 @@ class TestDownloadReferenceData:
         assert flowpaths["flowpath_id"].null_count() == 0, "No null flowpath_ids"
         assert divides["divide_id"].null_count() == 0, "No null divide_ids"
 
-    def test_geometries_not_empty(self, runner: LocalRunner) -> None:
+    def test_geometries_not_empty(self, sample_config: HFConfig) -> None:
         """Test that no geometries are empty after conversion."""
-        runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-
-        flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
-        divides = runner.ti.xcom_pull("download", key="reference_divides")
+        with LocalRunner(sample_config) as runner:
+            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+            flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+            divides = runner.ti.xcom_pull("download", key="reference_divides")
 
         # Convert and check that no geometries are empty
         flowpath_geometries = [from_wkb(wkb) for wkb in flowpaths["geometry"].to_list()]

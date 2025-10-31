@@ -5,6 +5,7 @@ import numpy as np
 import polars as pl
 import pytest
 import rustworkx as rx
+from conftest import dict_to_graph
 from shapely.geometry import LineString
 
 from hydrofabric_builds.config import HFConfig
@@ -114,34 +115,26 @@ class TestZeroValues:
 class TestNetworkTopology:
     """Tests for network topology edge cases."""
 
-    def test_detects_circular_reference(self, sample_config: HFConfig) -> None:
+    def test_detects_circular_reference(
+        self, circular_network_dict: dict[str, list[str]], sample_config: HFConfig
+    ) -> None:
         """Test that cycle detection catches circular references in network."""
 
-        # Network with cycle: fp1 -> fp2 -> fp3 -> fp1
-        upstream_network = {
-            "fp1": ["fp2"],
-            "fp2": ["fp3"],
-            "fp3": ["fp1"],  # Creates cycle back to fp1
-        }
+        graph, node_map = dict_to_graph(circular_network_dict)
 
         # Should raise ValueError about cycle
-        with pytest.raises(rx.DAGWouldCycle, match="Adding an edge would cycle"):
-            _detect_cycles(upstream_network)
+        with pytest.raises(rx.DAGHasCycle):
+            _detect_cycles(graph)
 
-    def test_no_cycle_passes_validation(self, sample_config: HFConfig) -> None:
+    def test_no_cycle_passes_validation(
+        self, valid_network_dict: dict[str, list[str]], sample_config: HFConfig
+    ) -> None:
         """Test that networks without cycles pass validation."""
 
-        # Valid network - no cycle
-        upstream_network = {
-            "fp1": ["fp2", "fp3"],
-            "fp2": ["fp4"],
-            "fp3": ["fp5"],
-            "fp4": [],
-            "fp5": [],
-        }
+        graph, _ = dict_to_graph(valid_network_dict)
 
         # Should not raise
-        _detect_cycles(upstream_network)
+        _detect_cycles(graph)
 
     def test_handles_disconnected_networks(self, disconnected_network: tuple[gpd.GeoDataFrame, dict]) -> None:
         """Test handling of disconnected sub-networks."""

@@ -76,31 +76,31 @@ class TestLocalRunner:
 
     def test_initialization(self, sample_config: HFConfig) -> None:
         """Test LocalRunner initialization."""
-        runner = LocalRunner(sample_config)
-        assert runner.config == sample_config
-        assert runner.run_id is not None
-        assert isinstance(runner.ti, TaskInstance)
-        assert runner.results == {}
+        with LocalRunner(sample_config) as runner:
+            assert runner.config == sample_config
+            assert runner.run_id is not None
+            assert isinstance(runner.ti, TaskInstance)
+            assert runner.results == {}
 
     def test_custom_run_id(self, sample_config: HFConfig) -> None:
         """Test LocalRunner with custom run_id."""
         custom_id = "test_run_12345"
-        runner = LocalRunner(sample_config, run_id=custom_id)
+        with LocalRunner(sample_config, run_id=custom_id) as runner:
+            assert runner.run_id == custom_id
 
-        assert runner.run_id == custom_id
-
-    def test_run_simple_task(self, runner: LocalRunner) -> None:
+    def test_run_simple_task(self, sample_config: HFConfig) -> None:
         """Test running a simple task."""
 
         def simple_task(value: int, **context: dict[str, Any]) -> dict[str, Any]:
             return {"value": value * 2}
 
-        _ = runner.run_task(task_id="simple", python_callable=simple_task, op_kwargs={"value": 21})
+        with LocalRunner(sample_config) as runner:
+            _ = runner.run_task(task_id="simple", python_callable=simple_task, op_kwargs={"value": 21})
 
-        assert runner.get_result("simple")["status"] == "success"
-        assert runner.get_result("simple")["result"]["value"] == 42
+            assert runner.get_result("simple")["status"] == "success"
+            assert runner.get_result("simple")["result"]["value"] == 42
 
-    def test_task_context_injection(self, runner: LocalRunner) -> None:
+    def test_task_context_injection(self, sample_config: HFConfig) -> None:
         """Test that context is properly injected into tasks."""
 
         def task_with_context(**context: dict[str, Any]) -> dict[str, Any]:
@@ -113,13 +113,14 @@ class TestLocalRunner:
                 "has_execution_date": "execution_date" in context,
             }
 
-        result = runner.run_task("check_context", task_with_context)
+        with LocalRunner(sample_config) as runner:
+            result = runner.run_task("check_context", task_with_context)
 
-        assert all(result.values()), "Missing context keys"
-        assert result["has_ti"]
-        assert result["has_config"]
+            assert all(result.values()), "Missing context keys"
+            assert result["has_ti"]
+            assert result["has_config"]
 
-    def test_task_accesses_config(self, runner: LocalRunner) -> None:
+    def test_task_accesses_config(self, sample_config: HFConfig) -> None:
         """Test that tasks can access config from context."""
 
         def task_using_config(**context: dict[str, Any]) -> dict:
@@ -127,9 +128,10 @@ class TestLocalRunner:
             assert config.divide_aggregation_threshold == 3.0  # type: ignore
             return {}
 
-        _ = runner.run_task("use_config", task_using_config)
+        with LocalRunner(sample_config) as runner:
+            _ = runner.run_task("use_config", task_using_config)
 
-    def test_task_uses_xcom(self, runner: LocalRunner) -> None:
+    def test_task_uses_xcom(self, sample_config: HFConfig) -> None:
         """Test tasks using XCom to pass data."""
 
         def task1(**context: dict[str, Any]) -> dict[str, Any]:
@@ -141,10 +143,11 @@ class TestLocalRunner:
             assert input_file == "/tmp/output.gpkg"
             return {}
 
-        runner.run_task("task1", task1)
-        _ = runner.run_task("task2", task2)
+        with LocalRunner(sample_config) as runner:
+            runner.run_task("task1", task1)
+            _ = runner.run_task("task2", task2)
 
-    def test_multiple_tasks_sequential(self, runner: LocalRunner) -> None:
+    def test_multiple_tasks_sequential(self, sample_config: HFConfig) -> None:
         """Test running multiple tasks sequentially."""
 
         def task1(value: int, **context: dict[str, Any]) -> dict[str, Any]:
@@ -160,22 +163,23 @@ class TestLocalRunner:
             prev = ti.xcom_pull("task2", key="value")  # type: ignore
             return {"value": prev * 5}
 
-        runner.run_task("task1", task1, {"value": 5})
-        runner.run_task("task2", task2)
-        _ = runner.run_task("task3", task3)
+        with LocalRunner(sample_config) as runner:
+            runner.run_task("task1", task1, {"value": 5})
+            runner.run_task("task2", task2)
+            _ = runner.run_task("task3", task3)
+            assert len(runner.results) == 3
+            assert all(r["status"] == "success" for r in runner.results.values())
 
-        assert len(runner.results) == 3
-        assert all(r["status"] == "success" for r in runner.results.values())
-
-    def test_task_return_value_stored_in_xcom(self, runner: LocalRunner) -> None:
+    def test_task_return_value_stored_in_xcom(self, sample_config: HFConfig) -> None:
         """Test that task return values are automatically stored in XCom."""
 
         def task_with_return(**context: dict[str, Any]) -> dict[str, Any]:
             return {"output": "test.gpkg", "count": 100}
 
-        runner.run_task("test", task_with_return)
-        assert runner.ti.xcom_pull("test", key="output") == "test.gpkg"
-        assert runner.ti.xcom_pull("test", key="count") == 100
+        with LocalRunner(sample_config) as runner:
+            runner.run_task("test", task_with_return)
+            assert runner.ti.xcom_pull("test", key="output") == "test.gpkg"
+            assert runner.ti.xcom_pull("test", key="count") == 100
 
 
 class TestIntegration:
@@ -184,61 +188,57 @@ class TestIntegration:
     def test_full_pipeline(self, sample_config: HFConfig, expected_graph: dict[str, Any]) -> None:
         """Test full pipeline with real download and build_graph functions."""
 
-        runner = LocalRunner(sample_config)
-
-        runner.run_task("download", download_reference_data)
-        runner.run_task("build_graph", build_graph)
-        runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
-        runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
-        runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
-        runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
-        runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
-
-        assert all(r["status"] == "success" for r in runner.results.values())
-
-        download_result = runner.get_result("download")
-        assert download_result["status"] == "success"
-
-        reference_flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
-        reference_divides = runner.ti.xcom_pull("download", key="reference_divides")
-
-        assert reference_flowpaths is not None
-        assert reference_divides is not None
-        assert len(reference_flowpaths) > 0
-        assert len(reference_divides) > 0
-
-        graph_result = runner.get_result("build_graph")
-        assert graph_result["status"] == "success"
-
-        upstream_network = runner.ti.xcom_pull("build_graph", key="upstream_network")
-        assert set(upstream_network.keys()) == set(expected_graph.keys())
-
-        for downstream_id, expected_upstreams in expected_graph.items():
-            actual_upstreams = upstream_network[downstream_id]
-            assert set(actual_upstreams) == set(expected_upstreams), (
-                f"Mismatch for downstream {downstream_id}: expected {expected_upstreams}, got {actual_upstreams}"
+        with LocalRunner(sample_config) as runner:
+            runner.run_task("download", download_reference_data)
+            runner.run_task("build_graph", build_graph)
+            runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+            runner.run_task(
+                task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={}
             )
+            runner.run_task(
+                task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={}
+            )
+            runner.run_task(
+                task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
+            )
+            runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
 
-        outlets = runner.ti.xcom_pull("build_graph", key="outlets")
-        assert "6720879" in outlets  # expected outlet
+            assert all(r["status"] == "success" for r in runner.results.values())
 
-        final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
-        final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
-        final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+            download_result = runner.get_result("download")
+            assert download_result["status"] == "success"
 
-        assert len(final_flowpaths) == 50
-        assert len(final_divides) == 50
-        assert len(final_nexus) == 38
+            reference_flowpaths = runner.ti.xcom_pull("download", key="reference_flowpaths")
+            reference_divides = runner.ti.xcom_pull("download", key="reference_divides")
 
-        flowpath_ids = set(final_flowpaths["fp_id"])
-        divide_ids = set(final_divides["div_id"])
-        assert flowpath_ids == divide_ids, (
-            f"Flowpath IDs and Divide IDs don't match.\n"
-            f"Missing in divides: {flowpath_ids - divide_ids}\n"
-            f"Missing in flowpaths: {divide_ids - flowpath_ids}"
-        )
-        # Test connectivity using nexus points
-        self._verify_nexus_connectivity(final_flowpaths, final_nexus)
+            assert reference_flowpaths is not None
+            assert reference_divides is not None
+            assert len(reference_flowpaths) > 0
+            assert len(reference_divides) > 0
+
+            graph_result = runner.get_result("build_graph")
+            assert graph_result["status"] == "success"
+
+            outlets = runner.ti.xcom_pull("build_graph", key="outlets")
+            assert "6720879" in outlets  # expected outlet
+
+            final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+            final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
+            final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+
+            assert len(final_flowpaths) == 50
+            assert len(final_divides) == 50
+            assert len(final_nexus) == 38
+
+            flowpath_ids = set(final_flowpaths["fp_id"])
+            divide_ids = set(final_divides["div_id"])
+            assert flowpath_ids == divide_ids, (
+                f"Flowpath IDs and Divide IDs don't match.\n"
+                f"Missing in divides: {flowpath_ids - divide_ids}\n"
+                f"Missing in flowpaths: {divide_ids - flowpath_ids}"
+            )
+            # Test connectivity using nexus points
+            self._verify_nexus_connectivity(final_flowpaths, final_nexus)
 
     def _verify_nexus_connectivity(self, flowpaths_gdf: pd.DataFrame, nexus_gdf: pd.DataFrame) -> None:
         """Verify that nexus connectivity forms a valid dendritic network.
@@ -304,7 +304,6 @@ class TestIntegration:
             f"{len(all_nexus_ids)} unique nexus points"
         )
 
-        # Verify the network structure
         self._verify_graph_structure(graph)
 
     def _verify_graph_structure(self, graph: rx.PyDiGraph) -> None:
@@ -351,13 +350,11 @@ class TestIntegration:
             col.append(idx_map[node_id])
             row.append(idx_map[downstream_id])
 
-        # Create sparse matrix
         matrix = sparse.coo_matrix(
             (np.ones(len(row), dtype=np.uint8), (row, col)),
             shape=(len(ts_order), len(ts_order)),
             dtype=np.uint8,
         )
-
         # Ensure matrix is lower triangular (proper topological ordering)
         assert np.all(matrix.row >= matrix.col), (
             "Adjacency matrix is not lower triangular - flowpaths are not in proper topological order"

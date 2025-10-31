@@ -4,6 +4,7 @@ from typing import Any
 
 import geopandas as gpd
 import polars as pl
+from conftest import dict_to_graph
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
 from hydrofabric_builds import HFConfig
@@ -231,13 +232,16 @@ class TestBuildBaseHydrofabric:
         """
         reference_flowpaths, reference_divides = sample_reference_data
 
+        graph, node_indices = dict_to_graph(expected_graph)
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -270,6 +274,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -277,7 +282,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -310,6 +316,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -317,7 +324,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -354,6 +362,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -361,7 +370,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -393,6 +403,7 @@ class TestBuildBaseHydrofabric:
         """
         reference_flowpaths, reference_divides = sample_reference_data
         offset = 100
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -400,8 +411,9 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
             cfg=sample_config,
+            graph=graph,
+            node_indices=node_indices,
             id_offset=offset,
         )
 
@@ -432,6 +444,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -439,7 +452,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -472,6 +486,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -479,7 +494,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -512,6 +528,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -519,7 +536,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -552,6 +570,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -559,7 +578,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -595,6 +615,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -602,7 +623,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -640,6 +662,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -647,7 +670,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
@@ -682,6 +706,7 @@ class TestBuildBaseHydrofabric:
             Sample configuration
         """
         reference_flowpaths, reference_divides = sample_reference_data
+        graph, node_indices = dict_to_graph(expected_graph)
 
         result = _build_base_hydrofabric(
             start_id="6720797",
@@ -689,7 +714,8 @@ class TestBuildBaseHydrofabric:
             classifications=sample_classifications,
             reference_divides=pl.from_pandas(reference_divides.to_wkb()),
             reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            upstream_network=expected_graph,
+            graph=graph,
+            node_indices=node_indices,
             cfg=sample_config,
         )
 
