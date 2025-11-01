@@ -52,6 +52,14 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict]:
     return ref_id_to_unit
 
 
+"""
+Complete updated _build_base_hydrofabric function for build.py
+
+This fixes the "808457 not found in any unit" error by properly handling
+no-divide connectors that get queued but aren't in ref_id_to_unit.
+"""
+
+
 def _build_base_hydrofabric(
     start_id: str,
     aggregate_data: Aggregations,
@@ -99,20 +107,50 @@ def _build_base_hydrofabric(
     """
     ref_id_to_unit = _order_aggregates_base(aggregate_data)
 
-    # Create mapping of no-divide connectors to their downstream targets
+    # Create mapping of no-divide connectors to their ULTIMATE downstream targets
     connector_to_downstream = {}
     connector_line_geoms = {}
     connector_to_upstreams = {}
 
+    # First pass: collect all connectors with their immediate downstream
+    temp_connector_map = {}
     for connector in aggregate_data.no_divide_connectors:
         connector_id = connector["ref_ids"]
         dn_id = connector.get("dn_id")
         up_ids = connector.get("up_id", [])
 
+        temp_connector_map[connector_id] = {
+            "dn_id": dn_id,
+            "up_ids": up_ids,
+            "line_geometry": connector["line_geometry"],
+        }
+
+    # Second pass: resolve chains to find ultimate downstream target
+    # and collect all geometries in the chain
+    for connector_id, connector_data in temp_connector_map.items():
+        dn_id = connector_data["dn_id"]
+        chain_geometries = [connector_data["line_geometry"]]
+
+        # Follow the chain of connectors to find the final downstream
+        visited_in_chain = {connector_id}
+        while dn_id and dn_id in temp_connector_map and dn_id not in visited_in_chain:
+            visited_in_chain.add(dn_id)
+            chain_geometries.append(temp_connector_map[dn_id]["line_geometry"])
+            dn_id = temp_connector_map[dn_id]["dn_id"]
+
+        # dn_id is now the ultimate downstream (not a connector) or None (terminal)
         if dn_id:
             connector_to_downstream[connector_id] = dn_id
-            connector_line_geoms[connector_id] = connector["line_geometry"]
-            connector_to_upstreams[connector_id] = up_ids
+            # Store ALL geometries from this connector to the final downstream
+            connector_line_geoms[connector_id] = chain_geometries
+            connector_to_upstreams[connector_id] = connector_data["up_ids"]
+        else:
+            # Terminal connector with no downstream - log warning
+            logger.warning(f"No-divide connector {connector_id} has no downstream target (terminal segment)")
+            # Still store it but with empty downstream
+            connector_to_downstream[connector_id] = None
+            connector_line_geoms[connector_id] = chain_geometries
+            connector_to_upstreams[connector_id] = connector_data["up_ids"]
 
     to_process = deque([start_id])
     visited_ref_ids = set()
@@ -138,7 +176,7 @@ def _build_base_hydrofabric(
             visited_ref_ids.add(current_ref_id)
             # Queue the downstream target instead
             downstream_id = connector_to_downstream[current_ref_id]
-            if downstream_id not in visited_ref_ids:
+            if downstream_id and downstream_id not in visited_ref_ids:
                 to_process.append(downstream_id)
             # Queue upstream IDs that connect to this connector
             for up_id in connector_to_upstreams.get(current_ref_id, []):
@@ -156,7 +194,26 @@ def _build_base_hydrofabric(
                 visited_ref_ids.add(current_ref_id)
                 continue
             else:
+                # CRITICAL FIX: Check if this is a no-divide connector that somehow wasn't caught earlier
+                # This can happen if the connector was in classifications.no_divide_connectors
+                # but not in aggregate_data.no_divide_connectors (trace/aggregate mismatch)
+                if current_ref_id in list(classifications.no_divide_connectors):
+                    logger.warning(
+                        f"No-divide connector {current_ref_id} was in classifications but not in "
+                        f"aggregate_data. Skipping."
+                    )
+                    visited_ref_ids.add(current_ref_id)
+                    continue
+
                 logger.error(f"{current_ref_id} not found in any unit")
+                logger.error("  - Is in ref_id_to_unit: False")
+                logger.error("  - Is in connector_to_downstream: False")
+                logger.error(
+                    f"  - Is in minor_flowpaths: {current_ref_id in classifications.minor_flowpaths}"
+                )
+                logger.error(
+                    f"  - Is in no_divide_connectors: {current_ref_id in classifications.no_divide_connectors}"
+                )
                 raise ValueError(f"{current_ref_id} not found in any unit")
 
         unit_info = ref_id_to_unit[current_ref_id]
@@ -177,11 +234,23 @@ def _build_base_hydrofabric(
 
         # Check if any upstream connectors should be patched into this unit
         line_geoms_to_merge = [unit["line_geometry"]]
+        upstream_connector_ids = []
+
         for connector_id, dn_id in connector_to_downstream.items():
             if dn_id == current_ref_id:
-                # This connector patches into current unit
-                line_geoms_to_merge.append(connector_line_geoms[connector_id])
-                logger.debug(f"Patching no-divide connector {connector_id} into {current_ref_id}")
+                # This connector (or chain) patches into current unit
+                # connector_line_geoms[connector_id] is now a list of geometries from the entire chain
+                line_geoms_to_merge.extend(connector_line_geoms[connector_id])
+                upstream_connector_ids.append(connector_id)
+
+                # Log for debugging
+                if len(connector_line_geoms[connector_id]) > 1:
+                    logger.debug(
+                        f"Patching connector chain (length={len(connector_line_geoms[connector_id])}) "
+                        f"ending with {connector_id} into {current_ref_id}"
+                    )
+                else:
+                    logger.debug(f"Patching no-divide connector {connector_id} into {current_ref_id}")
 
         merged_line_geom = (
             unary_union(line_geoms_to_merge) if len(line_geoms_to_merge) > 1 else unit["line_geometry"]
@@ -219,10 +288,18 @@ def _build_base_hydrofabric(
             if downstream_fp.height > 0:
                 downstream_ref_id = str(int(downstream_fp["flowpath_id"][0]))
 
+                # CRITICAL: Follow connector chain to find ultimate downstream
+                while downstream_ref_id in connector_to_downstream:
+                    next_dn = connector_to_downstream[downstream_ref_id]
+                    if next_dn:
+                        downstream_ref_id = next_dn
+                    else:
+                        break
+
                 if downstream_ref_id in ref_id_to_new_id:
                     downstream_unit_id = ref_id_to_new_id[downstream_ref_id]
 
-        # Get or create nexus at the pour point
+        # Get or create nexus at the pour point (downstream end of this flowpath)
         # Check if a nexus already exists at this location for the downstream flowpath
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
             # Reuse existing nexus - multiple upstream flowpaths converge here
@@ -252,12 +329,40 @@ def _build_base_hydrofabric(
             if downstream_unit_id is not None:
                 downstream_fp_to_nexus[downstream_unit_id] = nexus_id
 
+        # CRITICAL FIX: Only create flowpath/divide pair if we have a divide polygon
+        polygon_geom = unit.get("polygon_geometry")
+        if polygon_geom is None or polygon_geom.is_empty:
+            # This unit has no divide - skip flowpath creation entirely
+            logger.debug(f"Skipping flowpath creation for unit {ref_ids} - no divide polygon")
+
+            # Still need to register connector IDs for upstream references
+            for connector_id in upstream_connector_ids:
+                ref_id_to_new_id[connector_id] = new_id
+
+            # Register this current_ref_id too so upstream can find it
+            ref_id_to_new_id[current_ref_id] = new_id
+
+            # Still need to queue upstream for processing
+            if unit_info["type"] == "aggregate":
+                lookup_id = unit_info["up_id"]
+            else:
+                lookup_id = current_ref_id
+
+            if lookup_id in node_indices:
+                lookup_idx = node_indices[lookup_id]
+                upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
+                for upstream_id in upstream_ids:
+                    to_process.append(upstream_id)
+
+            continue  # Skip to next iteration - don't create flowpath or divide
+
+        # If we get here, we have a valid divide, so create both flowpath and divide
         fp_entry = {
             "fp_id": new_id,
             "dn_nex_id": nexus_id,
             "up_nex_id": None,
             "div_id": new_id,
-            "geometry": merged_line_geom,  # Use merged geometry
+            "geometry": merged_line_geom,  # Uses merged geometry including all connector chains
         }
 
         if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
@@ -270,10 +375,12 @@ def _build_base_hydrofabric(
             )
 
         fp_data.append(fp_entry)
+        div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
 
-        polygon_geom = unit.get("polygon_geometry")
-        if polygon_geom is not None and not polygon_geom.is_empty:
-            div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
+        # Register this ID for connectors that were merged
+        for connector_id in upstream_connector_ids:
+            ref_id_to_new_id[connector_id] = new_id
+
         new_id += 1
 
         # Queue upstream segments using graph
@@ -300,6 +407,7 @@ def _build_base_hydrofabric(
                 # This nexus is at the upstream end of this flowpath
                 fp_entry["up_nex_id"] = nexus["nex_id"]
                 break
+
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
         divides_gdf = gpd.GeoDataFrame(div_data, crs=cfg.crs)
@@ -308,6 +416,7 @@ def _build_base_hydrofabric(
         flowpaths_gdf = None
         divides_gdf = None
         nexus_gdf = None
+
     return {
         "flowpaths": flowpaths_gdf,
         "divides": divides_gdf,

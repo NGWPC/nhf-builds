@@ -1,7 +1,7 @@
 reference_divides_path: "data/reference_divides.parquet"
 reference_flowpaths_path: "data/reference_flowpaths.parquet"
-# debug_outlet_count: 100
-enable_dask_dashboard: True
+debug_outlet_count: 100
+enable_dask_dashboard: False
 dask_dashboard_port: 8787
 num_agg_workers: 4
 divide_attributes_processes: 1

@@ -127,6 +127,11 @@ def _process_aggregation_pairs(
         # Filter out minor flowpaths
         fp_ids = group_fps.filter(~pl.col("flowpath_id").cast(pl.Utf8).is_in(classifications.minor_flowpaths))
 
+        # Skip if all flowpaths in this group are minor
+        if fp_ids.height == 0:
+            logger.debug(f"Skipping group {group_ids} - all flowpaths are minor")
+            continue
+
         # Sort by hydroseq
         sorted_fps = fp_ids.sort("hydroseq")
         sorted_fps_desc = fp_ids.sort("hydroseq", descending=True)
