@@ -3,12 +3,10 @@
 import logging
 from typing import Any, cast
 
-from dask.diagnostics import ProgressBar
-from dask.distributed import Client
 from tqdm import tqdm
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries, _prepare_dataframes
+from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
 from hydrofabric_builds.hydrofabric.build import _build_base_hydrofabric, _order_aggregates_base
 from hydrofabric_builds.hydrofabric.trace import _trace_stack
 from hydrofabric_builds.hydrofabric.utils import (
@@ -32,12 +30,14 @@ def _process_single_outlet(
     ----------
     outlet : str
         Outlet ID
-    partition_data : dict
+    partition_data : dict[str, Any]
         Contains:
         - "subgraph": rx.PyDiGraph (minimal, only this outlet)
         - "node_indices": dict (for subgraph)
-        - "flowpaths": pl.DataFrame (pre-filtered)
-        - "divides": pl.DataFrame (pre-filtered)
+        - "fp_lookup": dict (flowpath attributes + shapely_geometry)
+        - "div_lookup": dict (divide attributes + shapely_geometry)
+        - "flowpaths": pl.DataFrame (for fallback operations)
+        - "divides": pl.DataFrame (for fallback operations)
     cfg : HFConfig
         Config
 
@@ -46,30 +46,21 @@ def _process_single_outlet(
     dict[str, Any]
         Dictionary containing outlet, classifications, aggregate_data, and num_features
     """
-    subgraph = partition_data["subgraph"]
-    node_indices = partition_data["node_indices"]
-    filtered_flowpaths = partition_data["flowpaths"]
     filtered_divides = partition_data["divides"]
-
-    valid_divide_ids = set(filtered_divides["divide_id"].to_list())
-    fp_geom_lookup, div_geom_lookup = _prepare_dataframes(filtered_flowpaths, filtered_divides)
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
 
     # Trace with subgraph
     classifications = _trace_stack(
         start_id=outlet,
-        fp=filtered_flowpaths,
         div_ids=valid_divide_ids,
         cfg=cfg,
-        digraph=subgraph,
-        node_indices=node_indices,
+        partition_data=partition_data,
     )
 
     # Aggregate geometries
     aggregate_data = _aggregate_geometries(
         classifications=classifications,
-        reference_flowpaths=filtered_flowpaths,
-        fp_geom_lookup=fp_geom_lookup,
-        div_geom_lookup=div_geom_lookup,
+        partition_data=partition_data,
     )
 
     ordered_aggregates = _order_aggregates_base(aggregate_data)
@@ -103,8 +94,10 @@ def _build_single_hydrofabric(
         Contains:
         - "subgraph": rx.PyDiGraph (minimal, only this outlet)
         - "node_indices": dict (for subgraph)
-        - "flowpaths": pl.DataFrame (pre-filtered)
-        - "divides": pl.DataFrame (pre-filtered)
+        - "fp_lookup": dict (flowpath attributes + shapely_geometry)
+        - "div_lookup": dict (divide attributes + shapely_geometry)
+        - "flowpaths": pl.DataFrame (for fallback operations)
+        - "divides": pl.DataFrame (for fallback operations)
     cfg : HFConfig
         Hydrofabric build config
 
@@ -116,19 +109,11 @@ def _build_single_hydrofabric(
     classifications = Classifications(**outlet_data["classifications"])
     aggregate_data = Aggregations(**outlet_data["aggregate_data"])
 
-    subgraph = partition_data["subgraph"]
-    node_indices = partition_data["node_indices"]
-    filtered_flowpaths = partition_data["flowpaths"]
-    filtered_divides = partition_data["divides"]
-
     hydrofabric = _build_base_hydrofabric(
         start_id=outlet,
         aggregate_data=aggregate_data,
         classifications=classifications,
-        reference_divides=filtered_divides,
-        reference_flowpaths=filtered_flowpaths,
-        graph=subgraph,
-        node_indices=node_indices,
+        partition_data=partition_data,
         cfg=cfg,
         id_offset=id_config["id_offset"],
     )
@@ -142,20 +127,20 @@ def _build_single_hydrofabric(
     }
 
 
-def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
-    """MAP PHASE: Trace and aggregate flowpaths using pre-partitioned subgraphs.
+def map_trace_and_aggregate(**context: dict[str, Any]) -> dict[str, Any]:
+    """Execute MAP PHASE: Trace and aggregate flowpaths using pre-partitioned subgraphs.
 
     This task processes each outlet independently using pre-partitioned subgraphs
     and filtered data from the build_graph task. No large DataFrames are broadcasted.
 
     Parameters
     ----------
-    **context : dict
+    **context : dict[str, Any]
         Airflow context
 
     Returns
     -------
-    dict
+    dict[str, Any]
         Dictionary with keys:
         - "outlet_aggregations": dict mapping outlet_id -> outlet data
         - "total_outlets": int total number of outlets
@@ -167,10 +152,9 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
     """
     ti = cast(TaskInstance, context["ti"])
     cfg = cast(HFConfig, context["config"])
-    client = cast(Client, context["dask_client"])
 
-    outlets = ti.xcom_pull(task_id="build_graph", key="outlets")
-    outlet_subgraphs = ti.xcom_pull(task_id="build_graph", key="outlet_subgraphs")
+    outlets: list[str] = ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = ti.xcom_pull(task_id="build_graph", key="outlet_subgraphs")
 
     if not outlets:
         raise ValueError("No outlets found. Aborting run")
@@ -178,37 +162,18 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
     # Apply debug limit if configured
     outlets_to_process = outlets[: cfg.debug_outlet_count] if cfg.debug_outlet_count else outlets
 
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
 
-    if client is not None:
-        logger.info(
-            f"map_flowpaths task: Processing {len(outlets_to_process)} outlets using Dask Distributed"
+    logger.info(f"map_flowpaths task: Processing {len(outlets_to_process)} outlets sequentially")
+    for outlet in tqdm(outlets_to_process, desc="Processing outlets"):
+        result = _process_single_outlet(
+            outlet,
+            outlet_subgraphs[outlet],
+            cfg,
         )
+        results.append(result)
 
-        futures = []
-        with ProgressBar():
-            for idx, outlet in enumerate(outlets_to_process):
-                future = client.submit(
-                    _process_single_outlet,
-                    outlet,
-                    outlet_subgraphs[outlet],
-                    cfg,
-                )
-                futures.append(future)
-                if idx % 500 == 0:
-                    logger.info(f"map_flowpaths task: Processing checkpoint. Completed {idx} outlets")
-        results = client.gather(futures)
-    else:
-        logger.info(f"map_flowpaths task: Processing {len(outlets_to_process)} outlets sequentially")
-        for outlet in tqdm(outlets_to_process, desc="Processing outlets"):
-            result = _process_single_outlet(
-                outlet,
-                outlet_subgraphs[outlet],
-                cfg,
-            )
-            results.append(result)
-
-    outlet_aggregations = {result["outlet"]: result for result in results}
+    outlet_aggregations: dict[str, dict[str, Any]] = {result["outlet"]: result for result in results}
 
     return {
         "outlet_aggregations": outlet_aggregations,
@@ -217,14 +182,14 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict:
 
 
 def reduce_calculate_id_ranges(**context: dict[str, Any]) -> dict[str, Any]:
-    """REDUCE PHASE: Calculate ID ranges based on feature counts.
+    """Execute REDUCE PHASE: Calculate ID ranges based on feature counts.
 
     Combines the results from all outlets to calculate non-overlapping
     ID ranges for each outlet's hydrofabric.
 
     Parameters
     ----------
-    **context : dict
+    **context : dict[str, Any]
         Airflow context
 
     Returns
@@ -240,7 +205,9 @@ def reduce_calculate_id_ranges(**context: dict[str, Any]) -> dict[str, Any]:
         If no outlet aggregations found from map phase
     """
     ti = cast(TaskInstance, context["ti"])
-    outlet_aggregations = ti.xcom_pull(task_id="map_flowpaths", key="outlet_aggregations")
+    outlet_aggregations: dict[str, dict[str, Any]] = ti.xcom_pull(
+        task_id="map_flowpaths", key="outlet_aggregations"
+    )
 
     if not outlet_aggregations:
         raise ValueError("No outlet aggregations found from map phase")
@@ -249,7 +216,7 @@ def reduce_calculate_id_ranges(**context: dict[str, Any]) -> dict[str, Any]:
 
 
 def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
-    """MAP PHASE: Build base hydrofabric layers with assigned ID ranges.
+    """Execute MAP PHASE: Build base hydrofabric layers with assigned ID ranges.
 
     Each outlet's classifications and aggregations are converted into
     flowpaths, divides, and nexus layers with unique IDs using pre-partitioned
@@ -257,7 +224,7 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
 
     Parameters
     ----------
-    **context : dict
+    **context : dict[str, Any]
         Airflow context
 
     Returns
@@ -273,56 +240,34 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     """
     ti = cast(TaskInstance, context["ti"])
     cfg = cast(HFConfig, context["config"])
-    client = cast(Client, context["dask_client"])
 
-    outlets = ti.xcom_pull(task_id="build_graph", key="outlets")
-    outlet_subgraphs = ti.xcom_pull(task_id="build_graph", key="outlet_subgraphs")
-    outlet_aggregations = ti.xcom_pull(task_id="map_flowpaths", key="outlet_aggregations")
-    outlet_id_ranges = ti.xcom_pull(task_id="reduce_flowpaths", key="outlet_id_ranges")
-    results: list[dict] = []
+    outlet_subgraphs: dict[str, dict[str, Any]] = ti.xcom_pull(task_id="build_graph", key="outlet_subgraphs")
+    outlet_aggregations: dict[str, dict[str, Any]] = ti.xcom_pull(
+        task_id="map_flowpaths", key="outlet_aggregations"
+    )
+    outlet_id_ranges: dict[str, dict[str, Any]] = ti.xcom_pull(
+        task_id="reduce_flowpaths", key="outlet_id_ranges"
+    )
+    results: list[dict[str, Any]] = []
 
     if not outlet_aggregations:
         raise ValueError("Missing outlet aggregations")
     if not outlet_id_ranges:
         raise ValueError("Missing ID ranges for outlets")
 
-    outlets_to_process = outlets[: cfg.debug_outlet_count] if cfg.debug_outlet_count else outlets
-
-    if client is not None:
-        logger.info(
-            f"map_build_base task: Building {len(outlet_aggregations)} hydrofabrics using Dask Distributed"
+    logger.info(f"map_build_base task: Building {len(outlet_aggregations)} hydrofabrics sequentially")
+    results = []
+    for outlet, outlet_data in tqdm(outlet_aggregations.items(), desc="Building hydrofabrics"):
+        result = _build_single_hydrofabric(
+            outlet,
+            outlet_data,
+            outlet_id_ranges[outlet],
+            outlet_subgraphs[outlet],
+            cfg,
         )
+        results.append(result)
 
-        futures = []
-        with ProgressBar():
-            for idx, outlet in enumerate(outlets_to_process):
-                future = client.submit(
-                    _build_single_hydrofabric,
-                    outlet,
-                    outlet_aggregations[outlet],
-                    outlet_id_ranges[outlet],
-                    outlet_subgraphs[outlet],
-                    cfg,
-                )
-                futures.append(future)
-                if idx % 500 == 0:
-                    logger.info(f"map_build_base task: Processing checkpoint. Completed {idx} outlets")
-        results = client.gather(futures)
-
-    else:
-        logger.info(f"map_build_base task: Building {len(outlet_aggregations)} hydrofabrics sequentially")
-        results = []
-        for outlet, outlet_data in tqdm(outlet_aggregations.items(), desc="Building hydrofabrics"):
-            result = _build_single_hydrofabric(
-                outlet,
-                outlet_data,
-                outlet_id_ranges[outlet],
-                outlet_subgraphs[outlet],
-                cfg,
-            )
-            results.append(result)
-
-    built_hydrofabrics = {result["outlet"]: result for result in results}
+    built_hydrofabrics: dict[str, dict[str, Any]] = {result["outlet"]: result for result in results}
 
     return {
         "built_hydrofabrics": built_hydrofabrics,
@@ -330,14 +275,14 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
 
 
 def reduce_combine_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
-    """REDUCE PHASE: Combine all built hydrofabric layers into an aggregated dataset.
+    """Execute REDUCE PHASE: Combine all built hydrofabric layers into an aggregated dataset.
 
     All outlet hydrofabrics are concatenated into single unified layers
     for flowpaths, divides, and nexus points.
 
     Parameters
     ----------
-    **context : dict
+    **context : dict[str, Any]
         Airflow context
 
     Returns
@@ -355,7 +300,9 @@ def reduce_combine_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]
     """
     ti = cast(TaskInstance, context["ti"])
     cfg = cast(HFConfig, context["config"])
-    built_hydrofabrics = ti.xcom_pull(task_id="map_build_base", key="built_hydrofabrics")
+    built_hydrofabrics: dict[str, dict[str, Any]] = ti.xcom_pull(
+        task_id="map_build_base", key="built_hydrofabrics"
+    )
 
     if not built_hydrofabrics:
         raise ValueError("No built hydrofabrics found from build phase")

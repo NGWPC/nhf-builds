@@ -7,6 +7,7 @@ from typing import Any
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import polars as pl
 import pytest
 import rustworkx as rx
 import yaml
@@ -59,8 +60,6 @@ def sample_config(mock_geopackages: tuple[str, str]) -> HFConfig:
     return HFConfig(
         reference_divides_path=mock_geopackages[0],
         reference_flowpaths_path=mock_geopackages[1],
-        num_agg_workers=1,
-        enable_dask_dashboard=False,
     )
 
 
@@ -1172,3 +1171,111 @@ def pipeline_results() -> dict[str, Any]:
             ],
         }
     )
+
+
+def create_partition_data_from_dataframes(
+    flowpaths_df: pl.DataFrame,
+    divides_df: pl.DataFrame | None,
+    graph: rx.PyDiGraph,
+    node_indices: dict,
+) -> dict:
+    """Convert DataFrames to partition_data format expected by optimized trace functions. NO GEOMETRIES NEEDED
+
+    Parameters
+    ----------
+    flowpaths_df : pl.DataFrame
+        Flowpaths DataFrame with all required columns
+    divides_df : pl.DataFrame | None
+        Divides DataFrame (can be None for tests)
+    graph : rx.PyDiGraph
+        The graph object
+    node_indices : dict
+        Node indices mapping
+
+    Returns
+    -------
+    dict
+        partition_data dict with fp_lookup, div_lookup, subgraph, node_indices
+    """
+    # Create fp_lookup
+    _fp_lookup = flowpaths_df.to_dicts()
+    fp_lookup = {str(row["flowpath_id"]): row for row in _fp_lookup}
+
+    # Add dummy shapely geometries for tests (not actually used in trace logic)
+    for fp_id in fp_lookup:
+        fp_lookup[fp_id]["shapely_geometry"] = LineString([(0, 0), (1, 1)])
+
+    # Create div_lookup
+    div_lookup = {}
+    if divides_df is not None:
+        _div_lookup = divides_df.to_dicts()
+        div_lookup = {str(row["divide_id"]): row for row in _div_lookup}
+        for div_id in div_lookup:
+            div_lookup[div_id]["shapely_geometry"] = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+
+    return {
+        "subgraph": graph,
+        "node_indices": node_indices,
+        "fp_lookup": fp_lookup,
+        "div_lookup": div_lookup,
+        "flowpaths": flowpaths_df,  # Keep for backward compat if needed
+        "divides": divides_df,
+    }
+
+
+def create_partition_data_for_build_tests(
+    reference_flowpaths: gpd.GeoDataFrame,
+    reference_divides: gpd.GeoDataFrame,
+    graph: rx.PyDiGraph,
+    node_indices: dict,
+) -> dict:
+    """Convert test fixtures to partition_data format for _build_base_hydrofabric. NEEDS GEOMETRIES
+
+    Parameters
+    ----------
+    reference_flowpaths : gpd.GeoDataFrame
+        Reference flowpaths GeoDataFrame
+    reference_divides : gpd.GeoDataFrame
+        Reference divides GeoDataFrame
+    graph : rx.PyDiGraph
+        The graph object
+    node_indices : dict
+        Node indices mapping
+
+    Returns
+    -------
+    dict
+        partition_data dict ready for _build_base_hydrofabric
+    """
+    # Convert to Polars with WKB
+    pl_flowpaths = pl.from_pandas(reference_flowpaths.to_wkb())
+    pl_divides = pl.from_pandas(reference_divides.to_wkb())
+
+    # Create fp_lookup with shapely geometries
+    fp_ids = pl_flowpaths["flowpath_id"].cast(pl.Utf8).to_list()
+    fp_dicts = pl_flowpaths.to_dicts()
+    fp_lookup = {str(row["flowpath_id"]): row for row in fp_dicts}
+
+    # Add shapely geometries to fp_lookup
+    for fp_id, geom in zip(fp_ids, reference_flowpaths.geometry, strict=True):
+        if fp_id in fp_lookup:
+            fp_lookup[fp_id]["shapely_geometry"] = geom
+
+    # Create div_lookup with shapely geometries
+    div_ids = pl_divides["divide_id"].cast(pl.Utf8).to_list()
+    div_dicts = pl_divides.to_dicts()
+    div_lookup = {str(row["divide_id"]): row for row in div_dicts}
+
+    # Add shapely geometries to div_lookup
+    for div_id, geom in zip(div_ids, reference_divides.geometry, strict=True):
+        if div_id in div_lookup:
+            div_lookup[div_id]["shapely_geometry"] = geom
+
+    return {
+        "subgraph": graph,
+        "node_indices": node_indices,
+        "fp_lookup": fp_lookup,
+        "div_lookup": div_lookup,
+        "flowpaths": pl_flowpaths,
+        "divides": pl_divides,
+    }

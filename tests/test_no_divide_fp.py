@@ -2,8 +2,9 @@
 
 from collections import deque
 
+import pandas as pd
 import polars as pl
-from conftest import dict_to_graph
+from conftest import create_partition_data_from_dataframes, dict_to_graph
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.trace import (
@@ -42,14 +43,13 @@ class TestOrderOneNoDivide:
                 "mainstemlp": [100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="808457",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # 808457 should NOT be marked as connector
@@ -89,13 +89,13 @@ class TestOrderOneNoDivide:
             }
         )
 
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
+
         result = _trace_stack(
             start_id="808457",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # All should be aggregated together
@@ -138,14 +138,13 @@ class TestOrderTwoNoDivideChain:
                 "mainstemlp": [100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="7717438",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # Both should be marked as minor
@@ -183,14 +182,13 @@ class TestOrderTwoNoDivideChain:
                 "mainstemlp": [100.0, 100.0, 50.0, 60.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="7717438",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # ALL should be marked as minor
@@ -222,14 +220,13 @@ class TestOrderTwoNoDivideChain:
                 "mainstemlp": [100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="808455",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # 808455 should be marked as connector (not minor)
@@ -265,14 +262,13 @@ class TestSingleUpstreamAreaThreshold:
                 "mainstemlp": [100.0, 100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="fp1",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # Should aggregate fp2 and fp3 into fp1
@@ -301,14 +297,13 @@ class TestSingleUpstreamAreaThreshold:
                 "mainstemlp": [100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="fp1",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # Should NOT aggregate
@@ -340,14 +335,13 @@ class TestSingleUpstreamAreaThreshold:
                 "mainstemlp": [100.0, 100.0, 100.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="fp1",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # Should aggregate no-divide AND continue to fp3
@@ -391,14 +385,13 @@ class TestNoDivideConnectorAtConfluence:
                 "mainstemlp": [100.0, 100.0, 50.0, 100.0, 50.0],
             }
         )
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result = _trace_stack(
             start_id="808455",
-            fp=fp_data,
             div_ids=div_ids,
             cfg=sample_config,
-            digraph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
         )
 
         # 808455 should be marked as connector
@@ -434,11 +427,12 @@ class TestCheckAndAggregateSameOrderNoDivideChain:
         )
 
         result = Classifications()
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         chain_has_no_divides = _check_and_aggregate_same_order_no_divide_chain(
             start_id="fp1",
             current_order=2,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             div_ids=div_ids,
             result=result,
             graph=graph,
@@ -474,11 +468,12 @@ class TestCheckAndAggregateSameOrderNoDivideChain:
         )
 
         result = Classifications()
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         chain_has_no_divides = _check_and_aggregate_same_order_no_divide_chain(
             start_id="fp1",
             current_order=2,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             div_ids=div_ids,
             result=result,
             graph=graph,
@@ -512,11 +507,12 @@ class TestCheckAndAggregateSameOrderNoDivideChain:
         )
 
         result = Classifications()
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         chain_has_no_divides = _check_and_aggregate_same_order_no_divide_chain(
             start_id="fp1",
             current_order=2,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             div_ids=div_ids,
             result=result,
             graph=graph,
@@ -536,7 +532,7 @@ class TestRuleAggregateSingleUpstreamOrder1:
     """Tests for order 1 behavior in single upstream aggregation."""
 
     def test_order1_aggregates_all_upstream(
-        self, sample_flowpaths: pl.DataFrame, sample_config: HFConfig
+        self, sample_flowpaths: pd.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 1 aggregates all upstream regardless of area."""
         network_graph = {"fp1": ["fp2"], "fp2": ["fp3"], "fp3": []}
@@ -556,6 +552,9 @@ class TestRuleAggregateSingleUpstreamOrder1:
         upstream_info = [
             {"flowpath_id": "fp2", "areasqkm": 1.0, "streamorder": 1, "length_km": 2.0, "mainstemlp": 100.0}
         ]
+        partition_data = create_partition_data_from_dataframes(
+            pl.from_dataframe(sample_flowpaths.drop(columns=["geometry"])), None, graph, node_indices
+        )
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -564,7 +563,7 @@ class TestRuleAggregateSingleUpstreamOrder1:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpaths,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -576,7 +575,7 @@ class TestRuleAggregateSingleUpstreamOrder1:
         assert ("fp3", "fp1") in result.aggregation_pairs
         assert "fp1" in result.processed_flowpaths
 
-    def test_order1_no_upstream(self, sample_flowpaths: pl.DataFrame, sample_config: HFConfig) -> None:
+    def test_order1_no_upstream(self, sample_flowpaths: pd.DataFrame, sample_config: HFConfig) -> None:
         """Test order 1 with no upstream (headwater)."""
         network_graph: dict[str, list] = {"fp1": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -593,6 +592,9 @@ class TestRuleAggregateSingleUpstreamOrder1:
         }
 
         upstream_info: list = []  # No upstream
+        partition_data = create_partition_data_from_dataframes(
+            pl.from_dataframe(sample_flowpaths.drop(columns=["geometry"])), None, graph, node_indices
+        )
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -601,7 +603,7 @@ class TestRuleAggregateSingleUpstreamOrder1:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpaths,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -617,7 +619,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
     """Tests for higher order (2+) area threshold behavior."""
 
     def test_order2_already_above_threshold_no_aggregation(
-        self, sample_flowpaths: pl.DataFrame, sample_config: HFConfig
+        self, sample_flowpaths: pd.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test order 2 already above threshold doesn't aggregate upstream."""
         network_graph = {"fp1": ["fp2"], "fp2": []}
@@ -638,6 +640,9 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
         upstream_info = [
             {"flowpath_id": "fp2", "areasqkm": 3.0, "streamorder": 2, "length_km": 2.0, "mainstemlp": 100.0}
         ]
+        partition_data = create_partition_data_from_dataframes(
+            pl.from_dataframe(sample_flowpaths.drop(columns=["geometry"])), None, graph, node_indices
+        )
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -646,7 +651,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpaths,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -691,6 +696,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
         upstream_info = [
             {"flowpath_id": "fp2", "areasqkm": 1.0, "streamorder": 2, "length_km": 2.0, "mainstemlp": 100.0}
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -699,7 +705,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -740,6 +746,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
         upstream_info = [
             {"flowpath_id": "fp2", "areasqkm": 1.5, "streamorder": 3, "length_km": 5.0, "mainstemlp": 100.0}
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -748,7 +755,7 @@ class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -800,6 +807,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
                 "mainstemlp": 100.0,
             }
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -808,7 +816,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -865,6 +873,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
                 "mainstemlp": 100.0,
             }
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -873,7 +882,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -887,7 +896,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
         assert "fp3" in to_process
 
     def test_no_divide_upstream_headwater(
-        self, sample_flowpaths: pl.DataFrame, sample_config: HFConfig
+        self, sample_flowpaths: pd.DataFrame, sample_config: HFConfig
     ) -> None:
         """Test no-divide upstream with no further upstream (headwater)."""
         network_graph = {"fp1": ["fp_no_div"], "fp_no_div": []}
@@ -915,6 +924,9 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
                 "mainstemlp": 100.0,
             }
         ]
+        partition_data = create_partition_data_from_dataframes(
+            pl.from_dataframe(sample_flowpaths.drop(columns=["geometry"])), None, graph, node_indices
+        )
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -923,7 +935,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpaths,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -973,6 +985,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
                 "mainstemlp": 100.0,
             }
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -981,7 +994,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -1034,6 +1047,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
                 "mainstemlp": 100.0,
             }
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data_with_extras, None, graph, node_indices)
 
         success = _rule_aggregate_single_upstream(
             current_id="fp1",
@@ -1042,7 +1056,7 @@ class TestRuleAggregateSingleUpstreamNoDivideHandling:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data_with_extras,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -1090,6 +1104,7 @@ class TestRuleAggregateSingleUpstreamAreaAccumulation:
         upstream_info = [
             {"flowpath_id": "fp2", "areasqkm": 1.0, "streamorder": 2, "length_km": 1.0, "mainstemlp": 100.0}
         ]
+        partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
 
         result.processed_flowpaths.add("fp1")
         success = _rule_aggregate_single_upstream(
@@ -1099,7 +1114,7 @@ class TestRuleAggregateSingleUpstreamAreaAccumulation:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=fp_data,
+            fp_lookup=partition_data["fp_lookup"],
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,

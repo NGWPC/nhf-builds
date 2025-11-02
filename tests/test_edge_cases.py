@@ -9,9 +9,9 @@ from conftest import dict_to_graph
 from shapely.geometry import LineString
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries, _prepare_dataframes
+from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
 from hydrofabric_builds.hydrofabric.build import _order_aggregates_base
-from hydrofabric_builds.hydrofabric.graph import _detect_cycles
+from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookups, _detect_cycles
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 
 
@@ -289,13 +289,15 @@ class TestEmptyInputs:
             cumulative_merge_areas={},
         )
 
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=empty_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         assert len(result.aggregates) == 0, "Should have no aggregates"

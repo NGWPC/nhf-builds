@@ -2,12 +2,10 @@
 
 import argparse
 import logging
-import os
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Self
 
-from dask.distributed import Client
 from dotenv import load_dotenv
 from pydantic import ValidationError
 from pyprojroot import here
@@ -39,8 +37,6 @@ class LocalRunner:
     run_id : str or None, default=None
         Unique identifier for this pipeline run. If None, generated from
         current timestamp in format 'YYYYMMDD_HHMMSS'.
-    setup_dask : bool, default=True
-        Whether to set up a Dask distributed client for parallel processing.
 
     Attributes
     ----------
@@ -52,15 +48,12 @@ class LocalRunner:
         TaskInstance for XCom operations.
     results : dict[str, dict[str, Any]]
         Execution results for each task, keyed by task_id.
-    dask_client : Client or None
-        Dask distributed client, if enabled.
     """
 
     def __init__(
         self,
         config: HFConfig,
         run_id: str | None = None,
-        setup_dask: bool = True,  # ADD THIS PARAMETER
     ) -> None:
         """Initialize the LocalRunner.
 
@@ -70,38 +63,15 @@ class LocalRunner:
             Pipeline configuration.
         run_id : str or None, default=None
             Optional run identifier. Auto-generated if not provided.
-        setup_dask : bool, default=True
-            Whether to set up Dask distributed client.
         """
         self.config: HFConfig = config
         self.run_id: str = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.ti: TaskInstance = TaskInstance()
         self.results: dict[str, dict[str, Any]] = {}
-        self.dask_client: Client | None = None
-
-        if self.config.enable_dask_dashboard:
-            self._setup_dask_client()
-
-    def _setup_dask_client(self) -> None:
-        """Set up Dask distributed client for parallel processing."""
-        n_workers = self.config.num_agg_workers if self.config.num_agg_workers else os.cpu_count()
-
-        self.dask_client = Client(
-            n_workers=n_workers,
-            threads_per_worker=1,
-            processes=True,
-            memory_limit="16GB",
-        )
-        logger.info(f"runner: Dask client initialized with {n_workers} workers")
-        logger.info(f"runner: Dask dashboard available at: {self.dask_client.dashboard_link}")
 
     def cleanup(self) -> None:
-        """Clean up resources, including Dask client if initialized."""
-        if self.dask_client is not None:
-            logger.info("runner: Closing Dask client...")
-            self.dask_client.close()
-            self.dask_client = None
-            logger.info("runner: Dask client closed")
+        """Clean up resources"""
+        logger.info("runner: Closing processes")
 
     def __enter__(self: Self) -> Self:
         """Context manager entry."""
@@ -142,7 +112,6 @@ class LocalRunner:
             "ds": datetime.now().strftime("%Y-%m-%d"),
             "execution_date": datetime.now(),
             "config": self.config,
-            "dask_client": self.dask_client,  # This can now be None
         }
 
         kwargs = {**(op_kwargs or {}), **context}
@@ -186,7 +155,6 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(description="A local runner for hydrofabric data processing")
     parser.add_argument("--config", required=False, help="Config file")
-    parser.add_argument("--no-dask", action="store_true", help="Disable Dask parallel processing")  # ADD THIS
     args = parser.parse_args()
 
     try:

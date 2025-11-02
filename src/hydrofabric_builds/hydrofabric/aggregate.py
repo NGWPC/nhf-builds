@@ -3,8 +3,8 @@
 import logging
 from typing import Any
 
-import geopandas as gpd
 import polars as pl
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
@@ -12,54 +12,23 @@ from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 logger = logging.getLogger(__name__)
 
 
-def _prepare_dataframes(
-    flowpaths_df: pl.DataFrame, divides_df: pl.DataFrame
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Prepare shapely geometry lookup dictionaries from Polars DataFrames.
-
-    Converts WKB geometries to shapely objects once for reuse in all aggregations.
-    This is much faster than converting WKB to shapely repeatedly in loops.
-
-    Parameters
-    ----------
-    flowpaths_df : pl.DataFrame
-        Flowpaths with WKB geometry column
-    divides_df : pl.DataFrame
-        Divides with WKB geometry column
-
-    Returns
-    -------
-    tuple[dict[str, Any], dict[str, Any]]
-        Shapely geometry lookup dicts for flowpaths and divides
-    """
-    fp_ids = flowpaths_df["flowpath_id"].cast(pl.Utf8).to_list()
-    fp_shapes = gpd.GeoSeries.from_wkb(flowpaths_df["geometry"])
-    fp_geom_lookup = dict(zip(fp_ids, fp_shapes, strict=False))
-
-    div_ids = divides_df["divide_id"].cast(pl.Utf8).to_list()
-    div_shapes = gpd.GeoSeries.from_wkb(divides_df["geometry"].to_list())
-    div_geom_lookup = dict(zip(div_ids, div_shapes, strict=False))
-
-    return fp_geom_lookup, div_geom_lookup
-
-
 def _merge_tuples_with_common_values(tuples_list: list[tuple[str, ...]]) -> list[list[str]]:
     """Merge tuples that share any common values using a Union-Find algorithm.
 
     Parameters
     ----------
-    tuples_list: list[tuple[str, ...]]
+    tuples_list : list[tuple[str, ...]]
         List of tuples, each containing values
 
     Returns
     -------
     list[list[str]]
-        each list contains all connected values
+        Each list contains all connected values
     """
     if not tuples_list:
         return []
 
-    parent = {}
+    parent: dict[str, str] = {}
 
     def find(x: str) -> str:
         if x not in parent:
@@ -80,7 +49,7 @@ def _merge_tuples_with_common_values(tuples_list: list[tuple[str, ...]]) -> list
             for value in tup[1:]:
                 union(first, value)
 
-    groups: dict[str, set] = {}
+    groups: dict[str, set[str]] = {}
     for tup in tuples_list:
         for value in tup:
             root = find(value)
@@ -93,124 +62,136 @@ def _merge_tuples_with_common_values(tuples_list: list[tuple[str, ...]]) -> list
 
 def _process_aggregation_pairs(
     classifications: Classifications,
-    flowpaths_df: pl.DataFrame,
-    fp_geom_lookup: dict[str, Any],
-    div_geom_lookup: dict[str, Any],
-) -> list[dict]:
-    """Process aggregation pairs
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process aggregation pairs using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    flowpaths_df : pl.DataFrame
-        Reference flowpaths with WKB geometries
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with attributes and shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         Processed aggregation data
     """
     groups = _merge_tuples_with_common_values(classifications.aggregation_pairs)
 
-    results = []
+    results: list[dict[str, Any]] = []
+    minor_flowpaths_set: set[str] = set(classifications.minor_flowpaths)
+
     for group_ids in groups:
-        group_fps = flowpaths_df.filter(pl.col("flowpath_id").cast(pl.Utf8).is_in(group_ids))
-        if group_fps.height == 0:
-            logger.warning(f"Cannot find flowpaths for {group_ids}")
-            continue
-
         # Filter out minor flowpaths
-        fp_ids = group_fps.filter(~pl.col("flowpath_id").cast(pl.Utf8).is_in(classifications.minor_flowpaths))
+        fp_ids = [fp_id for fp_id in group_ids if fp_id not in minor_flowpaths_set]
 
-        # Skip if all flowpaths in this group are minor
-        if fp_ids.height == 0:
+        if not fp_ids:
             logger.debug(f"Skipping group {group_ids} - all flowpaths are minor")
             continue
 
-        # Sort by hydroseq
-        sorted_fps = fp_ids.sort("hydroseq")
-        sorted_fps_desc = fp_ids.sort("hydroseq", descending=True)
+        try:
+            # Get flowpath data from lookup dict
+            fp_data = [fp_lookup[fp_id] for fp_id in fp_ids if fp_id in fp_lookup]
 
-        # Get IDs in sorted order
-        fp_geometry_ids = sorted_fps_desc["flowpath_id"].cast(pl.Utf8).to_list()
-        sorted_ids = sorted_fps["flowpath_id"].cast(pl.Utf8).to_list()
+            if not fp_data:
+                logger.warning(f"Cannot find flowpaths for {group_ids}")
+                continue
 
-        length_km = fp_ids["lengthkm"].sum()
-        total_da_sqkm = fp_ids["totdasqkm"].sum()
-        vpu_id = fp_ids["VPUID"][0]
+            # Sort by hydroseq
+            sorted_fps_asc = sorted(fp_data, key=lambda x: x["hydroseq"])
+            sorted_fps_desc = sorted(fp_data, key=lambda x: x["hydroseq"], reverse=True)
 
-        line_geoms = [fp_geom_lookup[id] for id in fp_geometry_ids if id in fp_geom_lookup]
-        polygon_geoms = [div_geom_lookup[id] for id in group_ids if id in div_geom_lookup]
+            # Extract IDs in sorted order
+            sorted_ids_asc = [str(fp["flowpath_id"]) for fp in sorted_fps_asc]
+            fp_geometry_ids = [str(fp["flowpath_id"]) for fp in sorted_fps_desc]
 
-        results.append(
-            {
-                "ref_ids": group_ids,
-                "dn_id": sorted_ids[0],
-                "up_id": sorted_ids[-1],
-                "vpu_id": vpu_id,
-                "length_km": length_km,
-                "total_da_sqkm": total_da_sqkm,
-                "line_geometry": unary_union(line_geoms),
-                "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
-            }
-        )
+            # Compute aggregates
+            length_km = sum(float(fp["lengthkm"]) for fp in fp_data)
+            total_da_sqkm = sum(float(fp["totdasqkm"]) for fp in fp_data)
+            vpu_id = fp_data[0]["VPUID"]
+
+            # Get geometries from lookup dicts
+            line_geoms: list[BaseGeometry] = [
+                fp_lookup[fp_id]["shapely_geometry"] for fp_id in fp_geometry_ids if fp_id in fp_lookup
+            ]
+            polygon_geoms: list[BaseGeometry] = [
+                div_lookup[fp_id]["shapely_geometry"] for fp_id in group_ids if fp_id in div_lookup
+            ]
+
+            results.append(
+                {
+                    "ref_ids": group_ids,
+                    "dn_id": sorted_ids_asc[0],
+                    "up_id": sorted_ids_asc[-1],
+                    "vpu_id": vpu_id,
+                    "length_km": length_km,
+                    "total_da_sqkm": total_da_sqkm,
+                    "line_geometry": unary_union(line_geoms),
+                    "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
+                }
+            )
+
+        except KeyError as e:
+            logger.warning(f"Missing flowpath data for group {group_ids}: {e}")
+            continue
 
     return results
 
 
 def _process_no_divide_connectors(
-    classifications: Classifications,
-    flowpaths_df: pl.DataFrame,
-    fp_geom_lookup: dict[str, Any],
-    div_geom_lookup: dict[str, Any],
-) -> list[dict]:
-    """Process no-divide connectors
+    classifications: Classifications, reference_flowpaths: pl.DataFrame, fp_lookup: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Process no-divide connectors using Polars for fast lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    flowpaths_df : pl.DataFrame
-        Reference flowpaths with WKB geometries
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    reference_flowpaths : pl.DataFrame
+        Reference flowpaths DataFrame
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
 
     Returns
     -------
-    list[dict]
-        Processed connector data
+    list[dict[str, Any]]
+        No-divide connector data
     """
-    results = []
-
+    results: list[dict[str, Any]] = []
     for fp in classifications.no_divide_connectors:
-        # Find upstream flowpaths
+        if fp not in fp_lookup:
+            continue
+
+        fp_data = fp_lookup[fp]
+
+        # ✅ Use Polars - single filter operation, very fast
         fp_float = float(fp)
         upstream_ids = (
-            flowpaths_df.filter(pl.col("flowpath_toid") == fp_float)
+            reference_flowpaths.filter(pl.col("flowpath_toid") == fp_float)
             .select("flowpath_id")
-            .cast(pl.Utf8)
             .to_series()
+            .cast(pl.Utf8)
             .to_list()
         )
 
         # Find downstream ID
-        downstream_row = flowpaths_df.filter(pl.col("flowpath_id").cast(pl.Utf8) == fp)
-        if downstream_row.height > 0:
-            downstream_id = str(int(downstream_row["flowpath_toid"][0]))
+        ds_id = fp_data.get("flowpath_toid")
+        if ds_id is None:
+            raise ValueError("No compatible downstream id")
+        downstream_id: str | None = str(int(ds_id)) if fp_data.get("flowpath_toid") else None
 
+        if downstream_id:
             results.append(
                 {
                     "ref_ids": fp,
                     "dn_id": downstream_id,
                     "up_id": upstream_ids,
-                    "line_geometry": fp_geom_lookup[fp],
+                    "line_geometry": fp_data["shapely_geometry"],
                 }
             )
 
@@ -218,172 +199,178 @@ def _process_no_divide_connectors(
 
 
 def _process_independent_flowpaths(
-    classifications: Classifications, fp_geom_lookup: dict[str, Any], div_geom_lookup: dict[str, Any]
-) -> list[dict]:
-    """Process independent flowpaths.
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process independent flowpaths using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         Independent flowpath data
     """
-    results = []
+    results: list[dict[str, Any]] = []
     for fp in classifications.independent_flowpaths:
-        results.append(
-            {
-                "ref_ids": fp,
-                "line_geometry": fp_geom_lookup[fp],
-                "polygon_geometry": div_geom_lookup.get(fp, None),
-            }
-        )
+        if fp in fp_lookup:
+            results.append(
+                {
+                    "ref_ids": fp,
+                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
+                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
+                }
+            )
 
     return results
 
 
 def _process_minor_flowpaths(
-    classifications: Classifications, fp_geom_lookup: dict[str, Any], div_geom_lookup: dict[str, Any]
-) -> list[dict]:
-    """Process minor flowpaths.
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process minor flowpaths using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         Minor flowpath data
     """
-    results = []
+    results: list[dict[str, Any]] = []
     for fp in classifications.minor_flowpaths:
-        results.append(
-            {
-                "ref_ids": fp,
-                "line_geometry": fp_geom_lookup[fp],
-                "polygon_geometry": div_geom_lookup.get(fp, None),
-            }
-        )
+        if fp in fp_lookup:
+            results.append(
+                {
+                    "ref_ids": fp,
+                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
+                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
+                }
+            )
 
     return results
 
 
 def _process_small_scale_connectors(
-    classifications: Classifications, fp_geom_lookup: dict[str, Any], div_geom_lookup: dict[str, Any]
-) -> list[dict]:
-    """Process small scale connectors.
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process small scale connectors using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         Small scale connector data
     """
-    results = []
+    results: list[dict[str, Any]] = []
     for fp in classifications.subdivide_candidates:
-        results.append(
-            {
-                "ref_ids": fp,
-                "line_geometry": fp_geom_lookup[fp],
-                "polygon_geometry": div_geom_lookup.get(fp, None),
-            }
-        )
+        if fp in fp_lookup:
+            results.append(
+                {
+                    "ref_ids": fp,
+                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
+                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
+                }
+            )
 
     return results
 
 
 def _process_connectors(
-    classifications: Classifications, fp_geom_lookup: dict[str, Any], div_geom_lookup: dict[str, Any]
-) -> list[dict]:
-    """Process connectors.
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process connectors using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         Connector data
     """
-    results = []
+    results: list[dict[str, Any]] = []
     for fp in classifications.connector_segments:
-        results.append(
-            {
-                "ref_ids": fp,
-                "line_geometry": fp_geom_lookup[fp],
-                "polygon_geometry": div_geom_lookup.get(fp, None),
-            }
-        )
+        if fp in fp_lookup:
+            results.append(
+                {
+                    "ref_ids": fp,
+                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
+                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
+                }
+            )
 
     return results
 
 
 def _aggregate_geometries(
     classifications: Classifications,
-    reference_flowpaths: pl.DataFrame,
-    fp_geom_lookup: dict[str, Any],
-    div_geom_lookup: dict[str, Any],
+    partition_data: dict[str, Any],
 ) -> Aggregations:
-    """Aggregate geometries
+    """Aggregate geometries using dictionary lookups.
 
     Parameters
     ----------
     classifications : Classifications
         Classification results
-    reference_flowpaths : pl.DataFrame
-        Reference flowpaths with WKB geometries
-    fp_geom_lookup : dict[str, Any]
-        Flowpath shapely geometry lookup
-    div_geom_lookup : dict[str, Any]
-        Divide shapely geometry lookup
+    partition_data : dict[str, Any]
+        Contains fp_lookup and div_lookup with shapely geometries
 
     Returns
     -------
     Aggregations
         Aggregated geometry data
     """
-    aggregates = _process_aggregation_pairs(
-        classifications, reference_flowpaths, fp_geom_lookup, div_geom_lookup
-    )
+    fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
+    div_lookup: dict[str, dict[str, Any]] = partition_data["div_lookup"]
+    filtered_flowpaths: pl.DataFrame = partition_data["flowpaths"]
 
-    no_divide_connectors = _process_no_divide_connectors(
-        classifications, reference_flowpaths, fp_geom_lookup, div_geom_lookup
-    )
+    aggregates = _process_aggregation_pairs(classifications, fp_lookup, div_lookup)
 
-    independents = _process_independent_flowpaths(classifications, fp_geom_lookup, div_geom_lookup)
+    no_divide_connectors = _process_no_divide_connectors(classifications, filtered_flowpaths, fp_lookup)
 
-    small_scale_connectors = _process_small_scale_connectors(classifications, fp_geom_lookup, div_geom_lookup)
+    independents = _process_independent_flowpaths(classifications, fp_lookup, div_lookup)
 
-    minor_flowpaths = _process_minor_flowpaths(classifications, fp_geom_lookup, div_geom_lookup)
+    small_scale_connectors = _process_small_scale_connectors(classifications, fp_lookup, div_lookup)
 
-    connectors = _process_connectors(classifications, fp_geom_lookup, div_geom_lookup)
+    minor_flowpaths = _process_minor_flowpaths(classifications, fp_lookup, div_lookup)
+
+    connectors = _process_connectors(classifications, fp_lookup, div_lookup)
 
     return Aggregations(
         aggregates=aggregates,

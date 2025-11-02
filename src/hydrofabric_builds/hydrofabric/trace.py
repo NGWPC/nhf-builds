@@ -1,9 +1,9 @@
-"""Tracing and classification module for hydrofabric builds."""
+"""Tracing and classification module for hydrofabric builds"""
 
 import logging
 from collections import deque
+from typing import Any
 
-import polars as pl
 import rustworkx as rx
 
 from hydrofabric_builds.config import HFConfig
@@ -12,91 +12,63 @@ from hydrofabric_builds.schemas.hydrofabric import Classifications
 logger = logging.getLogger(__name__)
 
 
-def _get_flowpath_info(flowpath_id: str, fp: pl.DataFrame) -> dict:
-    """Get flowpath information from the Polars dataframe.
-
-    Parameters
-    ----------
-    flowpath_id : str
-        The flowpath ID to look up
-    fp : pl.DataFrame
-        The flowpaths Polars dataframe
-
-    Returns
-    -------
-    dict
-        Dictionary containing flowpath attributes
-    """
-    fp_row = fp.filter(pl.col("flowpath_id") == flowpath_id)
-
-    if fp_row.height == 0:
-        raise ValueError(f"Flowpath {flowpath_id} not found in reference data")
-
-    return {
-        "flowpath_id": flowpath_id,
-        "areasqkm": float(fp_row["areasqkm"][0]),
-        "streamorder": int(fp_row["streamorder"][0]),
-        "length_km": float(fp_row["lengthkm"][0]),
-        "mainstemlp": float(fp_row["mainstemlp"][0] if "mainstemlp" in fp_row.columns else 0),
-    }
-
-
-def _get_unprocessed_upstream_info(upstream_ids: list, fp: pl.DataFrame, processed: set) -> list[dict]:
+def _get_unprocessed_upstream_info(
+    upstream_ids: list[str], fp_lookup: dict[str, dict[str, Any]], processed: set[str]
+) -> list[dict[str, Any]]:
     """Get info for unprocessed upstream flowpaths.
 
     Parameters
     ----------
-    upstream_ids : list
+    upstream_ids : list[str]
         List of upstream flowpath IDs
-    fp : pl.DataFrame
-        The flowpaths Polars dataframe
-    processed : set
+    fp_lookup : dict[str, dict[str, Any]]
+        Dictionary mapping flowpath_id -> flowpath attributes
+    processed : set[str]
         Set of already processed flowpath IDs
 
     Returns
     -------
-    list[dict]
+    list[dict[str, Any]]
         List of flowpath info dictionaries for unprocessed upstreams
     """
     if not upstream_ids:
         return []
 
-    upstream_ids_str = [str(uid) for uid in upstream_ids if str(uid) not in processed]
+    result: list[dict[str, Any]] = []
+    for uid in upstream_ids:
+        uid_str = str(uid)
+        if uid_str in processed or uid_str not in fp_lookup:
+            continue
 
-    if not upstream_ids_str:
-        return []
+        row = fp_lookup[uid_str]
+        result.append(
+            {
+                "flowpath_id": uid_str,
+                "areasqkm": float(row["areasqkm"]),
+                "streamorder": int(row["streamorder"]),
+                "lengthkm": float(row["lengthkm"]),
+                "mainstemlp": float(row.get("mainstemlp", 0)),
+            }
+        )
 
-    unprocessed_df = fp.filter(pl.col("flowpath_id").is_in(upstream_ids_str)).select(
-        [
-            pl.col("flowpath_id"),
-            pl.col("areasqkm"),
-            pl.col("streamorder"),
-            pl.col("lengthkm"),
-            pl.when(pl.col("mainstemlp").is_not_null())
-            .then(pl.col("mainstemlp"))
-            .otherwise(0.0)
-            .alias("mainstemlp"),
-        ]
-    )
-
-    return unprocessed_df.to_dicts()
+    return result
 
 
 def _queue_upstream(
-    upstream_ids: list, to_process: deque, processed: set, unprocessed_only: bool = False
+    upstream_ids: list[str], to_process: deque[str], processed: set[str], unprocessed_only: bool = False
 ) -> None:
     """Queue upstream flowpaths for processing.
 
     Parameters
     ----------
-    upstream_ids : list
+    upstream_ids : list[str]
         List of upstream flowpath IDs
-    to_process : deque
+    to_process : deque[str]
         Queue of flowpaths to process
-    processed : set
+    processed : set[str]
         Set of already processed flowpath IDs
-    unprocessed_only : bool
-        If True, only queue unprocessed flowpaths
+    unprocessed_only : bool, optional
+        If True, only queue unprocessed flowpaths, by default False
     """
     for uid in upstream_ids:
         uid_str = str(uid)
@@ -104,7 +76,7 @@ def _queue_upstream(
             to_process.append(uid_str)
 
 
-def _get_upstream_ids(flowpath_id: str, graph: rx.PyDiGraph, node_indices: dict) -> list[str]:
+def _get_upstream_ids(flowpath_id: str, graph: rx.PyDiGraph, node_indices: dict[str, int]) -> list[str]:
     """Get upstream flowpath IDs from the graph.
 
     Parameters
@@ -113,7 +85,7 @@ def _get_upstream_ids(flowpath_id: str, graph: rx.PyDiGraph, node_indices: dict)
         The flowpath ID to get upstreams for
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
 
     Returns
@@ -133,7 +105,7 @@ def _traverse_and_aggregate_all_upstream(
     downstream_id: str,
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> None:
     """Traverse all upstream flowpaths and aggregate them to a downstream target.
 
@@ -150,7 +122,7 @@ def _traverse_and_aggregate_all_upstream(
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     """
     upstream_id = start_id
@@ -175,7 +147,7 @@ def _traverse_and_mark_as_minor(
     downstream_id: str,
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> None:
     """Traverse all upstream flowpaths and mark them as minor, aggregating to downstream.
 
@@ -192,7 +164,7 @@ def _traverse_and_mark_as_minor(
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     """
     upstream_id = start_id
@@ -218,12 +190,12 @@ def _traverse_chain_with_area_threshold(
     current_id: str,
     initial_area: float,
     threshold: float,
-    fp: pl.DataFrame,
-    div_ids: set,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_ids: set[str],
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
-    to_process: deque,
+    node_indices: dict[str, int],
+    to_process: deque[str],
     check_stream_order: bool = False,
     expected_order: int | None = None,
 ) -> None:
@@ -246,34 +218,33 @@ def _traverse_chain_with_area_threshold(
         Initial cumulative area (km²)
     threshold : float
         Area threshold (km²) to stop aggregation
-    fp : pl.DataFrame
-        Flowpaths dataframe
-    div_ids : set
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    div_ids : set[str]
         Set of divide IDs
     result : Classifications
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
-    to_process : deque
+    to_process : deque[str]
         Queue for processing flowpaths
-    check_stream_order : bool
-        If True, stop when stream order changes
-    expected_order : int | None
-        Expected stream order (only used if check_stream_order=True)
+    check_stream_order : bool, optional
+        If True, stop when stream order changes, by default False
+    expected_order : int | None, optional
+        Expected stream order (only used if check_stream_order=True), by default None
     """
     upstream_id = start_id
     cumulative_area = initial_area
 
     while True:
         # Check if upstream exists
-        fp_row = fp.filter(pl.col("flowpath_id") == upstream_id)
-        if fp_row.height == 0:
+        if upstream_id not in fp_lookup:
             break
 
-        upstream_fp_info = _get_flowpath_info(upstream_id, fp)
-        cumulative_area += upstream_fp_info["areasqkm"]
+        upstream_fp_info = fp_lookup[upstream_id]
+        cumulative_area += float(upstream_fp_info["areasqkm"])
 
         # Create aggregation pair
         result.aggregation_pairs.append((current_id, upstream_id))
@@ -306,11 +277,10 @@ def _traverse_chain_with_area_threshold(
 
         # Check stream order if required
         if check_stream_order and expected_order is not None:
-            next_fp_row = fp.filter(pl.col("flowpath_id") == next_upstream_id)
-            if next_fp_row.height == 0:
+            if next_upstream_id not in fp_lookup:
                 break
 
-            next_fp_info = _get_flowpath_info(next_upstream_id, fp)
+            next_fp_info = fp_lookup[next_upstream_id]
             if next_fp_info["streamorder"] != expected_order:
                 # Different order - queue it for processing
                 if next_upstream_id not in result.processed_flowpaths:
@@ -330,11 +300,11 @@ def _traverse_chain_with_area_threshold(
 def _traverse_chain_through_no_divides(
     start_id: str,
     current_id: str,
-    div_ids: set,
+    div_ids: set[str],
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
-    to_process: deque,
+    node_indices: dict[str, int],
+    to_process: deque[str],
 ) -> None:
     """Traverse upstream chain through flowpaths without divides.
 
@@ -347,15 +317,15 @@ def _traverse_chain_through_no_divides(
         Starting upstream flowpath ID (without divide)
     current_id : str
         Current/downstream flowpath ID for aggregation pairs
-    div_ids : set
+    div_ids : set[str]
         Set of divide IDs
     result : Classifications
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
-    to_process : deque
+    to_process : deque[str]
         Queue for processing flowpaths
     """
     upstream_id = start_id
@@ -394,9 +364,9 @@ def _traverse_chain_through_no_divides(
 
 def _check_for_any_upstream_divides(
     start_id: str,
-    div_ids: set,
+    div_ids: set[str],
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> bool:
     """Check if there are ANY divides anywhere in the upstream network.
 
@@ -406,11 +376,11 @@ def _check_for_any_upstream_divides(
     ----------
     start_id : str
         Starting flowpath ID
-    div_ids : set
+    div_ids : set[str]
         Set of all divide IDs
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
 
     Returns
@@ -418,8 +388,8 @@ def _check_for_any_upstream_divides(
     bool
         True if any upstream segment has a divide, False otherwise
     """
-    to_check = deque([start_id])
-    visited = set()
+    to_check: deque[str] = deque([start_id])
+    visited: set[str] = set()
 
     while to_check:
         current_fp_id = to_check.popleft()
@@ -445,11 +415,11 @@ def _check_for_any_upstream_divides(
 def _check_and_aggregate_same_order_no_divide_chain(
     start_id: str,
     current_order: int,
-    fp: pl.DataFrame,
-    div_ids: set,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_ids: set[str],
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> bool:
     """Check if entire same-order upstream chain has no divides, and aggregate if so.
 
@@ -464,15 +434,15 @@ def _check_and_aggregate_same_order_no_divide_chain(
         Starting flowpath ID (no divide, order 2+)
     current_order : int
         Stream order to follow
-    fp : pl.DataFrame
-        Flowpaths dataframe
-    div_ids : set
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    div_ids : set[str]
         Set of divide IDs
     result : Classifications
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
 
     Returns
@@ -481,10 +451,10 @@ def _check_and_aggregate_same_order_no_divide_chain(
         True if entire chain has no divides (aggregated as minor)
         False if any segment in chain has a divide
     """
-    to_check = deque([start_id])
-    chain_ids = []
-    visited = set()
-    upstream_boundary = []  # Upstream IDs at the boundary (different order)
+    to_check: deque[str] = deque([start_id])
+    chain_ids: list[str] = []
+    visited: set[str] = set()
+    upstream_boundary: list[str] = []  # Upstream IDs at the boundary (different order)
 
     while to_check:
         current_fp_id = to_check.popleft()
@@ -495,11 +465,10 @@ def _check_and_aggregate_same_order_no_divide_chain(
         visited.add(current_fp_id)
 
         # Get flowpath info
-        fp_row = fp.filter(pl.col("flowpath_id") == current_fp_id)
-        if fp_row.height == 0:
+        if current_fp_id not in fp_lookup:
             continue
 
-        stream_order = int(fp_row["streamorder"][0])
+        stream_order = int(fp_lookup[current_fp_id]["streamorder"])
 
         # Only follow same order
         if stream_order != current_order:
@@ -538,7 +507,7 @@ def _mark_all_upstream_as_minor_iterative(
     start_id: str,
     result: Classifications,
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> None:
     """Iteratively mark a flowpath and all upstream as minor flowpaths.
 
@@ -553,10 +522,10 @@ def _mark_all_upstream_as_minor_iterative(
         Results container to update
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     """
-    to_mark = deque([start_id])
+    to_mark: deque[str] = deque([start_id])
 
     while to_mark:
         current_fp_id = to_mark.popleft()
@@ -575,10 +544,10 @@ def _mark_all_upstream_as_minor_iterative(
 
 def _check_if_order2_chain_has_divides(
     flowpath_id: str,
-    fp: pl.DataFrame,
-    div_ids: set,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_ids: set[str],
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
 ) -> tuple[bool, str | None]:
     """Check if an order 2 stream chain has any segments with divides.
 
@@ -588,13 +557,13 @@ def _check_if_order2_chain_has_divides(
     ----------
     flowpath_id : str
         Starting flowpath ID (order 2 without divide)
-    fp : pl.DataFrame
-        The flowpaths dataframe
-    div_ids : set
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    div_ids : set[str]
         Set of all divide IDs
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
 
     Returns
@@ -604,8 +573,8 @@ def _check_if_order2_chain_has_divides(
         - has_divide_in_chain: True if any order 2 segment upstream has a divide
         - first_divide_id_found: The ID of the first order 2 segment with a divide, or None
     """
-    to_check = deque([flowpath_id])
-    visited = set()
+    to_check: deque[str] = deque([flowpath_id])
+    visited: set[str] = set()
 
     while to_check:
         current_fp_id = to_check.popleft()
@@ -616,11 +585,10 @@ def _check_if_order2_chain_has_divides(
         visited.add(current_fp_id)
 
         # Get flowpath info
-        fp_row = fp.filter(pl.col("flowpath_id") == current_fp_id)
-        if fp_row.height == 0:
+        if current_fp_id not in fp_lookup:
             continue
 
-        stream_order = int(fp_row["streamorder"][0])
+        stream_order = int(fp_lookup[current_fp_id]["streamorder"])
 
         # Only follow order 2 streams
         if stream_order != 2:
@@ -640,9 +608,9 @@ def _check_if_order2_chain_has_divides(
 
 
 def _rule_independent_large_area(
-    current_id: str, fp_info: dict, cfg: HFConfig, result: Classifications
+    current_id: str, fp_info: dict[str, Any], cfg: HFConfig, result: Classifications
 ) -> bool:
-    """Rule: Large Area (>threshold) remains independent.
+    """Apply rule: Large Area (>threshold) remains independent.
 
     Large catchments remain independent regardless of stream order
     because they represent significant hydrologic features.
@@ -651,7 +619,7 @@ def _rule_independent_large_area(
     ----------
     current_id : str
         Current flowpath ID
-    fp_info : dict
+    fp_info : dict[str, Any]
         Flowpath information
     cfg : HFConfig
         Configuration
@@ -672,14 +640,14 @@ def _rule_independent_large_area(
 
 def _rule_independent_connector(
     current_id: str,
-    upstream_info: list[dict],
+    upstream_info: list[dict[str, Any]],
     cfg: HFConfig,
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
     result: Classifications,
-    div_ids: set,
+    div_ids: set[str],
 ) -> bool:
-    """Rule: Connector where 2+ HIGHER-ORDER streams meet.
+    """Apply rule: Connector where 2+ HIGHER-ORDER streams meet.
 
     True connectors are confluences of significant streams (order 2+).
     They remain independent regardless of area - critical for network topology.
@@ -693,17 +661,17 @@ def _rule_independent_connector(
     ----------
     current_id : str
         Current flowpath ID
-    upstream_info : list[dict]
+    upstream_info : list[dict[str, Any]]
         Upstream flowpath information
     cfg : HFConfig
         Configuration
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     result : Classifications
         Results container
-    div_ids : set
+    div_ids : set[str]
         Set of all divide IDs
 
     Returns
@@ -738,16 +706,16 @@ def _rule_independent_connector(
 
 def _rule_aggregate_order2_with_order1s(
     current_id: str,
-    fp_info: dict,
-    upstream_info: list[dict],
+    fp_info: dict[str, Any],
+    upstream_info: list[dict[str, Any]],
     graph: rx.PyDiGraph,
-    node_indices: dict,
+    node_indices: dict[str, int],
     result: Classifications,
-    div_ids: set,
-    fp: pl.DataFrame,
-    to_process: deque,
+    div_ids: set[str],
+    fp_lookup: dict[str, dict[str, Any]],
+    to_process: deque[str],
 ) -> bool:
-    """Rule: Order 2 with all Order 1 upstreams (Subdivide Candidate).
+    """Apply rule: Order 2 with all Order 1 upstreams (Subdivide Candidate).
 
     When an order 2 stream has multiple order 1 tributaries joining,
     we aggregate them but mark as a potential subdivision point.
@@ -756,21 +724,21 @@ def _rule_aggregate_order2_with_order1s(
     ----------
     current_id : str
         Current flowpath ID
-    fp_info : dict
+    fp_info : dict[str, Any]
         Flowpath information
-    upstream_info : list[dict]
+    upstream_info : list[dict[str, Any]]
         Upstream flowpath information
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     result : Classifications
         Results container
-    div_ids : set
+    div_ids : set[str]
         Set of all divide IDs
-    fp : pl.DataFrame
-        Flowpaths Polars dataframe
-    to_process : deque
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    to_process : deque[str]
         Queue for processing flowpaths
 
     Returns
@@ -807,17 +775,17 @@ def _rule_aggregate_order2_with_order1s(
 
 def _rule_aggregate_mixed_upstream_orders(
     current_id: str,
-    fp_info: dict,
-    upstream_info: list[dict],
+    fp_info: dict[str, Any],
+    upstream_info: list[dict[str, Any]],
     cfg: HFConfig,
     result: Classifications,
-    div_ids: set,
+    div_ids: set[str],
     graph: rx.PyDiGraph,
-    node_indices: dict,
-    fp: pl.DataFrame,
-    to_process: deque,
+    node_indices: dict[str, int],
+    fp_lookup: dict[str, dict[str, Any]],
+    to_process: deque[str],
 ) -> bool:
-    """Rule: Mainstem with Order 1 tributaries.
+    """Apply rule: Mainstem with Order 1 tributaries.
 
     When a mainstem segment has order 1 tributaries joining,
     aggregate small order 1s as minor flowpaths.
@@ -828,23 +796,23 @@ def _rule_aggregate_mixed_upstream_orders(
     ----------
     current_id : str
         Current flowpath ID
-    fp_info : dict
+    fp_info : dict[str, Any]
         Flowpath information
-    upstream_info : list[dict]
+    upstream_info : list[dict[str, Any]]
         Upstream flowpath information
     cfg : HFConfig
         Configuration
     result : Classifications
         Results container
-    div_ids : set
+    div_ids : set[str]
         Set of all divide IDs
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
-    fp : pl.DataFrame
-        Flowpaths Polars dataframe
-    to_process : deque
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    to_process : deque[str]
         Queue for processing flowpaths
 
     Returns
@@ -887,7 +855,7 @@ def _rule_aggregate_mixed_upstream_orders(
                 current_id=current_id,
                 initial_area=cumulative_area,
                 threshold=cfg.divide_aggregation_threshold,
-                fp=fp,
+                fp_lookup=fp_lookup,
                 div_ids=div_ids,
                 result=result,
                 graph=graph,
@@ -905,17 +873,17 @@ def _rule_aggregate_mixed_upstream_orders(
 
 def _rule_aggregate_single_upstream(
     current_id: str,
-    fp_info: dict,
-    upstream_info: list[dict],
+    fp_info: dict[str, Any],
+    upstream_info: list[dict[str, Any]],
     cfg: HFConfig,
     result: Classifications,
-    div_ids: set,
+    div_ids: set[str],
     graph: rx.PyDiGraph,
-    node_indices: dict,
-    fp: pl.DataFrame,
-    to_process: deque,
+    node_indices: dict[str, int],
+    fp_lookup: dict[str, dict[str, Any]],
+    to_process: deque[str],
 ) -> bool:
-    """Rule: Single upstream aggregation with three behaviors.
+    """Apply rule: Single upstream aggregation with three behaviors.
 
     Handles all single upstream cases:
     - Current lacks divide → mark as minor
@@ -928,23 +896,23 @@ def _rule_aggregate_single_upstream(
     ----------
     current_id : str
         Current flowpath ID
-    fp_info : dict
+    fp_info : dict[str, Any]
         Flowpath information
-    upstream_info : list[dict]
+    upstream_info : list[dict[str, Any]]
         Upstream flowpath information (should have length 1)
     cfg : HFConfig
         Configuration
     result : Classifications
         Results container
-    div_ids : set
+    div_ids : set[str]
         Set of all divide IDs
     graph : rx.PyDiGraph
         Network graph
-    node_indices : dict
+    node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
-    fp : pl.DataFrame
-        Flowpaths Polars dataframe
-    to_process : deque
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dictionary
+    to_process : deque[str]
         Queue for processing flowpaths
 
     Returns
@@ -1022,7 +990,7 @@ def _rule_aggregate_single_upstream(
                 current_id=current_id,
                 initial_area=cumulative_area,
                 threshold=cfg.divide_aggregation_threshold,
-                fp=fp,
+                fp_lookup=fp_lookup,
                 div_ids=div_ids,
                 result=result,
                 graph=graph,
@@ -1039,7 +1007,7 @@ def _rule_aggregate_single_upstream(
         current_id=current_id,
         initial_area=cumulative_area,
         threshold=cfg.divide_aggregation_threshold,
-        fp=fp,
+        fp_lookup=fp_lookup,
         div_ids=div_ids,
         result=result,
         graph=graph,
@@ -1054,11 +1022,9 @@ def _rule_aggregate_single_upstream(
 
 def _trace_stack(
     start_id: str,
-    fp: pl.DataFrame,
-    div_ids: set,
+    div_ids: set[str],
     cfg: HFConfig,
-    digraph: rx.PyDiGraph,
-    node_indices: dict,
+    partition_data: dict[str, Any],
 ) -> Classifications:
     """Trace upstream from a starting flowpath and classify segments according to aggregation rules.
 
@@ -1078,17 +1044,13 @@ def _trace_stack(
     Parameters
     ----------
     start_id : str
-        the outlet flowpath ID
-    fp : pl.DataFrame
-        the reference flowpaths Polars dataframe
-    div_ids: set
-        all IDs from the reference divides dataframe
+        The outlet flowpath ID
+    div_ids : set[str]
+        All IDs from the reference divides dataframe
     cfg : HFConfig
-        the Hydrofabric config file
-    digraph : rx.PyDiGraph
-        the rustworkx directed graph
-    node_indices : dict
-        mapping of flowpath IDs to node indices
+        The Hydrofabric config file
+    partition_data : dict[str, Any]
+        Contains subgraph, node_indices, and fp_lookup
 
     Returns
     -------
@@ -1100,14 +1062,18 @@ def _trace_stack(
     ValueError
         If one of the flowpaths doesn't pass a rule the workflow will be stopped
     """
+    digraph: rx.PyDiGraph = partition_data["subgraph"]
+    node_indices: dict[str, int] = partition_data["node_indices"]
+    fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
+
     result = Classifications()
-    to_process = deque([start_id])
+    to_process: deque[str] = deque([start_id])
 
     while to_process:
         current_id = to_process.popleft()
-        fp_info = _get_flowpath_info(current_id, fp)
+        fp_info: dict[str, Any] = fp_lookup[current_id]
         upstream_ids = _get_upstream_ids(current_id, digraph, node_indices)
-        upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp, result.processed_flowpaths)
+        upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp_lookup, result.processed_flowpaths)
 
         if len(upstream_info) == 0 and len(upstream_ids) > 0:
             raise ValueError("no upstream info since this segment was mistakingly queued")
@@ -1143,7 +1109,7 @@ def _trace_stack(
             chain_has_no_divides = _check_and_aggregate_same_order_no_divide_chain(
                 current_id,
                 fp_info["streamorder"],
-                fp,
+                fp_lookup,
                 div_ids,
                 result,
                 digraph,
@@ -1176,7 +1142,15 @@ def _trace_stack(
         # Rule 7: Order 2 stream with Multiple Order 1 Upstreams (Subdivide Candidate)
         if len(upstream_info) >= 2:
             if _rule_aggregate_order2_with_order1s(
-                current_id, fp_info, upstream_info, digraph, node_indices, result, div_ids, fp, to_process
+                current_id,
+                fp_info,
+                upstream_info,
+                digraph,
+                node_indices,
+                result,
+                div_ids,
+                fp_lookup,
+                to_process,
             ):
                 _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
                 continue
@@ -1192,7 +1166,7 @@ def _trace_stack(
                 div_ids,
                 digraph,
                 node_indices,
-                fp,
+                fp_lookup,
                 to_process,
             ):
                 continue
@@ -1208,7 +1182,7 @@ def _trace_stack(
                 div_ids,
                 digraph,
                 node_indices,
-                fp,
+                fp_lookup,
                 to_process,
             ):
                 continue

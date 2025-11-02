@@ -21,10 +21,6 @@ class HFConfig(BaseModel):
         default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
     )
 
-    num_agg_workers: int | None = Field(
-        default=None, description="Number of dask workers to use as a default for multiprocessing"
-    )
-
     output_dir: Path = Field(
         default=here() / "data/",
         description="The directory for output files to be saved from Hydrofabric builds",
@@ -56,16 +52,6 @@ class HFConfig(BaseModel):
         default=True, description="Decides if we want to run the divide attributes task"
     )
 
-    enable_dask_dashboard: bool = Field(
-        default=True,
-        description="Enable Dask dashboard for monitoring parallel tasks. Disable for testing or to avoid port conflicts.",
-    )
-
-    dask_dashboard_port: int | None = Field(
-        default=8787,
-        description="Port for Dask dashboard. Set to None for automatic port selection. Default is 8787.",
-    )
-
     @field_validator("debug_outlet_count")
     @classmethod
     def validate_debug_outlet_count(cls, v: int | None) -> int | None:
@@ -73,15 +59,6 @@ class HFConfig(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("debug_outlet_count must be None (for all outlets) or a positive integer")
         return v
-
-    @property
-    def dask_dashboard_address(self) -> str | None:
-        """Get the dashboard address for Dask client."""
-        if not self.enable_dask_dashboard:
-            return None
-        if self.dask_dashboard_port is None:
-            return ":0"  # Let Dask choose a random available port
-        return f":{self.dask_dashboard_port}"
 
     @classmethod
     def from_yaml(cls, path: str) -> Self:

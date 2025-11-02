@@ -16,8 +16,8 @@ def test_partition_contains_correct_flowpath_ids(
 ) -> None:
     """Test that partitions contain the correct flowpath IDs."""
     # Convert GeoDataFrames to Polars DataFrames (this is what the actual pipeline does)
-    fp_pl = pl.from_pandas(sample_flowpaths.drop(columns=["geometry"]))
-    div_pl = pl.from_pandas(sample_divides.drop(columns=["geometry"]))
+    fp_pl = pl.from_pandas(sample_flowpaths.to_wkb())
+    div_pl = pl.from_pandas(sample_divides.to_wkb())
 
     # Build graph
     upstream_dict = _build_graph(fp_pl)
@@ -66,8 +66,8 @@ def test_partition_flowpaths_not_empty(
     sample_flowpaths: gpd.GeoDataFrame, sample_divides: gpd.GeoDataFrame
 ) -> None:
     """Test that partitions contain non-empty flowpaths dataframes."""
-    fp_pl = pl.from_pandas(sample_flowpaths.drop(columns=["geometry"]))
-    div_pl = pl.from_pandas(sample_divides.drop(columns=["geometry"]))
+    fp_pl = pl.from_pandas(sample_flowpaths.to_wkb())
+    div_pl = pl.from_pandas(sample_divides.to_wkb())
 
     upstream_dict = _build_graph(fp_pl)
     digraph, node_indices = _build_rustworkx_object(upstream_dict)
@@ -107,8 +107,8 @@ def test_partition_outlet_included_in_flowpaths(
     sample_flowpaths: gpd.GeoDataFrame, sample_divides: gpd.GeoDataFrame
 ) -> None:
     """Test that each outlet ID is included in its own partition's flowpaths."""
-    fp_pl = pl.from_pandas(sample_flowpaths.drop(columns=["geometry"]))
-    div_pl = pl.from_pandas(sample_divides.drop(columns=["geometry"]))
+    fp_pl = pl.from_pandas(sample_flowpaths.to_wkb())
+    div_pl = pl.from_pandas(sample_divides.to_wkb())
 
     upstream_dict = _build_graph(fp_pl)
     digraph, node_indices = _build_rustworkx_object(upstream_dict)
@@ -138,8 +138,8 @@ def test_partition_type_consistency(
     sample_flowpaths: gpd.GeoDataFrame, sample_divides: gpd.GeoDataFrame
 ) -> None:
     """Test that all IDs are strings throughout the partition."""
-    fp_pl = pl.from_pandas(sample_flowpaths.drop(columns=["geometry"]))
-    div_pl = pl.from_pandas(sample_divides.drop(columns=["geometry"]))
+    fp_pl = pl.from_pandas(sample_flowpaths.to_wkb())
+    div_pl = pl.from_pandas(sample_divides.to_wkb())
 
     upstream_dict = _build_graph(fp_pl)
     digraph, node_indices = _build_rustworkx_object(upstream_dict)
@@ -193,8 +193,8 @@ def test_partition_type_consistency(
 
 def test_node_indices_mapping(sample_flowpaths: gpd.GeoDataFrame, sample_divides: gpd.GeoDataFrame) -> None:
     """Test that node_indices correctly maps flowpath IDs to graph nodes."""
-    fp_pl = pl.from_pandas(sample_flowpaths.drop(columns=["geometry"]))
-    div_pl = pl.from_pandas(sample_divides.drop(columns=["geometry"]))
+    fp_pl = pl.from_pandas(sample_flowpaths.to_wkb())
+    div_pl = pl.from_pandas(sample_divides.to_wkb())
 
     upstream_dict = _build_graph(fp_pl)
     digraph, node_indices = _build_rustworkx_object(upstream_dict)

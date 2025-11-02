@@ -8,7 +8,6 @@ from conftest import dict_to_graph
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.trace import (
-    _get_flowpath_info,
     _rule_aggregate_mixed_upstream_orders,
     _rule_aggregate_order2_with_order1s,
     _rule_aggregate_single_upstream,
@@ -33,14 +32,10 @@ def sample_flowpath_data() -> pl.DataFrame:
     return pl.DataFrame(data)
 
 
-def test_get_flowpath_info(sample_flowpath_data: pl.DataFrame) -> None:
-    """Test getting flowpath information."""
-    result = _get_flowpath_info("1", sample_flowpath_data)
-
-    assert result["flowpath_id"] == "1"
-    assert "areasqkm" in result
-    assert "streamorder" in result
-    assert "length_km" in result
+@pytest.fixture
+def sample_fp_lookup(sample_flowpath_data: pl.DataFrame) -> dict:
+    """Create fp_lookup dictionary from sample flowpath data."""
+    return {str(row["flowpath_id"]): row for row in sample_flowpath_data.to_dicts()}
 
 
 def test_connector_aggregates_small_order1_upstreams(
@@ -85,9 +80,7 @@ def test_connector_aggregates_small_order1_upstreams(
 class TestRuleAggregateSingleUpstream:
     """Tests for _rule_aggregate_single_upstream function."""
 
-    def test_single_upstream_aggregation(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_single_upstream_aggregation(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test basic single upstream aggregation."""
         network_graph = {"5": ["6"], "6": []}
         div_ids = {"5", "6"}
@@ -114,7 +107,7 @@ class TestRuleAggregateSingleUpstream:
             cfg=sample_config,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
             graph=graph,
             node_indices=node_indices,
@@ -123,9 +116,7 @@ class TestRuleAggregateSingleUpstream:
         assert success
         assert ("6", "5") in result.aggregation_pairs
 
-    def test_cumulative_area_tracking(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_cumulative_area_tracking(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test cumulative area tracking stops at threshold."""
         network_graph = {"fp1": ["up1"], "up1": ["up2"], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -154,15 +145,13 @@ class TestRuleAggregateSingleUpstream:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert success
 
-    def test_large_area_not_aggregated(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_large_area_not_aggregated(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test large area upstream not aggregated."""
         network_graph = {"fp1": ["up1"], "up1": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -191,7 +180,7 @@ class TestRuleAggregateSingleUpstream:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
@@ -201,9 +190,7 @@ class TestRuleAggregateSingleUpstream:
 class TestRuleAggregateOrder2WithOrder1s:
     """Tests for _rule_aggregate_order2_with_order1s function."""
 
-    def test_order2_with_two_order1s(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_order2_with_two_order1s(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test order 2 with two order 1 upstreams."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -232,15 +219,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert success
 
-    def test_order2_with_upstream_branches(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_order2_with_upstream_branches(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test order 2 with branching order 1 upstreams."""
         network_graph = {
             "fp1": ["up1", "up2"],
@@ -275,13 +260,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert success
 
-    def test_not_order2(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
+    def test_not_order2(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test function returns False when not order 2."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -310,13 +295,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert not success
 
-    def test_not_all_order1(self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig) -> None:
+    def test_not_all_order1(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test function returns False when not all upstreams are order 1."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -351,15 +336,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert not success
 
-    def test_order2_with_three_order1s(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_order2_with_three_order1s(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test order 2 with three order 1 upstreams."""
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -389,15 +372,13 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         assert success
 
-    def test_order2_with_four_order1s(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_order2_with_four_order1s(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test order 2 with four order 1 upstreams."""
         network_graph = {
             "fp1": ["up1", "up2", "up3", "up4"],
@@ -434,7 +415,7 @@ class TestRuleAggregateOrder2WithOrder1s:
             node_indices=node_indices,
             result=result,
             div_ids=div_ids,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
@@ -445,7 +426,7 @@ class TestRuleAggregateMixedUpstreamOrders:
     """Tests for _rule_aggregate_mixed_upstream_orders function."""
 
     def test_mixed_orders_small_order1_becomes_minor(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
+        self, sample_fp_lookup: dict, sample_config: HFConfig
     ) -> None:
         """Test mixed orders with small order 1 becoming minor."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
@@ -488,7 +469,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
@@ -496,9 +477,7 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert "up1" in result.minor_flowpaths  # Order 1 should be minor
         assert ("up1", "fp1") in result.aggregation_pairs
 
-    def test_large_order1_not_minor(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_large_order1_not_minor(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test that function still works with large order 1 (area doesn't matter for this rule)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -540,7 +519,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
@@ -548,9 +527,7 @@ class TestRuleAggregateMixedUpstreamOrders:
         # Order 1 is still marked as minor regardless of size
         assert "up1" in result.minor_flowpaths
 
-    def test_multiple_small_order1s_all_minor(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_multiple_small_order1s_all_minor(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test multiple order 1s all marked as minor with same-order upstream."""
         network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -599,7 +576,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
@@ -608,9 +585,7 @@ class TestRuleAggregateMixedUpstreamOrders:
         assert "up2" in result.minor_flowpaths
         assert "fp1" in result.upstream_merge_points
 
-    def test_only_order1s_not_mixed(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_only_order1s_not_mixed(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test function returns False when all upstreams are order 1 (no same-order upstream)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -640,16 +615,14 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         # Should return False - no same-order upstreams
         assert not success
 
-    def test_only_same_order_not_mixed(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_only_same_order_not_mixed(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test function returns False when no order 1 upstreams (only same-order)."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         graph, node_indices = dict_to_graph(network_graph)
@@ -691,16 +664,14 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 
         # Should return False - no order 1 upstreams
         assert not success
 
-    def test_small_order1_with_same_order(
-        self, sample_flowpath_data: pl.DataFrame, sample_config: HFConfig
-    ) -> None:
+    def test_small_order1_with_same_order(self, sample_fp_lookup: dict, sample_config: HFConfig) -> None:
         """Test order 1 tributary with same-order mainstem."""
         network_graph = {"fp1": ["up1", "up2"], "up1": [], "up2": []}
         div_ids = {"fp1", "up1", "up2"}
@@ -741,7 +712,7 @@ class TestRuleAggregateMixedUpstreamOrders:
             div_ids=div_ids,
             graph=graph,
             node_indices=node_indices,
-            fp=sample_flowpath_data,
+            fp_lookup=sample_fp_lookup,
             to_process=to_process,
         )
 

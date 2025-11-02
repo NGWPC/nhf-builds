@@ -4,18 +4,18 @@ from typing import Any
 
 import geopandas as gpd
 import polars as pl
-from conftest import dict_to_graph
+from conftest import create_partition_data_for_build_tests, dict_to_graph
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
 from hydrofabric_builds import HFConfig
 from hydrofabric_builds.hydrofabric.aggregate import (
     _aggregate_geometries,
-    _prepare_dataframes,
 )
 from hydrofabric_builds.hydrofabric.build import (
     _build_base_hydrofabric,
     _order_aggregates_base,
 )
+from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookups
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 
 
@@ -234,14 +234,15 @@ class TestBuildBaseHydrofabric:
 
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -276,14 +277,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -318,14 +320,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -364,14 +367,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -405,15 +409,16 @@ class TestBuildBaseHydrofabric:
         offset = 100
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
+            partition_data=partition_data,
             cfg=sample_config,
-            graph=graph,
-            node_indices=node_indices,
             id_offset=offset,
         )
 
@@ -446,14 +451,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -488,14 +494,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -530,14 +537,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -572,14 +580,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -617,14 +626,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -664,14 +674,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -708,14 +719,15 @@ class TestBuildBaseHydrofabric:
         reference_flowpaths, reference_divides = sample_reference_data
         graph, node_indices = dict_to_graph(expected_graph)
 
+        partition_data = create_partition_data_for_build_tests(
+            reference_flowpaths, reference_divides, graph, node_indices
+        )
+
         result = _build_base_hydrofabric(
             start_id="6720797",
             aggregate_data=sample_aggregate_data,
             classifications=sample_classifications,
-            reference_divides=pl.from_pandas(reference_divides.to_wkb()),
-            reference_flowpaths=pl.from_pandas(reference_flowpaths.to_wkb()),
-            graph=graph,
-            node_indices=node_indices,
+            partition_data=partition_data,
             cfg=sample_config,
         )
 
@@ -758,13 +770,15 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         assert isinstance(result, Aggregations)
@@ -788,13 +802,15 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         if len(result.aggregates) > 0:
@@ -826,13 +842,15 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         if len(result.independents) > 0:
@@ -862,13 +880,15 @@ class TestAggregateGeometries:
         assert len(sample_classifications.aggregation_pairs) > 0
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         # Should have created aggregates
@@ -896,13 +916,15 @@ class TestAggregateGeometries:
         assert len(sample_classifications.independent_flowpaths) > 0
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         # Should have created independents
@@ -970,13 +992,15 @@ class TestAggregateGeometries:
         )
 
         # Prepare lookup dictionaries
-        fp_geom_lookup, div_geom_lookup = _prepare_dataframes(reference_flowpaths, reference_divides)
+        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
 
         result = _aggregate_geometries(
             classifications=empty_classifications,
-            reference_flowpaths=reference_flowpaths,
-            fp_geom_lookup=fp_geom_lookup,
-            div_geom_lookup=div_geom_lookup,
+            partition_data={
+                "flowpaths": reference_flowpaths,
+                "fp_lookup": fp_lookup,
+                "div_lookup": div_lookup,
+            },
         )
 
         # Should return empty lists
