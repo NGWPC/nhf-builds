@@ -55,11 +55,12 @@ def sample_flowpaths() -> gpd.GeoDataFrame:
 
 
 @pytest.fixture
-def sample_config(mock_geopackages: tuple[str, str]) -> HFConfig:
+def sample_config(mock_geopackages: tuple[str, str], tmp_path: Path) -> HFConfig:
     """Fixture providing a sample HFConfig."""
     return HFConfig(
         reference_divides_path=mock_geopackages[0],
         reference_flowpaths_path=mock_geopackages[1],
+        output_dir=tmp_path,
     )
 
 

@@ -81,7 +81,7 @@ def _calculate_id_ranges_pure(outlet_aggregations: dict) -> dict[str, Any]:
 
 def _combine_hydrofabrics(
     built_hydrofabrics: dict[str, dict[str, Any]], crs: str
-) -> dict[str, gpd.GeoDataFrame]:
+) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
     """Function to combine multiple outlet hydrofabrics.
 
     Parameters
@@ -113,6 +113,7 @@ def _combine_hydrofabrics(
     all_flowpaths = []
     all_divides = []
     all_nexus = []
+    all_reference_flowpaths = []
 
     valid_hydrofabrics = {k: v for k, v in built_hydrofabrics.items() if v is not None}
     if not valid_hydrofabrics:
@@ -125,6 +126,8 @@ def _combine_hydrofabrics(
             raise KeyError(f"Missing 'divides' for outlet {outlet_id}")
         if "nexus" not in hf_data:
             raise KeyError(f"Missing 'nexus' for outlet {outlet_id}")
+        if "reference_flowpaths" not in hf_data:
+            raise KeyError(f"Missing 'reference_flowpaths' for outlet {outlet_id}")
 
         if hf_data["flowpaths"] is not None:
             if not hf_data["flowpaths"].empty:
@@ -132,6 +135,9 @@ def _combine_hydrofabrics(
         if hf_data["nexus"] is not None:
             if not hf_data["nexus"].empty:
                 all_nexus.append(hf_data["nexus"])
+        if hf_data["reference_flowpaths"] is not None:
+            if not hf_data["reference_flowpaths"].empty:
+                all_reference_flowpaths.append(hf_data["reference_flowpaths"])
         if hf_data["divides"] is not None:
             # Making sure that the divides layer geometry isn't empty
             if not hf_data["divides"].empty and not hf_data["divides"].geometry.is_empty.iloc[0]:
@@ -143,6 +149,7 @@ def _combine_hydrofabrics(
     combined_flowpaths = pd.concat(all_flowpaths, ignore_index=True)
     combined_divides = pd.concat(all_divides, ignore_index=True)
     combined_nexus = pd.concat(all_nexus, ignore_index=True)
+    combined_reference_flowpaths = pd.concat(all_reference_flowpaths, ignore_index=True)
 
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
@@ -161,4 +168,5 @@ def _combine_hydrofabrics(
         "flowpaths": final_flowpaths,
         "divides": final_divides,
         "nexus": final_nexus,
+        "reference_flowpaths": combined_reference_flowpaths,
     }

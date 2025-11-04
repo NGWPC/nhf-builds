@@ -1,6 +1,7 @@
 """Contains all code for writing hydrofabric data"""
 
 import logging
+import sqlite3
 from typing import Any, cast
 
 from pyprojroot import here
@@ -36,6 +37,7 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     final_flowpaths = ti.xcom_pull(task_id="reduce_base", key="flowpaths")
     final_divides = ti.xcom_pull(task_id="reduce_base", key="divides")
     final_nexus = ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_reference_flowpaths = ti.xcom_pull(task_id="reduce_base", key="reference_flowpaths")
     final_divides.to_file(
         cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="divides", driver="GPKG"
     )
@@ -43,5 +45,10 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
         cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="flowpaths", driver="GPKG"
     )
     final_nexus.to_file(cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="nexus", driver="GPKG")
+
+    conn = sqlite3.connect(cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg")
+    final_reference_flowpaths.to_sql("reference_flowpaths", conn, index=False)
+    conn.close()
+
     logger.info(f"write_base task: wrote base geopackage layers to base_hydrofabric_{__version__}.gpkg")
     return {"base_file_path": here() / f"data/base_hydrofabric_{__version__}.gpkg"}

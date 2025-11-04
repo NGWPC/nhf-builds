@@ -5,6 +5,7 @@ from collections import deque
 from typing import Any
 
 import geopandas as gpd
+import pandas as pd
 from shapely import Point
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
@@ -195,169 +196,6 @@ def _create_nexus_point(
     }
 
 
-def _process_unit(
-    current_ref_id: str,
-    unit_info: dict[str, Any],
-    fp_lookup: dict[str, dict[str, Any]],
-    fp_by_hydroseq: dict[Any, dict[str, Any]],
-    connector_to_downstream: dict[str, str | None],
-    connector_line_geoms: dict[str, list[BaseGeometry]],
-    ref_id_to_new_id: dict[str, int],
-    downstream_fp_to_nexus: dict[int, int],
-    new_id: int,
-    nexus_counter: int,
-    fp_data: list[dict[str, Any]],
-    div_data: list[dict[str, Any]],
-    nexus_data: list[dict[str, Any]],
-    base_minor_data: list[dict[str, Any]],
-) -> tuple[int, int]:
-    """Process a single unit and create flowpath/divide/nexus.
-
-    Parameters
-    ----------
-    current_ref_id : str
-        The current reference ID being processed
-    unit_info : dict[str, Any]
-        Unit information including type, unit data, and ref_ids
-    fp_lookup : dict[str, dict[str, Any]]
-        Flowpath lookup dictionary
-    fp_by_hydroseq : dict[Any, dict[str, Any]]
-        Flowpath lookup by hydroseq
-    connector_to_downstream : dict[str, str | None]
-        Connector to downstream mapping
-    connector_line_geoms : dict[str, list[BaseGeometry]]
-        Connector line geometries
-    ref_id_to_new_id : dict[str, int]
-        Reference ID to new ID mapping
-    downstream_fp_to_nexus : dict[int, int]
-        Downstream flowpath to nexus mapping
-    new_id : int
-        Current new ID counter
-    nexus_counter : int
-        Current nexus ID counter
-    fp_data : list[dict[str, Any]]
-        Flowpath data accumulator
-    div_data : list[dict[str, Any]]
-        Divide data accumulator
-    nexus_data : list[dict[str, Any]]
-        Nexus data accumulator
-    base_minor_data : list[dict[str, Any]]
-        Base minor flowpath data accumulator
-
-    Returns
-    -------
-    tuple[int, int]
-        Updated (new_id, nexus_counter) after processing
-    """
-    unit: dict[str, Any] = unit_info["unit"]
-    unit_type: str = unit_info["type"]
-    ref_ids: list[str] = list(unit_info["all_ref_ids"])
-
-    # Check if any upstream connectors should be patched into this unit
-    line_geoms_to_merge: list[BaseGeometry] = [unit["line_geometry"]]
-    upstream_connector_ids: list[str] = []
-
-    for connector_id, dn_id in connector_to_downstream.items():
-        if dn_id == current_ref_id:
-            line_geoms_to_merge.extend(connector_line_geoms[connector_id])
-            upstream_connector_ids.append(connector_id)
-
-            if len(connector_line_geoms[connector_id]) > 1:
-                logger.debug(
-                    f"Patching connector chain (length={len(connector_line_geoms[connector_id])}) "
-                    f"ending with {connector_id} into {current_ref_id}"
-                )
-            else:
-                logger.debug(f"Patching no-divide connector {connector_id} into {current_ref_id}")
-
-    merged_line_geom: BaseGeometry = (
-        unary_union(line_geoms_to_merge) if len(line_geoms_to_merge) > 1 else unit["line_geometry"]
-    )
-
-    # Get original flowpaths
-    original_fps: list[dict[str, Any]] = [fp_lookup[ref_id] for ref_id in ref_ids if ref_id in fp_lookup]
-
-    if not original_fps:
-        logger.warning(f"No flowpaths found for unit {ref_ids}")
-        return new_id, nexus_counter
-
-    # Find outlet flowpath
-    outlet_fp: dict[str, Any]
-    if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
-        dn_id_str: str = unit_info["dn_id"]
-        outlet_fp_temp = fp_lookup.get(dn_id_str)
-
-        if outlet_fp_temp is None:
-            outlet_fp = min(original_fps, key=lambda x: x["hydroseq"])
-        else:
-            outlet_fp = outlet_fp_temp
-    else:
-        if len(original_fps) == 1:
-            outlet_fp = original_fps[0]
-        else:
-            outlet_fp = min(original_fps, key=lambda x: x["hydroseq"])
-
-    # Find downstream unit
-    downstream_unit_id = _find_downstream_unit(
-        outlet_fp, fp_by_hydroseq, connector_to_downstream, ref_id_to_new_id
-    )
-
-    # Get or create nexus
-    nexus_id: int
-    if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
-        nexus_id = downstream_fp_to_nexus[downstream_unit_id]
-    else:
-        nexus_id = nexus_counter
-        nexus_counter += 1
-
-        nexus = _create_nexus_point(merged_line_geom, nexus_id, downstream_unit_id)
-        nexus_data.append(nexus)
-
-        if downstream_unit_id is not None:
-            downstream_fp_to_nexus[downstream_unit_id] = nexus_id
-
-    # Check for divide polygon
-    polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
-    if polygon_geom is None or polygon_geom.is_empty:
-        logger.debug(f"Skipping flowpath creation for unit {ref_ids} - no divide polygon")
-
-        # Register connector IDs
-        for connector_id in upstream_connector_ids:
-            ref_id_to_new_id[connector_id] = new_id
-
-        ref_id_to_new_id[current_ref_id] = new_id
-        return new_id, nexus_counter
-
-    # Create flowpath and divide
-    fp_entry: dict[str, Any] = {
-        "fp_id": new_id,
-        "dn_nex_id": nexus_id,
-        "up_nex_id": None,
-        "div_id": new_id,
-        "geometry": merged_line_geom,
-    }
-
-    if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
-        base_minor_data.append(
-            {
-                "fp_id": new_id,
-                "dn_ref_id": unit_info["dn_id"],
-                "up_ref_id": unit_info["up_id"],
-            }
-        )
-
-    fp_data.append(fp_entry)
-    div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
-
-    # Register connector IDs
-    for connector_id in upstream_connector_ids:
-        ref_id_to_new_id[connector_id] = new_id
-
-    new_id += 1
-
-    return new_id, nexus_counter
-
-
 def _build_base_hydrofabric(
     start_id: str,
     aggregate_data: Aggregations,
@@ -365,7 +203,7 @@ def _build_base_hydrofabric(
     partition_data: dict[str, Any],
     cfg: HFConfig,
     id_offset: int = 0,
-) -> dict[str, gpd.GeoDataFrame | list[dict[str, Any]] | None]:
+) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame) | list[dict[str, Any]] | None]:
     """Build the base hydrofabric layers with no-divide connector patching using dictionary lookups.
 
     No-divide connectors are flowpaths without catchment polygons that connect
@@ -391,8 +229,8 @@ def _build_base_hydrofabric(
 
     Returns
     -------
-    dict[str, gpd.GeoDataFrame | list[dict[str, Any]] | None]
-        Built hydrofabric data with keys: flowpaths, divides, nexus, base_minor_flowpaths
+    dict[str, (gpd.GeoDataFrame | pd.DataFrame) | list[dict[str, Any]] | None]
+        Built hydrofabric data with keys: flowpaths, divides, nexus, base_minor_flowpaths, reference_flowpaths
     """
     # Extract from partition_data
     fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
@@ -416,6 +254,7 @@ def _build_base_hydrofabric(
     fp_data: list[dict[str, Any]] = []
     div_data: list[dict[str, Any]] = []
     nexus_data: list[dict[str, Any]] = []
+    reference_flowpaths_data: list[dict[str, Any]] = []
     base_minor_data: list[dict[str, Any]] = []
     ref_id_to_new_id: dict[str, int] = {}
     downstream_fp_to_nexus: dict[int, int] = {}
@@ -473,26 +312,145 @@ def _build_base_hydrofabric(
             visited_ref_ids.add(ref_id)
             ref_id_to_new_id[ref_id] = new_id
 
-        # Process the unit
-        new_id, nexus_counter = _process_unit(
-            current_ref_id,
-            unit_info,
-            fp_lookup,
-            fp_by_hydroseq,
-            connector_to_downstream,
-            connector_line_geoms,
-            ref_id_to_new_id,
-            downstream_fp_to_nexus,
-            new_id,
-            nexus_counter,
-            fp_data,
-            div_data,
-            nexus_data,
-            base_minor_data,
+        # Processing the layer
+        unit: dict[str, Any] = unit_info["unit"]
+        unit_type: str = unit_info["type"]
+        ref_ids: list[str] = list(unit_info["all_ref_ids"])
+
+        # Check if any upstream connectors should be patched into this unit
+        line_geoms_to_merge: list[BaseGeometry] = [unit["line_geometry"]]
+        upstream_connector_ids: list[str] = []
+
+        for connector_id, dn_id in connector_to_downstream.items():
+            if dn_id == current_ref_id:
+                line_geoms_to_merge.extend(connector_line_geoms[connector_id])
+                upstream_connector_ids.append(connector_id)
+
+                if len(connector_line_geoms[connector_id]) > 1:
+                    logger.debug(
+                        f"Patching connector chain (length={len(connector_line_geoms[connector_id])}) "
+                        f"ending with {connector_id} into {current_ref_id}"
+                    )
+                else:
+                    logger.debug(f"Patching no-divide connector {connector_id} into {current_ref_id}")
+
+        merged_line_geom: BaseGeometry = (
+            unary_union(line_geoms_to_merge) if len(line_geoms_to_merge) > 1 else unit["line_geometry"]
         )
 
+        # Get original flowpaths
+        original_fps: list[dict[str, Any]] = [fp_lookup[ref_id] for ref_id in ref_ids if ref_id in fp_lookup]
+
+        if not original_fps:
+            logger.warning(f"No flowpaths found for unit {ref_ids}")
+            # Queue upstream segments before continuing
+            lookup_id: str
+            if unit_info["type"] == "aggregate":
+                lookup_id = unit_info["up_id"]
+            else:
+                lookup_id = current_ref_id
+
+            if lookup_id in node_indices:
+                lookup_idx = node_indices[lookup_id]
+                upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
+                for upstream_id in upstream_ids:
+                    to_process.append(upstream_id)
+            continue
+
+        # Find outlet flowpath
+        outlet_fp: dict[str, Any]
+        if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
+            dn_id_str: str = unit_info["dn_id"]
+            outlet_fp_temp = fp_lookup.get(dn_id_str)
+
+            if outlet_fp_temp is None:
+                outlet_fp = min(original_fps, key=lambda x: x["hydroseq"])
+            else:
+                outlet_fp = outlet_fp_temp
+        else:
+            if len(original_fps) == 1:
+                outlet_fp = original_fps[0]
+            else:
+                outlet_fp = min(original_fps, key=lambda x: x["hydroseq"])
+
+        # Find downstream unit
+        downstream_unit_id = _find_downstream_unit(
+            outlet_fp, fp_by_hydroseq, connector_to_downstream, ref_id_to_new_id
+        )
+
+        # Get or create nexus
+        nexus_id: int
+        if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
+            nexus_id = downstream_fp_to_nexus[downstream_unit_id]
+        else:
+            nexus_id = nexus_counter
+            nexus_counter += 1
+
+            nexus = _create_nexus_point(merged_line_geom, nexus_id, downstream_unit_id)
+            nexus_data.append(nexus)
+
+            if downstream_unit_id is not None:
+                downstream_fp_to_nexus[downstream_unit_id] = nexus_id
+
+        # Check for divide polygon
+        polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
+        if polygon_geom is None or polygon_geom.is_empty:
+            logger.debug(f"Skipping flowpath creation for unit {ref_ids} - no divide polygon")
+
+            # Register connector IDs
+            for connector_id in upstream_connector_ids:
+                ref_id_to_new_id[connector_id] = new_id
+
+            ref_id_to_new_id[current_ref_id] = new_id
+
+            # Queue upstream segments before continuing
+            if unit_info["type"] == "aggregate":
+                lookup_id = unit_info["up_id"]
+            else:
+                lookup_id = current_ref_id
+
+            if lookup_id in node_indices:
+                lookup_idx = node_indices[lookup_id]
+                upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
+                for upstream_id in upstream_ids:
+                    to_process.append(upstream_id)
+            continue
+
+        # Create flowpath and divide
+        fp_entry: dict[str, Any] = {
+            "fp_id": new_id,
+            "dn_nex_id": nexus_id,
+            "up_nex_id": None,
+            "div_id": new_id,
+            "geometry": merged_line_geom,
+        }
+
+        for ref_id in ref_ids:
+            _ref_entry: dict[str, Any] = {
+                "ref_fp_id": int(ref_id),
+                "fp_id": new_id,
+            }
+            reference_flowpaths_data.append(_ref_entry)
+
+        if unit_type == "aggregate" and unit_info.get("dn_id") is not None:
+            base_minor_data.append(
+                {
+                    "fp_id": new_id,
+                    "dn_ref_id": unit_info["dn_id"],
+                    "up_ref_id": unit_info["up_id"],
+                }
+            )
+
+        fp_data.append(fp_entry)
+        div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
+
+        # Register connector IDs
+        for connector_id in upstream_connector_ids:
+            ref_id_to_new_id[connector_id] = new_id
+
+        new_id += 1
+
         # Queue upstream segments
-        lookup_id: str
         if unit_info["type"] == "aggregate":
             lookup_id = unit_info["up_id"]
         else:
@@ -519,18 +477,22 @@ def _build_base_hydrofabric(
     flowpaths_gdf: gpd.GeoDataFrame | None
     divides_gdf: gpd.GeoDataFrame | None
     nexus_gdf: gpd.GeoDataFrame | None
+    reference_flowpaths_df: pd.DataFrame | None
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
         divides_gdf = gpd.GeoDataFrame(div_data, crs=cfg.crs)
         nexus_gdf = gpd.GeoDataFrame(nexus_data, crs=cfg.crs)
+        reference_flowpaths_df = pd.DataFrame(reference_flowpaths_data)
     except ValueError:
         flowpaths_gdf = None
         divides_gdf = None
         nexus_gdf = None
+        reference_flowpaths_df = None
 
     return {
         "flowpaths": flowpaths_gdf,
         "divides": divides_gdf,
         "nexus": nexus_gdf,
         "base_minor_flowpaths": base_minor_data,
+        "reference_flowpaths": reference_flowpaths_df,
     }

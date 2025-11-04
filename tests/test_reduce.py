@@ -9,7 +9,7 @@ from hydrofabric_builds.pipeline.processing import _calculate_id_ranges_pure, _c
 
 
 @pytest.fixture
-def sample_hydrofabric_outlet1() -> dict[str, gpd.GeoDataFrame]:
+def sample_hydrofabric_outlet1() -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
     """Sample hydrofabric for outlet 1."""
     crs = "EPSG:5070"
     return {
@@ -46,11 +46,17 @@ def sample_hydrofabric_outlet1() -> dict[str, gpd.GeoDataFrame]:
             },
             crs=crs,
         ),
+        "reference_flowpaths": pd.DataFrame(
+            {
+                "ref_fp_id": [1, 2],
+                "fp_id": [1, 2],
+            }
+        ),
     }
 
 
 @pytest.fixture
-def sample_hydrofabric_outlet2() -> dict[str, gpd.GeoDataFrame]:
+def sample_hydrofabric_outlet2() -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
     """Sample hydrofabric for outlet 2."""
     crs = "EPSG:5070"
     return {
@@ -88,6 +94,12 @@ def sample_hydrofabric_outlet2() -> dict[str, gpd.GeoDataFrame]:
                 "geometry": [Point(4, 4), Point(5, 5), Point(6, 6)],
             },
             crs=crs,
+        ),
+        "reference_flowpaths": pd.DataFrame(
+            {
+                "ref_fp_id": [3, 4, 5],
+                "fp_id": [3, 4, 5],
+            }
         ),
     }
 
@@ -301,14 +313,20 @@ class TestCombineHydrofabricsPure:
                     },
                     crs=crs,
                 ),
+                "reference_flowpaths": pd.DataFrame(
+                    {
+                        "ref_fp_id": [i * 10 + j for j in range(5)],
+                        "fp_id": [i * 10 + j for j in range(5)],
+                    }
+                ),
             }
 
         result = _combine_hydrofabrics(many_outlets, crs)
 
-        # 10 outlets * 5 features each = 50 total
         assert len(result["flowpaths"]) == 50
         assert len(result["divides"]) == 50
         assert len(result["nexus"]) == 50
+        assert len(result["reference_flowpaths"]) == 50
 
     def test_empty_geodataframes(self) -> None:
         """Test handling of outlets with empty GeoDataFrames."""
@@ -320,6 +338,7 @@ class TestCombineHydrofabricsPure:
                 ),
                 "divides": gpd.GeoDataFrame({"div_id": [], "type": [], "geometry": []}, crs=crs),
                 "nexus": gpd.GeoDataFrame({"nex_id": [], "downstream_fp_id": [], "geometry": []}, crs=crs),
+                "reference_flowpaths": pd.DataFrame({"ref_fp_id": [], "fp_id": []}),
             }
         }
 
@@ -362,13 +381,49 @@ class TestCalculateIdRangesPure:
         with pytest.raises(ValueError):
             _calculate_id_ranges_pure({})
 
-    def test_handles_single_outlet(self) -> None:
-        single = {"outlet1": {"outlet": "outlet1", "num_features": 10}}
-        result = _calculate_id_ranges_pure(single)
+    def test_handles_single_outlet(self, sample_hydrofabric_outlet1: dict) -> None:
+        """Test combination with single outlet."""
+        single_outlet = {"outlet1": sample_hydrofabric_outlet1}
 
-        ranges = result["outlet_id_ranges"]
-        assert ranges["outlet1"]["id_offset"] == 1
-        assert ranges["outlet1"]["id_max"] == 10
+        result = _combine_hydrofabrics(single_outlet, "EPSG:5070")
+
+        assert len(result["flowpaths"]) == 2
+        assert len(result["divides"]) == 2
+        assert len(result["nexus"]) == 2
+        assert len(result["reference_flowpaths"]) == 2
+
+    def test_combines_reference_flowpaths(self, built_hydrofabrics: dict) -> None:
+        """Test that reference_flowpaths are combined correctly."""
+        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
+
+        assert "reference_flowpaths" in result
+        assert isinstance(result["reference_flowpaths"], pd.DataFrame)
+
+        # Should have 5 total reference flowpaths (2 from outlet1 + 3 from outlet2)
+        assert len(result["reference_flowpaths"]) == 5
+
+        assert "ref_fp_id" in result["reference_flowpaths"].columns
+        assert "fp_id" in result["reference_flowpaths"].columns
+
+        expected_ref_ids = [1, 2, 3, 4, 5]
+        assert sorted(result["reference_flowpaths"]["ref_fp_id"].tolist()) == expected_ref_ids
+
+        expected_fp_ids = [1, 2, 3, 4, 5]
+        assert sorted(result["reference_flowpaths"]["fp_id"].tolist()) == expected_fp_ids
+
+    def test_raises_when_missing_reference_flowpaths_key(self, sample_hydrofabric_outlet1: dict) -> None:
+        """Test error when reference_flowpaths key missing from hydrofabric."""
+        bad_hydrofabric = {
+            "outlet1": {
+                "flowpaths": sample_hydrofabric_outlet1["flowpaths"],
+                "divides": sample_hydrofabric_outlet1["divides"],
+                "nexus": sample_hydrofabric_outlet1["nexus"],
+                # Missing "reference_flowpaths"
+            }
+        }
+
+        with pytest.raises(KeyError, match="Missing 'reference_flowpaths' for outlet outlet1"):
+            _combine_hydrofabrics(bad_hydrofabric, "EPSG:5070")
 
     def test_handles_many_outlets(self) -> None:
         many = {f"outlet{i}": {"outlet": f"outlet{i}", "num_features": i} for i in range(1, 11)}
