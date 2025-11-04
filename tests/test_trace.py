@@ -57,6 +57,12 @@ def test_connector_aggregates_small_order1_upstreams(
         {"flowpath_id": "up2", "areasqkm": 5.0, "streamorder": 2, "length_km": 5.0, "mainstemlp": 100.0},
         {"flowpath_id": "up3", "areasqkm": 0.3, "streamorder": 1, "length_km": 0.8, "mainstemlp": 8.0},
     ]
+    fp_lookup = {
+        "fp1": {"flowpath_id": "fp1", "areasqkm": 10.0, "streamorder": 3, "flowpath_toid": "0"},
+        "up1": {"flowpath_id": "up1", "areasqkm": 5.0, "streamorder": 2, "flowpath_toid": "fp1"},
+        "up2": {"flowpath_id": "up2", "areasqkm": 5.0, "streamorder": 2, "flowpath_toid": "fp1"},
+        "up3": {"flowpath_id": "up3", "areasqkm": 0.3, "streamorder": 1, "flowpath_toid": "fp1"},
+    }
 
     result = Classifications()
 
@@ -69,6 +75,8 @@ def test_connector_aggregates_small_order1_upstreams(
         div_ids=div_ids,
         graph=graph,
         node_indices=node_indices,
+        fp_lookup=fp_lookup,
+        to_process=deque(),
     )
 
     assert is_connector

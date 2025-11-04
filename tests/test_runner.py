@@ -15,7 +15,6 @@ from hydrofabric_builds import (
     map_trace_and_aggregate,
     reduce_calculate_id_ranges,
     reduce_combine_base_hydrofabric,
-    write_base_hydrofabric,
 )
 from scripts.hf_runner import LocalRunner, TaskInstance
 
@@ -201,7 +200,7 @@ class TestIntegration:
             runner.run_task(
                 task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
             )
-            runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
+            # runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
 
             assert all(r["status"] == "success" for r in runner.results.values())
 

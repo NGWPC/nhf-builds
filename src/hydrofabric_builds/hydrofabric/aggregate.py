@@ -139,7 +139,6 @@ def _process_aggregation_pairs(
         except KeyError as e:
             logger.warning(f"Missing flowpath data for group {group_ids}: {e}")
             continue
-
     return results
 
 

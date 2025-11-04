@@ -1,4 +1,4 @@
-"""Extended conftest for test_trace.py with edge case fixtures."""
+"""conftest for test_trace.py with edge case fixtures."""
 
 from collections import deque
 from pathlib import Path
@@ -1201,9 +1201,12 @@ def create_partition_data_from_dataframes(
     _fp_lookup = flowpaths_df.to_dicts()
     fp_lookup = {str(row["flowpath_id"]): row for row in _fp_lookup}
 
-    # Add dummy shapely geometries for tests (not actually used in trace logic)
+    # Add dummy shapely geometries and flowpath_toid for tests
     for fp_id in fp_lookup:
         fp_lookup[fp_id]["shapely_geometry"] = LineString([(0, 0), (1, 1)])
+        # Add flowpath_toid if not present
+        if "flowpath_toid" not in fp_lookup[fp_id]:
+            fp_lookup[fp_id]["flowpath_toid"] = "0"  # Default to outlet
 
     # Create div_lookup
     div_lookup = {}

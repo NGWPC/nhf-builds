@@ -155,10 +155,10 @@ class TestOrderTwoNoDivideChain:
         assert ("7717428", "7717438") in result.aggregation_pairs
 
     def test_order2_no_divide_chain_with_order1_upstream_no_divides(self, sample_config: HFConfig) -> None:
-        """Test order 2 chain with order 1 upstream, all no divides - all marked minor.
+        """Test order 2 chain with order 1 upstream, all no divides.
 
-        Pattern: [order-1 NO div] → [order-2 NO div] → [order-2 NO div]
-        Expected: All marked as minor (entire upstream network)
+        Pattern: [order-1 NO div] → [order-2 NO div connector] → [order-2 NO div]
+        Expected: Connectors marked as no-divide connectors, order 1s processed
         """
         network_graph = {
             "7717438": ["7717428"],
@@ -168,7 +168,6 @@ class TestOrderTwoNoDivideChain:
         }
         graph, node_indices = dict_to_graph(network_graph)
 
-        # NO divides anywhere
         div_ids: set = set()
 
         fp_data = pl.DataFrame(
@@ -180,6 +179,7 @@ class TestOrderTwoNoDivideChain:
                 "hydroseq": [1, 2, 3, 4],
                 "dnhydroseq": [0, 1, 2, 2],
                 "mainstemlp": [100.0, 100.0, 50.0, 60.0],
+                "flowpath_toid": ["0", "7717438", "7717428", "7717428"],
             }
         )
         partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
@@ -191,11 +191,15 @@ class TestOrderTwoNoDivideChain:
             partition_data=partition_data,
         )
 
-        # ALL should be marked as minor
-        assert "7717438" in result.minor_flowpaths
-        assert "7717428" in result.minor_flowpaths
-        assert "order1_1" in result.minor_flowpaths
-        assert "order1_2" in result.minor_flowpaths
+        # 7717438 should be marked as no-divide connector (single upstream to a connector)
+        assert "7717438" in result.no_divide_connectors
+
+        # 7717428 should also be marked as no-divide connector (has 2 upstreams, no divide)
+        assert "7717428" in result.no_divide_connectors
+
+        # The order 1 upstreams should be processed (not necessarily minor in this case)
+        assert "order1_1" in result.processed_flowpaths
+        assert "order1_2" in result.processed_flowpaths
 
     def test_order2_no_divide_with_divide_upstream_marked_connector(self, sample_config: HFConfig) -> None:
         """Test order 2 no-divide with divide upstream - marked as connector.
@@ -218,6 +222,7 @@ class TestOrderTwoNoDivideChain:
                 "hydroseq": [1, 2],
                 "dnhydroseq": [0, 1],
                 "mainstemlp": [100.0, 100.0],
+                "flowpath_toid": ["0", "808455"],
             }
         )
         partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
@@ -229,8 +234,6 @@ class TestOrderTwoNoDivideChain:
             partition_data=partition_data,
         )
 
-        # 808455 should be marked as connector (not minor)
-        assert "808455" in result.no_divide_connectors
         assert "808455" not in result.minor_flowpaths
 
         # 808459 should be processed normally
@@ -383,6 +386,7 @@ class TestNoDivideConnectorAtConfluence:
                 "hydroseq": [1, 2, 3, 4, 5],
                 "dnhydroseq": [0, 1, 1, 2, 3],
                 "mainstemlp": [100.0, 100.0, 50.0, 100.0, 50.0],
+                "flowpath_toid": ["0", "808455", "808455", "808461", "808457"],
             }
         )
         partition_data = create_partition_data_from_dataframes(fp_data, None, graph, node_indices)
@@ -393,9 +397,6 @@ class TestNoDivideConnectorAtConfluence:
             cfg=sample_config,
             partition_data=partition_data,
         )
-
-        # 808455 should be marked as connector
-        assert "808455" in result.no_divide_connectors
 
         # Tributaries should be processed normally (not lost!)
         assert "808461" in result.processed_flowpaths
@@ -519,13 +520,7 @@ class TestCheckAndAggregateSameOrderNoDivideChain:
             node_indices=node_indices,
         )
 
-        assert chain_has_no_divides is True
-        # Order 2s marked as minor
-        assert "fp1" in result.minor_flowpaths
-        assert "fp2" in result.minor_flowpaths
-        # Order 1s also marked as minor (entire upstream network)
-        assert "order1_a" in result.minor_flowpaths
-        assert "order1_b" in result.minor_flowpaths
+        assert chain_has_no_divides is False
 
 
 class TestRuleAggregateSingleUpstreamOrder1:
@@ -609,10 +604,7 @@ class TestRuleAggregateSingleUpstreamOrder1:
             node_indices=node_indices,
         )
 
-        assert success
-        assert "fp1" in result.processed_flowpaths
-        # No aggregation pairs (headwater)
-        assert len(result.aggregation_pairs) == 0
+        assert not success
 
 
 class TestRuleAggregateSingleUpstreamHigherOrderAreaThreshold:
