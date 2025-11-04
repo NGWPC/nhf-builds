@@ -125,7 +125,7 @@ def _process_aggregation_pairs(
 
             results.append(
                 {
-                    "ref_ids": group_ids,
+                    "ref_ids": fp_ids,
                     "dn_id": sorted_ids_asc[0],
                     "up_id": sorted_ids_asc[-1],
                     "vpu_id": vpu_id,
