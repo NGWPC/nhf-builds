@@ -164,6 +164,9 @@ def _combine_hydrofabrics(
         final_divides = final_divides.set_crs(crs)
         final_nexus = final_nexus.set_crs(crs)
 
+    final_flowpaths = final_flowpaths.assign(
+        geometry=final_flowpaths.line_merge()
+    )  # removing multilinestring geometries
     return {
         "flowpaths": final_flowpaths,
         "divides": final_divides,

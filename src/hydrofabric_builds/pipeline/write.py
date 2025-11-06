@@ -34,7 +34,10 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     """
     cfg = cast(HFConfig, context["config"])
     ti = cast(TaskInstance, context["ti"])
-    final_flowpaths = ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    file_name = cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg"
+    file_name.unlink(missing_ok=True)  # deletes files that exist with the same name
+
+    final_flowpaths = ti.xcom_pull(task_id="trace_attributes", key="flowpaths_with_attributes")
     final_divides = ti.xcom_pull(task_id="reduce_base", key="divides")
     final_nexus = ti.xcom_pull(task_id="reduce_base", key="nexus")
     final_reference_flowpaths = ti.xcom_pull(task_id="reduce_base", key="reference_flowpaths")

@@ -15,7 +15,7 @@ from hydrofabric_builds.hydrofabric.build import (
     _build_base_hydrofabric,
     _order_aggregates_base,
 )
-from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookups
+from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookup
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 
 
@@ -160,6 +160,11 @@ class TestOrderAggregatesBase:
                     "ref_ids": ["fp1", "fp2"],
                     "dn_id": "fp1",
                     "up_id": "fp2",
+                    "vpu_id": "01",
+                    "hydroseq": 1,
+                    "area_sqkm": 3.0,
+                    "length_km": 3.0,
+                    "div_area_sqkm": 3.0,
                     "line_geometry": LineString([(0, 0), (1, 1)]),
                     "polygon_geometry": Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                 }
@@ -549,7 +554,7 @@ class TestBuildBaseHydrofabric:
             cfg=sample_config,
         )
 
-        required_cols = ["nex_id", "downstream_fp_id", "geometry"]
+        required_cols = ["nex_id", "dn_fp_id", "geometry"]
         nexus: gpd.GeoDataFrame = result["nexus"]
         for col in required_cols:
             assert col in nexus.columns
@@ -770,7 +775,8 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
@@ -802,7 +808,8 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
@@ -842,7 +849,8 @@ class TestAggregateGeometries:
         reference_divides = pl.from_pandas(reference_divides.to_wkb())
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
@@ -880,7 +888,8 @@ class TestAggregateGeometries:
         assert len(sample_classifications.aggregation_pairs) > 0
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
@@ -916,7 +925,8 @@ class TestAggregateGeometries:
         assert len(sample_classifications.independent_flowpaths) > 0
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=sample_classifications,
@@ -992,7 +1002,8 @@ class TestAggregateGeometries:
         )
 
         # Prepare lookup dictionaries
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=empty_classifications,

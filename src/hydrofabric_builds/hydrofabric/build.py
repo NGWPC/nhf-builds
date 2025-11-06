@@ -37,6 +37,11 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
         unit_info: dict[str, Any] = {
             "unit": unit,
             "type": "aggregate",
+            "vpu_id": unit["vpu_id"],
+            "hydroseq": unit["hydroseq"],
+            "length_km": unit["length_km"],
+            "area_sqkm": unit["area_sqkm"],
+            "div_area_sqkm": unit["div_area_sqkm"],
             "up_id": str(unit["up_id"]),
             "dn_id": str(unit["dn_id"]),
             "all_ref_ids": [str(rid) for rid in unit["ref_ids"]],  # Store all ref_ids
@@ -46,11 +51,29 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
 
     for unit in aggregate_data.independents:
         ref_id = unit["ref_ids"]
-        ref_id_to_unit[ref_id] = {"unit": unit, "type": "independent", "all_ref_ids": [ref_id]}
+        ref_id_to_unit[ref_id] = {
+            "unit": unit,
+            "type": "independent",
+            "vpu_id": unit["vpu_id"],
+            "hydroseq": unit["hydroseq"],
+            "length_km": unit["length_km"],
+            "area_sqkm": unit["area_sqkm"],
+            "div_area_sqkm": unit["div_area_sqkm"],
+            "all_ref_ids": [ref_id],
+        }
 
     for unit in aggregate_data.connectors:
         ref_id = unit["ref_ids"]
-        ref_id_to_unit[ref_id] = {"unit": unit, "type": "connectors", "all_ref_ids": [ref_id]}
+        ref_id_to_unit[ref_id] = {
+            "unit": unit,
+            "type": "connectors",
+            "vpu_id": unit["vpu_id"],
+            "hydroseq": unit["hydroseq"],
+            "length_km": unit["length_km"],
+            "area_sqkm": unit["area_sqkm"],
+            "div_area_sqkm": unit["div_area_sqkm"],
+            "all_ref_ids": [ref_id],
+        }
     return ref_id_to_unit
 
 
@@ -180,7 +203,7 @@ def _create_nexus_point(
     Returns
     -------
     dict[str, Any]
-        Nexus data dictionary with nex_id, downstream_fp_id, and geometry
+        Nexus data dictionary with nex_id, dn_fp_id, and geometry
     """
     # Use merged geometry for nexus point
     if merged_line_geom.geom_type == "MultiLineString":
@@ -191,7 +214,7 @@ def _create_nexus_point(
 
     return {
         "nex_id": nexus_counter,
-        "downstream_fp_id": downstream_unit_id,
+        "dn_fp_id": downstream_unit_id,
         "geometry": Point(end_coordinate),
     }
 
@@ -419,9 +442,13 @@ def _build_base_hydrofabric(
         # Create flowpath and divide
         fp_entry: dict[str, Any] = {
             "fp_id": new_id,
-            "dn_nex_id": nexus_id,
+            "dn_nex_id": int(nexus_id),
             "up_nex_id": None,
             "div_id": new_id,
+            "vpu_id": unit["vpu_id"],
+            "hydroseq": unit["hydroseq"],
+            "length_km": unit["length_km"],
+            "area_sqkm": unit["area_sqkm"],
             "geometry": merged_line_geom,
         }
 
@@ -442,7 +469,15 @@ def _build_base_hydrofabric(
             )
 
         fp_data.append(fp_entry)
-        div_data.append({"div_id": new_id, "type": unit_type, "geometry": polygon_geom})
+        div_data.append(
+            {
+                "div_id": new_id,
+                "vpu_id": unit["vpu_id"],
+                "type": unit_type,
+                "area_sqkm": unit["div_area_sqkm"],
+                "geometry": polygon_geom,
+            }
+        )
 
         # Register connector IDs
         for connector_id in upstream_connector_ids:
@@ -464,14 +499,12 @@ def _build_base_hydrofabric(
 
     # Fix up_nex_id references
     nexus_by_downstream_fp: dict[int, int] = {
-        nexus["downstream_fp_id"]: nexus["nex_id"]
-        for nexus in nexus_data
-        if nexus.get("downstream_fp_id") is not None
+        nexus["dn_fp_id"]: nexus["nex_id"] for nexus in nexus_data if nexus.get("dn_fp_id") is not None
     }
     for fp_entry in fp_data:
         my_fp_id: int = fp_entry["fp_id"]
         if my_fp_id in nexus_by_downstream_fp:
-            fp_entry["up_nex_id"] = nexus_by_downstream_fp[my_fp_id]
+            fp_entry["up_nex_id"] = int(nexus_by_downstream_fp[my_fp_id])
 
     # Create GeoDataFrames
     flowpaths_gdf: gpd.GeoDataFrame | None
@@ -480,6 +513,10 @@ def _build_base_hydrofabric(
     reference_flowpaths_df: pd.DataFrame | None
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
+        flowpaths_gdf["fp_id"] = flowpaths_gdf["fp_id"].astype("Int64")
+        flowpaths_gdf["dn_nex_id"] = flowpaths_gdf["dn_nex_id"].astype("Int64")
+        flowpaths_gdf["up_nex_id"] = flowpaths_gdf["up_nex_id"].astype("Int64")
+
         divides_gdf = gpd.GeoDataFrame(div_data, crs=cfg.crs)
         nexus_gdf = gpd.GeoDataFrame(nexus_data, crs=cfg.crs)
         reference_flowpaths_df = pd.DataFrame(reference_flowpaths_data)

@@ -11,7 +11,7 @@ from shapely.geometry import LineString
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
 from hydrofabric_builds.hydrofabric.build import _order_aggregates_base
-from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookups, _detect_cycles
+from hydrofabric_builds.hydrofabric.graph import _create_dictionary_lookup, _detect_cycles
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 
 
@@ -289,7 +289,8 @@ class TestEmptyInputs:
             cumulative_merge_areas={},
         )
 
-        fp_lookup, div_lookup = _create_dictionary_lookups(reference_flowpaths, reference_divides)
+        fp_lookup = _create_dictionary_lookup(reference_flowpaths, "flowpath_id")
+        div_lookup = _create_dictionary_lookup(reference_divides, "divide_id")
 
         result = _aggregate_geometries(
             classifications=empty_classifications,

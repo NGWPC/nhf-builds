@@ -97,6 +97,7 @@ def _process_aggregation_pairs(
         try:
             # Get flowpath data from lookup dict
             fp_data = [fp_lookup[fp_id] for fp_id in fp_ids if fp_id in fp_lookup]
+            div_data = [div_lookup[fp_id] for fp_id in fp_ids if fp_id in div_lookup]
 
             if not fp_data:
                 logger.warning(f"Cannot find flowpaths for {group_ids}")
@@ -112,7 +113,9 @@ def _process_aggregation_pairs(
 
             # Compute aggregates
             length_km = sum(float(fp["lengthkm"]) for fp in fp_data)
-            total_da_sqkm = sum(float(fp["totdasqkm"]) for fp in fp_data)
+            area_sqkm = sum(float(fp["areasqkm"]) for fp in fp_data)
+            hydroseq = max(int(fp["hydroseq"]) for fp in fp_data)
+            div_area_sqkm = sum(float(div["areasqkm"]) for div in div_data)
             vpu_id = fp_data[0]["VPUID"]
 
             # Get geometries from lookup dicts
@@ -129,15 +132,17 @@ def _process_aggregation_pairs(
                     "dn_id": sorted_ids_asc[0],
                     "up_id": sorted_ids_asc[-1],
                     "vpu_id": vpu_id,
+                    "hydroseq": hydroseq,
                     "length_km": length_km,
-                    "total_da_sqkm": total_da_sqkm,
+                    "area_sqkm": area_sqkm,
+                    "div_area_sqkm": div_area_sqkm,
                     "line_geometry": unary_union(line_geoms),
                     "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
                 }
             )
 
-        except KeyError as e:
-            logger.warning(f"Missing flowpath data for group {group_ids}: {e}")
+        except KeyError:
+            logger.debug(f"Missing flowpath / divide path data for fp_ids {fp_ids}")
             continue
     return results
 
@@ -168,7 +173,6 @@ def _process_no_divide_connectors(
 
         fp_data = fp_lookup[fp]
 
-        # ✅ Use Polars - single filter operation, very fast
         fp_float = float(fp)
         upstream_ids = (
             reference_flowpaths.filter(pl.col("flowpath_toid") == fp_float)
@@ -220,14 +224,30 @@ def _process_independent_flowpaths(
     """
     results: list[dict[str, Any]] = []
     for fp in classifications.independent_flowpaths:
-        if fp in fp_lookup:
+        try:
+            fp_data = fp_lookup[fp]
+            div_data = div_lookup[fp]
+
+            length_km = float(fp_data["lengthkm"])
+            area_sqkm = float(fp_data["areasqkm"])
+            hydroseq = int(fp_data["hydroseq"])
+            div_area_sqkm = float(div_data["areasqkm"])
+            vpu_id = fp_data["VPUID"]
             results.append(
                 {
                     "ref_ids": fp,
+                    "vpu_id": vpu_id,
+                    "hydroseq": hydroseq,
+                    "length_km": length_km,
+                    "area_sqkm": area_sqkm,
+                    "div_area_sqkm": div_area_sqkm,
                     "line_geometry": fp_lookup[fp]["shapely_geometry"],
                     "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
                 }
             )
+        except KeyError:
+            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
+            continue
 
     return results
 
@@ -290,14 +310,30 @@ def _process_small_scale_connectors(
     """
     results: list[dict[str, Any]] = []
     for fp in classifications.subdivide_candidates:
-        if fp in fp_lookup:
+        try:
+            fp_data = fp_lookup[fp]
+            div_data = div_lookup[fp]
+
+            length_km = float(fp_data["lengthkm"])
+            area_sqkm = float(fp_data["areasqkm"])
+            hydroseq = int(fp_data["hydroseq"])
+            div_area_sqkm = float(div_data["areasqkm"])
+            vpu_id = fp_data["VPUID"]
             results.append(
                 {
                     "ref_ids": fp,
+                    "vpu_id": vpu_id,
+                    "hydroseq": hydroseq,
+                    "length_km": length_km,
+                    "area_sqkm": area_sqkm,
+                    "div_area_sqkm": div_area_sqkm,
                     "line_geometry": fp_lookup[fp]["shapely_geometry"],
                     "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
                 }
             )
+        except KeyError:
+            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
+            continue
 
     return results
 
@@ -325,15 +361,30 @@ def _process_connectors(
     """
     results: list[dict[str, Any]] = []
     for fp in classifications.connector_segments:
-        if fp in fp_lookup:
+        try:
+            fp_data = fp_lookup[fp]
+            div_data = div_lookup[fp]
+
+            length_km = float(fp_data["lengthkm"])
+            area_sqkm = float(fp_data["areasqkm"])
+            hydroseq = int(fp_data["hydroseq"])
+            div_area_sqkm = float(div_data["areasqkm"])
+            vpu_id = fp_data["VPUID"]
             results.append(
                 {
                     "ref_ids": fp,
+                    "vpu_id": vpu_id,
+                    "hydroseq": hydroseq,
+                    "length_km": length_km,
+                    "area_sqkm": area_sqkm,
+                    "div_area_sqkm": div_area_sqkm,
                     "line_geometry": fp_lookup[fp]["shapely_geometry"],
                     "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
                 }
             )
-
+        except KeyError:
+            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
+            continue
     return results
 
 

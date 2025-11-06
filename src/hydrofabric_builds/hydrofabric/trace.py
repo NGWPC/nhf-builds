@@ -4,6 +4,7 @@ import logging
 from collections import deque
 from typing import Any
 
+import polars as pl
 import rustworkx as rx
 
 from hydrofabric_builds.config import HFConfig
@@ -101,7 +102,7 @@ def _get_upstream_ids(flowpath_id: str, graph: rx.PyDiGraph, node_indices: dict[
 
 
 def _traverse_and_aggregate_all_upstream(
-    start_id: str,
+    upstream_id: str,
     downstream_id: str,
     result: Classifications,
     graph: rx.PyDiGraph,
@@ -125,8 +126,6 @@ def _traverse_and_aggregate_all_upstream(
     node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     """
-    upstream_id = start_id
-
     while True:
         result.aggregation_pairs.append((upstream_id, downstream_id))
         result.processed_flowpaths.add(upstream_id)
@@ -668,10 +667,10 @@ def _rule_independent_connector(
         # Mark as connector
         result.connector_segments.append(current_id)
 
-        # Aggregate small order 1 tributaries into the connector
+        # Aggregate small order 1 tributaries as their own reaches. Can't me made minor flowpaths given the divide belonging to the flowpath may not be next to the current_id's divide
         for order1_info in order_1_upstreams:
             upstream_id = order1_info["flowpath_id"]
-            _traverse_and_mark_as_minor(upstream_id, current_id, result, graph, node_indices)
+            _traverse_and_aggregate_all_upstream(upstream_id, current_id, result, graph, node_indices)
 
         return True
 
@@ -1620,3 +1619,178 @@ def _trace_stack(
         raise ValueError(f"No Rule Matched. Please debug flowpath_id: {current_id}")
 
     return result
+
+
+def _trace_single_flowpath_attributes(
+    outlet_fp_id: str,
+    partition_data: dict[str, Any],
+    id_offset: int,
+) -> pl.DataFrame:
+    """Trace flowpath attributes for a single outlet's drainage basin.
+
+    Parameters
+    ----------
+    outlet_fp_id : str
+        The outlet flowpath ID for this basin
+    partition_data : dict[str, Any]
+        Contains:
+        - "subgraph": rx.PyDiGraph (only this outlet's tree)
+        - "node_indices": dict (fp_id -> node index in subgraph)
+        - "flowpaths": pl.DataFrame (filtered to this outlet)
+        - "fp_lookup": dict (flowpath attributes)
+    id_offset : int
+        Starting ID for mainstem numbering
+
+    Returns
+    -------
+    pl.DataFrame
+        Updated flowpaths with total_da_sqkm, mainstem_lp, path_length, and dn_hydroseq columns
+    """
+    basin_graph = partition_data["subgraph"]
+    basin_node_indices = partition_data["node_indices"]
+    fp_lookup = partition_data["fp_lookup"]
+
+    # Initialize node data in the basin graph
+    for node_idx in basin_graph.node_indices():
+        fp_id = str(basin_graph[node_idx])
+
+        basin_graph[node_idx] = {
+            "fp_id": fp_id,
+            "area_sqkm": fp_lookup[fp_id]["area_sqkm"],
+            "length_km": fp_lookup[fp_id]["length_km"],
+            "hydroseq": fp_lookup[fp_id]["hydroseq"],
+            "total_da_sqkm": 0.0,
+            "mainstem_lp": None,
+            "path_length": 0.0,
+            "dn_hydroseq": None,
+        }
+
+    outlet_idx = basin_node_indices[outlet_fp_id]
+
+    # Get topological order for this basin
+    try:
+        topo_order = rx.topological_sort(basin_graph)
+    except rx.DAGHasCycle as e:
+        raise AssertionError(f"Basin {outlet_fp_id} contains cycles") from e
+
+    # PASS 1: Traverse from OUTLET to ANCESTORS (reverse topo order)
+    current_mainstem_id = id_offset
+
+    # Initialize outlet
+    basin_graph[outlet_idx]["path_length"] = 0.0
+    basin_graph[outlet_idx]["dn_hydroseq"] = 0
+
+    # Calculate path lengths (reverse topo order)
+    for node_idx in reversed(topo_order):
+        if node_idx == outlet_idx:
+            continue
+
+        out_edges = basin_graph.out_edges(node_idx)
+
+        if out_edges:
+            downstream_nodes = [tgt_idx for _, tgt_idx, _ in out_edges]
+
+            if downstream_nodes:
+                downstream_idx = max(downstream_nodes, key=lambda idx: basin_graph[idx]["path_length"])
+                basin_graph[node_idx]["path_length"] = (
+                    basin_graph[downstream_idx]["path_length"] + basin_graph[downstream_idx]["length_km"]
+                )
+
+    # Trace main mainstem (longest path from outlet to headwater)
+    current_idx = outlet_idx
+    mainstem_nodes = []
+
+    while True:
+        mainstem_nodes.append(current_idx)
+        basin_graph[current_idx]["mainstem_lp"] = current_mainstem_id
+
+        in_edges = list(basin_graph.in_edges(current_idx))
+
+        if not in_edges:
+            break
+
+        upstream_candidates = [src_idx for src_idx, _, _ in in_edges]
+
+        if not upstream_candidates:
+            break
+
+        upstream_idx = max(
+            upstream_candidates,
+            key=lambda idx: (basin_graph[idx]["path_length"], basin_graph[idx]["total_da_sqkm"]),
+        )
+        current_idx = upstream_idx
+
+    # Assign tributary mainstems
+    tributary_offset = current_mainstem_id + 1
+    processed = set(mainstem_nodes)
+
+    for node_idx in basin_graph.node_indices():
+        if node_idx not in processed:
+            tributary_id = tributary_offset
+            tributary_offset += 1
+
+            trib_current = node_idx
+            while trib_current not in processed:
+                basin_graph[trib_current]["mainstem_lp"] = tributary_id
+                processed.add(trib_current)
+
+                in_edges = list(basin_graph.in_edges(trib_current))
+                upstream_in_basin = [src_idx for src_idx, _, _ in in_edges]
+
+                if not upstream_in_basin:
+                    break
+
+                trib_current = max(
+                    upstream_in_basin,
+                    key=lambda idx: (basin_graph[idx]["path_length"], basin_graph[idx]["total_da_sqkm"]),
+                )
+
+    # Assign dn_hydroseq based on graph edges
+    for node_idx in basin_graph.node_indices():
+        if node_idx == outlet_idx:
+            continue
+
+        out_edges = basin_graph.out_edges(node_idx)
+        downstream_nodes = [tgt_idx for _, tgt_idx, _ in out_edges]
+
+        if downstream_nodes:
+            downstream_idx = downstream_nodes[0]
+            basin_graph[node_idx]["dn_hydroseq"] = basin_graph[downstream_idx]["hydroseq"]
+        else:
+            basin_graph[node_idx]["dn_hydroseq"] = 0
+
+    # PASS 2: Traverse from ROOT to OUTLET (forward topo order)
+    for node_idx in topo_order:
+        in_edges = basin_graph.in_edges(node_idx)
+
+        upstream_total = sum(basin_graph[src_idx]["total_da_sqkm"] for src_idx, _, _ in in_edges)
+
+        basin_graph[node_idx]["total_da_sqkm"] = upstream_total + basin_graph[node_idx]["area_sqkm"]
+
+    # Extract results from graph into lists
+    fp_ids = []
+    total_das = []
+    mainstems = []
+    path_lengths = []
+    dn_hydroseqs = []
+
+    for node_idx in basin_graph.node_indices():
+        node_data = basin_graph[node_idx]
+        fp_ids.append(node_data["fp_id"])
+        total_das.append(node_data["total_da_sqkm"])
+        mainstems.append(node_data["mainstem_lp"])
+        path_lengths.append(node_data["path_length"])
+        dn_hydroseqs.append(node_data["dn_hydroseq"])
+
+    # Create Polars DataFrame with results
+    traced_df = pl.DataFrame(
+        {
+            "fp_id": fp_ids,
+            "total_da_sqkm": total_das,
+            "mainstem_lp": mainstems,
+            "path_length": path_lengths,
+            "dn_hydroseq": dn_hydroseqs,
+        }
+    )
+
+    return traced_df

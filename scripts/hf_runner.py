@@ -20,6 +20,7 @@ from hydrofabric_builds.pipeline.processing import (
     reduce_calculate_id_ranges,
     reduce_combine_base_hydrofabric,
 )
+from hydrofabric_builds.pipeline.trace_graph_attributes import trace_hydrofabric_attributes
 from hydrofabric_builds.pipeline.write import write_base_hydrofabric
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -178,6 +179,9 @@ def main() -> int:
         runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
         runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
         runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+        runner.run_task(
+            task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
+        )
         runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
         if config.run_divide_attributes_task:
             runner.run_task(

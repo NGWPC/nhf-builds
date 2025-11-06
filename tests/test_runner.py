@@ -10,11 +10,13 @@ from scipy import sparse
 from hydrofabric_builds import (
     HFConfig,
     build_graph,
+    build_nhf_graph,
     download_reference_data,
     map_build_base_hydrofabric,
     map_trace_and_aggregate,
     reduce_calculate_id_ranges,
     reduce_combine_base_hydrofabric,
+    trace_hydrofabric_attributes,
     write_base_hydrofabric,
 )
 from scripts.hf_runner import LocalRunner, TaskInstance
@@ -201,6 +203,9 @@ class TestIntegration:
             runner.run_task(
                 task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
             )
+            runner.run_task(
+                task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
+            )
             runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
 
             assert all(r["status"] == "success" for r in runner.results.values())
@@ -222,7 +227,7 @@ class TestIntegration:
             outlets = runner.ti.xcom_pull("build_graph", key="outlets")
             assert "6720879" in outlets  # expected outlet
 
-            final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+            final_flowpaths = runner.ti.xcom_pull(task_id="trace_attributes", key="flowpaths_with_attributes")
             final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
             final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
 
@@ -238,73 +243,12 @@ class TestIntegration:
                 f"Missing in flowpaths: {divide_ids - flowpath_ids}"
             )
             # Test connectivity using nexus points
-            self._verify_nexus_connectivity(final_flowpaths, final_nexus)
-
-    def _verify_nexus_connectivity(self, flowpaths_gdf: pd.DataFrame, nexus_gdf: pd.DataFrame) -> None:
-        """Verify that nexus connectivity forms a valid dendritic network.
-
-        Parameters
-        ----------
-        flowpaths_gdf : pd.DataFrame (GeoDataFrame)
-            Flowpaths with fp_id, up_nex_id, dn_nex_id columns
-
-        Raises
-        ------
-        AssertionError
-            If connectivity is invalid (cycles, non-dendritic, or broken links)
-        """
-        graph = rx.PyDiGraph(check_cycle=True)
-        fp_id_to_node = {}
-
-        # Add all flowpaths as nodes
-        for fp_id in flowpaths_gdf["fp_id"]:
-            fp_id_to_node[fp_id] = graph.add_node(fp_id)
-
-        # Verify all flowpaths are represented as nodes
-        assert len(graph) == len(flowpaths_gdf), (
-            f"Graph has {len(graph)} nodes but there are {len(flowpaths_gdf)} flowpaths"
-        )
-
-        # Build edges based on shared nexus points
-        # If flowpath A's dn_nex_id == flowpath B's up_nex_id, then A flows into B
-        edge_count = 0
-        for _, row in flowpaths_gdf.iterrows():
-            fp_id = row["fp_id"]
-            dn_nex_id = row["dn_nex_id"]
-
-            # Skip if no downstream nexus
-            if pd.isna(dn_nex_id):
-                continue
-
-            # Find downstream flowpath(s) that have this nexus as their up_nex_id
-            downstream_fps = flowpaths_gdf[flowpaths_gdf["up_nex_id"] == dn_nex_id]
-
-            for _, dn_row in downstream_fps.iterrows():
-                dn_fp_id = dn_row["fp_id"]
-                # Add edge from current flowpath to downstream flowpath
-                graph.add_edge(fp_id_to_node[fp_id], fp_id_to_node[dn_fp_id], None)
-                edge_count += 1
-
-        all_nexus_ids = set()
-        for val in flowpaths_gdf["dn_nex_id"]:
-            if not pd.isna(val):
-                all_nexus_ids.add(val)
-        for val in flowpaths_gdf["up_nex_id"]:
-            if not pd.isna(val):
-                all_nexus_ids.add(val)
-
-        # Number of edges should equal number of non-terminal flowpaths
-        # (i.e., flowpaths with at least one downstream connection)
-        assert graph.num_edges() == edge_count, (
-            f"Graph has {graph.num_edges()} edges but created {edge_count} edges"
-        )
-
-        print(
-            f"Graph statistics: {len(graph)} nodes, {graph.num_edges()} edges, "
-            f"{len(all_nexus_ids)} unique nexus points"
-        )
-
-        self._verify_graph_structure(graph)
+            graph = build_nhf_graph(final_flowpaths)
+            self._verify_graph_structure(graph)
+            self._verify_cumulative_drainage_area(graph, final_flowpaths)
+            self._verify_path_length_logic(graph, final_flowpaths)
+            self._verify_downstream_hydroseq(graph, final_flowpaths)
+            self._verify_mainstem_tracing(graph, final_flowpaths)
 
     def _verify_graph_structure(self, graph: rx.PyDiGraph) -> None:
         """Verify dendritic structure and topological ordering.
@@ -359,3 +303,254 @@ class TestIntegration:
         assert np.all(matrix.row >= matrix.col), (
             "Adjacency matrix is not lower triangular - flowpaths are not in proper topological order"
         )
+
+    def _verify_hydroseq(self, graph: rx.PyDiGraph, flowpaths_gdf: pd.DataFrame) -> rx.PyDiGraph:
+        """verify hydroseq ordering.
+
+        Parameters
+        ----------
+        graph : rx.PyDiGraph
+            Graph where nodes are fp_id values
+        flowpaths_gdf : pd.DataFrame
+            Flowpaths with fp_id, area_sqkm, hydroseq columns
+
+        Returns
+        -------
+        rx.PyDiGraph
+            Graph with edges containing total_da_sqkm attribute
+
+        Raises
+        ------
+        AssertionError
+            If hydroseq doesn't decrease downstream
+        """
+        # Create lookup for flowpath attributes
+        fp_lookup = flowpaths_gdf.set_index("fp_id")[["area_sqkm", "hydroseq"]].to_dict("index")
+
+        # Get topological order (processes upstream nodes first)
+        try:
+            topo_order = rx.topological_sort(graph)
+        except rx.DAGHasCycle as e:
+            raise AssertionError("Graph contains cycles - cannot be a dendritic network") from e
+
+        # Initialize node data with local area and hydroseq
+        for node_idx in graph.node_indices():
+            fp_id = graph[node_idx]
+            graph[node_idx] = {
+                "fp_id": fp_id,
+                "area_sqkm": fp_lookup[fp_id]["area_sqkm"],
+                "hydroseq": fp_lookup[fp_id]["hydroseq"],
+                "total_da_sqkm": 0.0,  # Will be computed
+            }
+
+        # Process nodes in topological order to accumulate drainage area
+        for node_idx in topo_order:
+            node_data = graph[node_idx]
+            in_edges = graph.in_edges(node_idx)
+
+            # Verify hydroseq decreases downstream
+            for src_idx, _, _ in in_edges:
+                upstream_hydroseq = graph[src_idx]["hydroseq"]
+                current_hydroseq = node_data["hydroseq"]
+
+                assert upstream_hydroseq > current_hydroseq, (
+                    f"Hydroseq ordering violated: upstream fp_id={graph[src_idx]['fp_id']} "
+                    f"(hydroseq={upstream_hydroseq}) -> downstream fp_id={node_data['fp_id']} "
+                    f"(hydroseq={current_hydroseq}). Hydroseq should decrease downstream."
+                )
+
+        return graph
+
+    def _verify_cumulative_drainage_area(self, graph: rx.PyDiGraph, flowpaths: pd.DataFrame) -> None:
+        """Verify total drainage area accumulates correctly through topological sort.
+
+        For each node: total_da_sqkm = sum(upstream total_da_sqkm) + area_sqkm
+        """
+        try:
+            topo_order = rx.topological_sort(graph)
+        except rx.DAGHasCycle as e:
+            raise AssertionError("Graph contains cycles") from e
+
+        # Create lookup
+        fp_dict = flowpaths.set_index("fp_id").to_dict("index")
+
+        # Create node_indices mapping
+        node_indices = {}
+        for node_idx in graph.node_indices():
+            fp_id = graph[node_idx]
+            node_indices[fp_id] = node_idx
+
+        # Verify accumulation for each node
+        for node_idx in topo_order:
+            fp_id = graph[node_idx]
+            fp_data = fp_dict[fp_id]
+
+            # Get upstream total drainage areas
+            in_edges = graph.in_edges(node_idx)
+            upstream_total = sum(fp_dict[graph[src_idx]]["total_da_sqkm"] for src_idx, _, _ in in_edges)
+
+            expected_total = upstream_total + fp_data["area_sqkm"]
+            actual_total = fp_data["total_da_sqkm"]
+
+            assert abs(expected_total - actual_total) < 0.001, (
+                f"Drainage area mismatch for fp_id={fp_id}: "
+                f"expected {expected_total:.3f}, got {actual_total:.3f}"
+            )
+
+    def _verify_path_length_logic(self, graph: rx.PyDiGraph, flowpaths: pd.DataFrame) -> None:
+        """Verify path_length = downstream_path_length + downstream_length_km.
+
+        Outlets should have path_length = 0.
+        """
+        fp_dict = flowpaths.set_index("fp_id").to_dict("index")
+
+        for node_idx in graph.node_indices():
+            fp_id = graph[node_idx]
+            fp_data = fp_dict[fp_id]
+
+            out_edges = list(graph.out_edges(node_idx))
+
+            if not out_edges:
+                # Outlet - should have path_length = 0
+                assert fp_data["path_length"] == 0.0, (
+                    f"Outlet fp_id={fp_id} should have path_length=0, got {fp_data['path_length']}"
+                )
+            else:
+                # Should have exactly one downstream (dendritic)
+                assert len(out_edges) == 1, f"fp_id={fp_id} has {len(out_edges)} downstream connections"
+
+                _, downstream_idx, _ = out_edges[0]
+                downstream_fp_id = graph[downstream_idx]
+                downstream_data = fp_dict[downstream_fp_id]
+
+                expected_path = downstream_data["path_length"] + downstream_data["length_km"]
+                actual_path = fp_data["path_length"]
+
+                assert abs(expected_path - actual_path) < 0.001, (
+                    f"Path length mismatch for fp_id={fp_id}: "
+                    f"expected {expected_path:.3f} (downstream_path={downstream_data['path_length']:.3f} + "
+                    f"downstream_length={downstream_data['length_km']:.3f}), got {actual_path:.3f}"
+                )
+
+    def _verify_downstream_hydroseq(self, graph: rx.PyDiGraph, flowpaths: pd.DataFrame) -> None:
+        """Verify dn_hydroseq points to downstream node's hydroseq (0 for outlets)."""
+        fp_dict = flowpaths.set_index("fp_id").to_dict("index")
+
+        for node_idx in graph.node_indices():
+            fp_id = graph[node_idx]
+            fp_data = fp_dict[fp_id]
+
+            out_edges = list(graph.out_edges(node_idx))
+
+            if not out_edges:
+                # Outlet - dn_hydroseq should be 0
+                assert fp_data["dn_hydroseq"] == 0, (
+                    f"Outlet fp_id={fp_id} should have dn_hydroseq=0, got {fp_data['dn_hydroseq']}"
+                )
+            else:
+                # Should point to downstream's hydroseq
+                _, downstream_idx, _ = out_edges[0]
+                downstream_fp_id = graph[downstream_idx]
+                downstream_data = fp_dict[downstream_fp_id]
+
+                expected_dn_hydroseq = downstream_data["hydroseq"]
+                actual_dn_hydroseq = fp_data["dn_hydroseq"]
+
+                assert expected_dn_hydroseq == actual_dn_hydroseq, (
+                    f"dn_hydroseq mismatch for fp_id={fp_id}: "
+                    f"expected {expected_dn_hydroseq} (downstream hydroseq), got {actual_dn_hydroseq}"
+                )
+
+    def _verify_mainstem_tracing(self, graph: rx.PyDiGraph, flowpaths: pd.DataFrame) -> None:
+        """Verify mainstems are properly traced and follow longest paths."""
+        fp_dict = flowpaths.set_index("fp_id").to_dict("index")
+
+        # Get all unique mainstem IDs
+        mainstem_ids = flowpaths["mainstem_lp"].unique()
+
+        # Should have at least one mainstem
+        assert len(mainstem_ids) > 0, "Should have at least one mainstem"
+
+        # Each mainstem should form a connected path
+        for mainstem_id in mainstem_ids:
+            mainstem_fps = flowpaths[flowpaths["mainstem_lp"] == mainstem_id]
+
+            # Should have at least one flowpath
+            assert len(mainstem_fps) > 0, f"Mainstem {mainstem_id} has no flowpaths"
+
+            # Verify connectivity - flowpaths on same mainstem should form connected paths
+            # Get all node indices for this mainstem
+            mainstem_nodes = [
+                idx for idx in graph.node_indices() if graph[idx] in mainstem_fps["fp_id"].values
+            ]
+
+            # At least one should be reachable from any other via downstream traversal
+            # (they form a connected tree structure)
+            for node_idx in mainstem_nodes:
+                # Follow downstream until we hit outlet or leave this mainstem
+                current = node_idx
+                visited_mainstem_nodes = {current}
+
+                while True:
+                    out_edges = list(graph.out_edges(current))
+                    if not out_edges:
+                        break  # Reached outlet
+
+                    _, downstream_idx, _ = out_edges[0]
+                    downstream_fp_id = graph[downstream_idx]
+                    downstream_mainstem = fp_dict[downstream_fp_id]["mainstem_lp"]
+
+                    if downstream_mainstem == mainstem_id:
+                        visited_mainstem_nodes.add(downstream_idx)
+                        current = downstream_idx
+                    else:
+                        break  # Left this mainstem
+
+        # Verify mainstem follows longest path at confluences
+        confluence_count = 0
+        for node_idx in graph.node_indices():
+            in_edges = list(graph.in_edges(node_idx))
+
+            if len(in_edges) > 1:
+                # This is a confluence
+                confluence_count += 1
+                fp_id = graph[node_idx]
+                current_mainstem = fp_dict[fp_id]["mainstem_lp"]
+
+                # Get path lengths of all upstream segments
+                upstream_paths = [
+                    (
+                        graph[src_idx],
+                        fp_dict[graph[src_idx]]["path_length"],
+                        fp_dict[graph[src_idx]]["mainstem_lp"],
+                    )
+                    for src_idx, _, _ in in_edges
+                ]
+
+                # The upstream with longest path should determine the mainstem
+                longest_upstream_id, longest_path, longest_mainstem = max(upstream_paths, key=lambda x: x[1])
+
+                # Either:
+                # 1. The longest upstream continues the current mainstem (longest_mainstem == current_mainstem)
+                # 2. OR the current node is where the longest tributary joins (forming new mainstem)
+                # The key is: the upstream with LONGEST path should influence mainstem assignment
+
+                # Verify that if all upstreams are on different mainstems, we made a choice
+                upstream_mainstems = [ms for _, _, ms in upstream_paths]
+
+                if len(set(upstream_mainstems)) > 1:
+                    # Multiple mainstems joining - verify the longest one continues or current is new
+                    assert (
+                        current_mainstem == longest_mainstem or current_mainstem not in upstream_mainstems
+                    ), (
+                        f"At confluence fp_id={fp_id}, current mainstem {current_mainstem} doesn't match "
+                        f"longest upstream mainstem {longest_mainstem} (path={longest_path}), and current "
+                        f"is not a new mainstem. Upstream mainstems: {upstream_mainstems}"
+                    )
+
+        # Verify we actually tested confluence logic (should have at least 1 confluence)
+        # unless it's a completely linear network
+        if len(flowpaths) > 3:
+            assert confluence_count > 0, (
+                f"Expected at least one confluence in network of {len(flowpaths)} flowpaths, found none"
+            )

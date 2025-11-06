@@ -37,12 +37,12 @@ def download_reference_data(**context: dict[str, Any]) -> dict[str, pl.DataFrame
     _reference_divides["divide_id"] = _reference_divides["divide_id"].astype("int").astype("str")
     _reference_divides = _validate_and_fix_geometries(_reference_divides, geom_type="divides")
     reference_divides = pl.from_pandas(_reference_divides.to_wkb())
-    logger.info(f"Download Task: Ingested Reference Divides from: {cfg.reference_divides_path}")
+    logger.info(f"download Task: Ingested Reference Divides from: {cfg.reference_divides_path}")
 
     _reference_flowpaths = gpd.read_parquet(cfg.reference_flowpaths_path)
     _reference_flowpaths["flowpath_id"] = _reference_flowpaths["flowpath_id"].astype("int").astype("str")
     _reference_flowpaths = _validate_and_fix_geometries(_reference_flowpaths, geom_type="flowpaths")
     reference_flowpaths = pl.from_pandas(_reference_flowpaths.to_wkb())
-    logger.info(f"Download Task: Ingested Reference Flowpaths from: {cfg.reference_flowpaths_path}")
+    logger.info(f"download Task: Ingested Reference Flowpaths from: {cfg.reference_flowpaths_path}")
 
     return {"reference_flowpaths": reference_flowpaths, "reference_divides": reference_divides}

@@ -41,7 +41,7 @@ def sample_hydrofabric_outlet1() -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]
         "nexus": gpd.GeoDataFrame(
             {
                 "nex_id": [1, 2],
-                "downstream_fp_id": [2, None],
+                "dn_fp_id": [2, None],
                 "geometry": [Point(1, 1), Point(2, 2)],
             },
             crs=crs,
@@ -90,7 +90,7 @@ def sample_hydrofabric_outlet2() -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]
         "nexus": gpd.GeoDataFrame(
             {
                 "nex_id": [3, 4, 5],
-                "downstream_fp_id": [4, 5, None],
+                "dn_fp_id": [4, 5, None],
                 "geometry": [Point(4, 4), Point(5, 5), Point(6, 6)],
             },
             crs=crs,
@@ -239,7 +239,7 @@ class TestCombineHydrofabricsPure:
 
         # Check nexus columns
         assert "nex_id" in result["nexus"].columns
-        assert "downstream_fp_id" in result["nexus"].columns
+        assert "dn_fp_id" in result["nexus"].columns
         assert "geometry" in result["nexus"].columns
 
     def test_preserves_data_types(self, built_hydrofabrics: dict) -> None:
@@ -308,7 +308,7 @@ class TestCombineHydrofabricsPure:
                 "nexus": gpd.GeoDataFrame(
                     {
                         "nex_id": [i * 10 + j for j in range(5)],
-                        "downstream_fp_id": [None] * 5,
+                        "dn_fp_id": [None] * 5,
                         "geometry": [Point(j, j) for j in range(5)],
                     },
                     crs=crs,
@@ -337,7 +337,7 @@ class TestCombineHydrofabricsPure:
                     {"fp_id": [], "dn_nex_id": [], "div_id": [], "geometry": []}, crs=crs
                 ),
                 "divides": gpd.GeoDataFrame({"div_id": [], "type": [], "geometry": []}, crs=crs),
-                "nexus": gpd.GeoDataFrame({"nex_id": [], "downstream_fp_id": [], "geometry": []}, crs=crs),
+                "nexus": gpd.GeoDataFrame({"nex_id": [], "dn_fp_id": [], "geometry": []}, crs=crs),
                 "reference_flowpaths": pd.DataFrame({"ref_fp_id": [], "fp_id": []}),
             }
         }
