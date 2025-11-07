@@ -228,5 +228,4 @@ _version.py
 
 Pipfile
 .vscode
-configs/
 .DS_Store
