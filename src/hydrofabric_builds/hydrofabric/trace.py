@@ -661,7 +661,8 @@ def _rule_independent_connector(
                 result.subdivide_candidates.append(current_id)
                 lat_id: str = unprocessed_lateral_info[0]["flowpath_id"]
                 _traverse_and_mark_as_minor(lat_id, current_id, result, graph, node_indices)
-                to_process.remove(lat_id)
+                if lat_id in to_process:
+                    to_process.remove(lat_id)
                 return True
 
         # Mark as connector
@@ -1488,18 +1489,6 @@ def _trace_stack(
             # For coastal areas. We're agregating upstream as the outlet has no divide associated with it
             ds_id = str(int(fp_info["flowpath_toid"]))
             lateral_neighbors: list[str] = _get_upstream_ids(ds_id, digraph, node_indices)
-            start_idx = node_indices[start_id]
-            ancestor_indices = rx.ancestors(digraph, start_idx)
-            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
-            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
-                result.minor_flowpaths |= set(ancestor_ids)
-                result.minor_flowpaths.add(current_id)
-                for lr in lateral_neighbors:
-                    if lr in to_process:
-                        to_process.remove(lr)
-                result.processed_flowpaths |= set(ancestor_ids)
-                continue
-
             if ds_id == "0":
                 if len(upstream_ids) == 1:
                     if upstream_ids[0] in div_ids:
@@ -1508,7 +1497,64 @@ def _trace_stack(
                             upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
                         )
                         continue
-            # Some upstream in chain has a divide OR connector detected
+
+            # for outlets that are single no-divide segments
+            other_laterals = [lid for lid in lateral_neighbors if lid != current_id]
+            if len(other_laterals) == 0:
+                result.aggregation_pairs.append((current_id, ds_id))
+                _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
+                continue
+
+            if len(upstream_ids) == 1:
+                _upstream_id = upstream_ids[0]
+                if _upstream_id in div_ids:
+                    result.aggregation_pairs.append((current_id, _upstream_id))
+                    _queue_upstream(
+                        upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                    )
+                    continue
+                else:
+                    _id = current_id
+                    upstream_upstream_ids = _get_upstream_ids(_upstream_id, digraph, node_indices)
+                    while _id not in div_ids:
+                        # Current has no divide - check if upstream is a connector
+                        if len(upstream_upstream_ids) >= 2:
+                            # Upstream is a connector - aggregate current into it and queue the connector
+                            result.aggregation_pairs.append((current_id, _upstream_id))
+                            result.processed_flowpaths.add(current_id)
+                            result.processed_flowpaths.add(_upstream_id)
+                            break
+
+                        result.aggregation_pairs.append((_id, _upstream_id))
+                        result.processed_flowpaths.add(_id)
+                        result.processed_flowpaths.add(_upstream_id)
+                        # Upstream is not a connector - aggregate both current and upstream
+                        if _upstream_id in div_ids:
+                            break
+                        else:
+                            # keep looping
+                            _id = _upstream_id
+                            _upstream_id = upstream_upstream_ids[0]
+                            upstream_upstream_ids = _get_upstream_ids(_upstream_id, digraph, node_indices)
+
+                    _queue_upstream(
+                        upstream_upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                    )
+                    continue
+
+            start_idx = node_indices[start_id]
+            ancestor_indices = rx.ancestors(digraph, start_idx)
+            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
+            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
+                result.minor_flowpaths |= set(ancestor_ids)
+                result.minor_flowpaths.add(current_id)
+                [result.aggregation_pairs.append((current_id, ac_id)) for ac_id in ancestor_ids]  # type: ignore
+                for lr in lateral_neighbors:
+                    if lr in to_process:
+                        to_process.remove(lr)
+                result.processed_flowpaths |= set(ancestor_ids)
+                continue
+
             # Mark current as connector and queue upstream
             result.no_divide_connectors.append(current_id)
             # Queue upstream for normal processing

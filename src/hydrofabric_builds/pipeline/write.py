@@ -41,15 +41,11 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     final_divides = ti.xcom_pull(task_id="reduce_base", key="divides")
     final_nexus = ti.xcom_pull(task_id="reduce_base", key="nexus")
     final_reference_flowpaths = ti.xcom_pull(task_id="reduce_base", key="reference_flowpaths")
-    final_divides.to_file(
-        cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="divides", driver="GPKG"
-    )
-    final_flowpaths.to_file(
-        cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="flowpaths", driver="GPKG"
-    )
-    final_nexus.to_file(cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg", layer="nexus", driver="GPKG")
+    final_divides.to_file(file_name, layer="divides", driver="GPKG")
+    final_flowpaths.to_file(file_name, layer="flowpaths", driver="GPKG")
+    final_nexus.to_file(file_name, layer="nexus", driver="GPKG")
 
-    conn = sqlite3.connect(cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg")
+    conn = sqlite3.connect(file_name)
     final_reference_flowpaths.to_sql("reference_flowpaths", conn, index=False)
     conn.close()
 
