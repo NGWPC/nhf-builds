@@ -1475,36 +1475,45 @@ def _trace_stack(
                         continue
 
             # Case 5: Original order 2+ logic - Check if entire same-order chain has no divides
-            chain_has_no_divides = _check_and_aggregate_same_order_no_divide_chain(
-                current_id,
-                fp_info["streamorder"],
-                fp_lookup,
-                div_ids,
-                result,
-                digraph,
-                node_indices,
-            )
+            start_idx = node_indices[start_id]
+            ancestor_indices = rx.ancestors(digraph, start_idx)
+            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
+            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
+                # No divides anywhere upstream - mark everything as minor
+                result.minor_flowpaths |= set(ancestor_ids)
+                result.minor_flowpaths.add(current_id)
+                result.processed_flowpaths |= set(ancestor_ids)
+                continue
 
-            if chain_has_no_divides:
-                # Entire chain has no divides - already aggregated and marked as minor
+            # For coastal areas. We're agregating upstream as the outlet has no divide associated with it
+            ds_id = str(int(fp_info["flowpath_toid"]))
+            lateral_neighbors: list[str] = _get_upstream_ids(ds_id, digraph, node_indices)
+            start_idx = node_indices[start_id]
+            ancestor_indices = rx.ancestors(digraph, start_idx)
+            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
+            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
+                result.minor_flowpaths |= set(ancestor_ids)
+                result.minor_flowpaths.add(current_id)
+                for lr in lateral_neighbors:
+                    if lr in to_process:
+                        to_process.remove(lr)
+                result.processed_flowpaths |= set(ancestor_ids)
                 continue
-            else:
-                # For coastal areas. We're agregating upstream as the outlet has no divide associated with it
-                ds_id = str(int(fp_info["flowpath_toid"]))
-                if ds_id == "0":
-                    if len(upstream_ids) == 1:
-                        if upstream_ids[0] in div_ids:
-                            result.aggregation_pairs.append((current_id, ds_id))
-                            _queue_upstream(
-                                upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
-                            )
-                            continue
-                # Some upstream in chain has a divide OR connector detected
-                # Mark current as connector and queue upstream
-                result.no_divide_connectors.append(current_id)
-                # Queue upstream for normal processing
-                _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
-                continue
+
+            if ds_id == "0":
+                if len(upstream_ids) == 1:
+                    if upstream_ids[0] in div_ids:
+                        result.aggregation_pairs.append((current_id, ds_id))
+                        _queue_upstream(
+                            upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                        )
+                        continue
+            # Some upstream in chain has a divide OR connector detected
+            # Mark current as connector and queue upstream
+            result.no_divide_connectors.append(current_id)
+            # Queue upstream for normal processing
+            _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
+            continue
 
         # Rule 4: Independent - Large Area (regardless of upstream count)
         if _rule_independent_large_area(current_id, fp_info, cfg, result):
