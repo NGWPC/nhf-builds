@@ -1475,20 +1475,60 @@ def _trace_stack(
                     ):
                         continue
 
-            # Case 5: Original order 2+ logic - Check if entire same-order chain has no divides
-            start_idx = node_indices[start_id]
-            ancestor_indices = rx.ancestors(digraph, start_idx)
-            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
-            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
-                # No divides anywhere upstream - mark everything as minor
-                result.minor_flowpaths |= set(ancestor_ids)
-                result.minor_flowpaths.add(current_id)
-                result.processed_flowpaths |= set(ancestor_ids)
+            # Case where we have an upstream fp not in a divide
+            ds_id = str(int(fp_info["flowpath_toid"]))
+            lateral_neighbors: list[str] = _get_upstream_ids(ds_id, digraph, node_indices)
+            other_laterals = [lid for lid in lateral_neighbors if lid != current_id]
+            if (
+                len(upstream_info) >= 2
+                and any(uid not in div_ids for uid in upstream_ids)
+                and any(uid in div_ids for uid in upstream_ids)
+            ):
+                # Case 1: Single flowpath downstream - aggregate downstream
+                if len(other_laterals) == 0:
+                    result.no_divide_connectors.append(current_id)
+                    result.aggregation_pairs.append((current_id, ds_id))
+                    _queue_upstream(
+                        upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                    )
+                    continue
+
+                # Case 2 & 3: Multiple laterals - aggregate to upstream with divide, queue upstream without divide
+                # Separate upstreams by divide status
+                upstreams_with_divide = []
+                upstreams_without_divide = []
+
+                for _info in upstream_info:
+                    __upstream_id = _info["flowpath_id"]
+                    if __upstream_id in div_ids:
+                        upstreams_with_divide.append((__upstream_id, _info))
+                    else:
+                        upstreams_without_divide.append((__upstream_id, _info))
+
+                # Aggregate current to the "best" upstream with divide
+                if upstreams_with_divide:
+                    # Select upstream with highest stream order, then highest drainage area
+                    best_upstream = max(
+                        upstreams_with_divide, key=lambda x: (x[1]["streamorder"], x[1]["areasqkm"])
+                    )
+                    best_upstream_id = best_upstream[0]
+
+                    result.aggregation_pairs.append((current_id, best_upstream_id))
+                    result.no_divide_connectors.append(current_id)
+
+                # Handle upstreams without divides
+                for upstream_no_div_id, upstream_info_dict in upstreams_without_divide:
+                    if upstream_info_dict["streamorder"] == 1:
+                        # Order 1 tributaries become minor flowpaths
+                        _traverse_and_mark_as_minor(
+                            upstream_no_div_id, current_id, result, digraph, node_indices
+                        )
+
+                # Queue all upstreams at the end (higher-order no-divide upstreams will be queued here)
+                _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
                 continue
 
             # For coastal areas. We're agregating upstream as the outlet has no divide associated with it
-            ds_id = str(int(fp_info["flowpath_toid"]))
-            lateral_neighbors: list[str] = _get_upstream_ids(ds_id, digraph, node_indices)
             if ds_id == "0":
                 if len(upstream_ids) == 1:
                     if upstream_ids[0] in div_ids:
@@ -1499,7 +1539,6 @@ def _trace_stack(
                         continue
 
             # for outlets that are single no-divide segments
-            other_laterals = [lid for lid in lateral_neighbors if lid != current_id]
             if len(other_laterals) == 0:
                 result.aggregation_pairs.append((current_id, ds_id))
                 _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
@@ -1542,20 +1581,37 @@ def _trace_stack(
                     )
                     continue
 
-            start_idx = node_indices[start_id]
-            ancestor_indices = rx.ancestors(digraph, start_idx)
-            ancestor_ids = [str(digraph[idx]) for idx in ancestor_indices]
-            if not any(_fp_id_ in div_ids for _fp_id_ in ancestor_ids):
-                result.minor_flowpaths |= set(ancestor_ids)
-                result.minor_flowpaths.add(current_id)
-                [result.aggregation_pairs.append((current_id, ac_id)) for ac_id in ancestor_ids]  # type: ignore
-                for lr in lateral_neighbors:
-                    if lr in to_process:
-                        to_process.remove(lr)
-                result.processed_flowpaths |= set(ancestor_ids)
-                continue
+            # Case 5: Original order 2+ logic - Check if entire same-order chain has no divides
+            # checking if all upstreams are not in a divide to prevent traversals for long graphs
+            if all(uid not in div_ids for uid in upstream_ids):
+                start_idx = node_indices[start_id]
+                ancestor_indices = rx.ancestors(digraph, start_idx)
+                ancestor_ids = {str(digraph[idx]) for idx in ancestor_indices}
+
+                # Check if ALL ancestors lack divides
+                if ancestor_ids.isdisjoint(div_ids):
+                    # Bad outlet - entire network has no divides
+                    if start_id == current_id:
+                        logger.warning(
+                            f"Outlet {start_id} and entire upstream network lack divides - skipping"
+                        )
+                        return result
+
+                    # Not the outlet - mark everything as minor and aggregate to downstream
+                    all_non_existent_ids = ancestor_ids | {current_id}
+                    result.minor_flowpaths |= all_non_existent_ids
+                    for fp_id in all_non_existent_ids:
+                        result.aggregation_pairs.append((fp_id, ds_id))
+                    for _fp_id_ in all_non_existent_ids:
+                        if _fp_id_ in to_process:
+                            to_process.remove(_fp_id_)
+                    result.processed_flowpaths |= all_non_existent_ids
+                    continue
 
             # Mark current as connector and queue upstream
+            best_upstream = max(upstream_info, key=lambda x: (x["streamorder"], x["areasqkm"]))
+            best_upstream_id = best_upstream["flowpath_id"]
+            result.aggregation_pairs.append((current_id, best_upstream_id))
             result.no_divide_connectors.append(current_id)
             # Queue upstream for normal processing
             _queue_upstream(upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True)
