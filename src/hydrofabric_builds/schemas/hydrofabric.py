@@ -71,6 +71,10 @@ class Classifications(BaseModel):
             "Tracks cumulative drainage areas being merged into each flowpath. Key: flowpath_id, Value: cumulative area (km²) from all upstream merges. Helps identify when to stop chaining aggregations"
         ),
     )
+    force_queue_flowpaths: set[str] = Field(
+        default_factory=set,
+        description="flowpaths that are required to be queued. These are only for streams deeply nested in no-divide connectors",
+    )
 
 
 class Aggregations(BaseModel):
