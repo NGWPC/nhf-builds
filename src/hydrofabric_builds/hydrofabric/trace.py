@@ -270,7 +270,12 @@ def _trace_stack(
             else:
                 # Big enough - independent
                 if current_id in div_ids:
-                    result.independent_flowpaths.add(current_id)
+                    if upstream_id not in div_ids:
+                        result.aggregation_pairs.append((current_id, upstream_id))
+                        result.aggregation_set.add(current_id)
+                        result.aggregation_set.add(upstream_id)
+                    else:
+                        result.independent_flowpaths.add(current_id)
                 # If no divide and big, still aggregate to avoid orphans
                 else:
                     result.aggregation_pairs.append((current_id, upstream_id))
