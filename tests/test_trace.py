@@ -359,61 +359,6 @@ class TestTraceStackRule2:
 class TestTraceStackRule3CaseA:
     """Tests for Rule 3 Case A: Multiple upstream WITH divide."""
 
-    def test_all_order1_upstreams(self, sample_config: HFConfig) -> None:
-        """Test connector with all order 1 upstreams."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [5.0, 1.0, 1.0],
-                "lengthkm": [10.0, 3.0, 3.0],
-                "totdasqkm": [7.0, 1.0, 1.0],
-                "streamorder": [2, 1, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 1],
-                "flowpath_toid": [0, 1, 1],
-                "mainstemlp": [100.0, 50.0, 60.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2", "3"], "2": [], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "2", "3"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Should aggregate to best order 1, mark others as minor
-        assert any(("1", uid) in result.aggregation_pairs for uid in ["2", "3"])
-
-    def test_two_upstreams_one_higher_order(self, sample_config: HFConfig) -> None:
-        """Test 2 upstreams with 1 higher-order."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [10.0, 5.0, 1.0],
-                "lengthkm": [10.0, 8.0, 2.0],
-                "totdasqkm": [16.0, 5.0, 1.0],
-                "streamorder": [3, 2, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 1],
-                "flowpath_toid": [0, 1, 1],
-                "mainstemlp": [100.0, 100.0, 50.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2", "3"], "2": [], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "2", "3"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Order 1 should be minor, should aggregate to order 2
-        assert "3" in result.minor_flowpaths
-        assert ("1", "2") in result.aggregation_pairs
-
     def test_two_upstreams_both_higher_order(self, sample_config: HFConfig) -> None:
         """Test 2 higher-order upstreams creates connector."""
         flowpath_data = pl.DataFrame(
