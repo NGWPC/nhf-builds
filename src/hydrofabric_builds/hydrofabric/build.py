@@ -6,6 +6,7 @@ from typing import Any
 
 import geopandas as gpd
 import pandas as pd
+import rustworkx as rx
 from shapely import Point
 from shapely.geometry.base import BaseGeometry
 
@@ -74,6 +75,54 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
             "all_ref_ids": [ref_id],
         }
     return ref_id_to_unit
+
+
+def _queue_all_unit_upstreams(
+    unit_info: dict[str, Any],
+    ref_ids: list[str],
+    current_ref_id: str,
+    graph: rx.PyDiGraph,
+    node_indices: dict[str, int],
+    to_process: deque[str],
+) -> None:
+    """Queue all upstream flowpaths for a unit.
+
+    For aggregates, checks all ref_ids to capture all upstream branches.
+    For independents/connectors, just checks the current flowpath.
+
+    Parameters
+    ----------
+    unit_info : dict[str, Any]
+        Info for the unit
+    ref_ids : list[str]
+        All reference flowpath IDs in this unit
+    current_ref_id : str
+        Current flowpath ID being processed
+    graph : rx.PyDiGraph
+        Network graph
+    node_indices : dict[str, int]
+        Mapping of flowpath IDs to node indices
+    to_process : deque[str]
+        Queue to add upstream IDs to
+    """
+    if unit_info["type"] == "aggregate":
+        # For aggregates, check all ref_ids for upstreams
+        all_upstream_ids = []
+        if "0" in ref_ids:
+            ref_ids.remove("0")
+        for ref_id in ref_ids:
+            if ref_id in node_indices:
+                ref_idx = node_indices[ref_id]
+                upstream_ids = [graph[idx] for idx in graph.predecessor_indices(ref_idx)]
+                all_upstream_ids.extend(upstream_ids)
+        unique_upstream_ids = list(set(all_upstream_ids))
+        to_process.extend(unique_upstream_ids)
+    else:
+        # For independents/connectors, just use current_ref_id
+        if current_ref_id in node_indices:
+            current_idx = node_indices[current_ref_id]
+            upstream_ids = [graph[idx] for idx in graph.predecessor_indices(current_idx)]
+            to_process.extend(upstream_ids)
 
 
 def _build_base_hydrofabric(
@@ -175,7 +224,7 @@ def _build_base_hydrofabric(
         original_fps: list[dict[str, Any]] = [fp_lookup[ref_id] for ref_id in ref_ids if ref_id in fp_lookup]
 
         if not original_fps:
-            logger.warning(f"No flowpaths found for unit {ref_ids}")
+            logger.debug(f"No flowpaths found for unit {ref_ids}")
             # Queue upstream
             lookup_id = unit_info.get("up_id", current_ref_id)
             if lookup_id in node_indices:
@@ -231,13 +280,7 @@ def _build_base_hydrofabric(
         polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
         if polygon_geom is None or polygon_geom.is_empty:
             logger.warning(f"Unit {ref_ids} has no divide polygon - skipping")
-            # Queue upstream
-            lookup_id = unit_info.get("up_id", current_ref_id)
-            if lookup_id in node_indices:
-                lookup_idx = node_indices[lookup_id]
-                upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
-                to_process.extend(upstream_ids)
-            continue
+            _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
 
         # Create flowpath
         fp_data.append(
@@ -286,12 +329,7 @@ def _build_base_hydrofabric(
 
         new_id += 1
 
-        # Queue upstream
-        lookup_id = unit_info.get("up_id", current_ref_id)
-        if lookup_id in node_indices:
-            lookup_idx = node_indices[lookup_id]
-            upstream_ids = [graph[idx] for idx in graph.predecessor_indices(lookup_idx)]
-            to_process.extend(upstream_ids)
+        _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
 
     # Fix up_nex_id references
     nexus_by_downstream_fp: dict[int, int] = {

@@ -49,5 +49,5 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     final_reference_flowpaths.to_sql("reference_flowpaths", conn, index=False)
     conn.close()
 
-    logger.info(f"write_base task: wrote base geopackage layers to base_hydrofabric_{__version__}.gpkg")
-    return {"base_file_path": here() / f"data/base_hydrofabric_{__version__}.gpkg"}
+    logger.info(f"write_base task: wrote base geopackage layers to {file_name}")
+    return {"base_file_path": here() / file_name}

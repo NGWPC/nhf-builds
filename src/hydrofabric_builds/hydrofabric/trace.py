@@ -128,30 +128,14 @@ def _traverse_and_mark_as_minor(
     node_indices : dict[str, int]
         Mapping of flowpath IDs to node indices
     """
-    upstream_id = start_id
+    result.minor_flowpaths.add(start_id)
+    result.aggregation_pairs.append((start_id, downstream_id))
+    result.processed_flowpaths.add(start_id)
 
-    while True:
-        result.minor_flowpaths.add(upstream_id)
-        result.aggregation_pairs.append((upstream_id, downstream_id))
-        result.processed_flowpaths.add(upstream_id)
-
-        # Get next upstream
-        next_upstream_ids = _get_upstream_ids(upstream_id, graph, node_indices)
-
-        # Stop if no upstream (headwater)
-        if not next_upstream_ids:
-            break
-
-        # If multiple upstreams, traverse all of them
-        if len(next_upstream_ids) > 1:
-            for next_id in next_upstream_ids:
-                if next_id not in result.processed_flowpaths:
-                    _traverse_and_mark_as_minor(next_id, downstream_id, result, graph, node_indices)
-            break
-
-        # Single upstream - continue
-        next_upstream_id = next_upstream_ids[0]
-        upstream_id = next_upstream_id
+    next_upstream_ids = _get_upstream_ids(start_id, graph, node_indices)
+    if len(next_upstream_ids) > 0:
+        for next_id in next_upstream_ids:
+            _traverse_and_mark_as_minor(next_id, downstream_id, result, graph, node_indices)
 
 
 def _trace_stack(
@@ -228,28 +212,56 @@ def _trace_stack(
 
         # Rule 2: Single upstream
         if len(upstream_ids) == 1:
-            upstream_id = upstream_ids[0]
-            upstream_data = upstream_info[0] if upstream_info else fp_lookup[upstream_id]
-
-            # Get cumulative area
-            current_area = fp_info["areasqkm"]
-            cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
-
-            # Check if we should aggregate
-            if cumulative < cfg.divide_aggregation_threshold:
-                # Too small - aggregate
-                result.aggregation_pairs.append((current_id, upstream_id))
-                updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
+            ds_id = str(int(fp_info["flowpath_toid"]))
+            if current_id not in div_ids:
+                # checking to see if any divides in flowpath
+                all_upstreams_lack_deep_divides = True
+                for uid in upstream_ids:
+                    layer2_ids = _get_upstream_ids(uid, digraph, node_indices)
+                    has_divide_layer2 = any(l2_id in div_ids for l2_id in layer2_ids)
+                    if has_divide_layer2:
+                        all_upstreams_lack_deep_divides = False
+                        break
+                    # Check layer 3
+                    has_divide_layer3 = False
+                    for l2_id in layer2_ids:
+                        layer3_ids = _get_upstream_ids(l2_id, digraph, node_indices)
+                        if any(l3_id in div_ids for l3_id in layer3_ids):
+                            has_divide_layer3 = True
+                            break
+                    if has_divide_layer3:
+                        all_upstreams_lack_deep_divides = False
+                        break
+                if all_upstreams_lack_deep_divides:
+                    result.aggregation_pairs.append((current_id, ds_id))
+                    result.minor_flowpaths.add(current_id)
+                    # Mark all upstreams as minor
+                    for uid in upstream_ids:
+                        _traverse_and_mark_as_minor(uid, current_id, result, digraph, node_indices)
+                    continue
             else:
-                # Big enough - independent
-                if current_id in div_ids:
-                    result.independent_flowpaths.append(current_id)
-                # If no divide and big, still aggregate to avoid orphans
-                else:
-                    result.aggregation_pairs.append((current_id, upstream_id))
+                upstream_id = upstream_ids[0]
+                upstream_data = upstream_info[0] if upstream_info else fp_lookup[upstream_id]
 
-            _queue_upstream([upstream_id], to_process, result.processed_flowpaths, unprocessed_only=True)
-            continue
+                # Get cumulative area
+                current_area = fp_info["areasqkm"]
+                cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
+
+                # Check if we should aggregate
+                if cumulative < cfg.divide_aggregation_threshold:
+                    # Too small - aggregate
+                    result.aggregation_pairs.append((current_id, upstream_id))
+                    updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
+                else:
+                    # Big enough - independent
+                    if current_id in div_ids:
+                        result.independent_flowpaths.append(current_id)
+                    # If no divide and big, still aggregate to avoid orphans
+                    else:
+                        result.aggregation_pairs.append((current_id, upstream_id))
+
+                _queue_upstream([upstream_id], to_process, result.processed_flowpaths, unprocessed_only=True)
+                continue
 
         # Rule 3: Multiple upstream (connector case)
         if len(upstream_ids) > 1:
@@ -314,7 +326,53 @@ def _trace_stack(
                 other_laterals = [lid for lid in lateral_ids if lid != current_id]
                 if len(other_laterals) == 0:
                     result.aggregation_pairs.append((current_id, ds_id))
-                    result.connector_segments.append(current_id)
+
+                    # Check: do the upstream segments have divides
+                    # Case A: No divides for flowpaths upstream. Need to only use one and make the other a minor
+                    if all(uid not in div_ids for uid in upstream_ids):
+                        best_upstream = max(upstream_info, key=lambda x: (x["streamorder"], x["areasqkm"]))
+                        result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
+                        _uids = upstream_ids.copy()
+                        _uids.remove(best_upstream["flowpath_id"])
+                        for _uid in _uids:
+                            result.force_queue_flowpaths.add(_uid)
+                            _traverse_and_mark_as_minor(_uid, current_id, result, digraph, node_indices)
+                        _queue_upstream(
+                            [best_upstream["flowpath_id"]],
+                            to_process,
+                            result.processed_flowpaths,
+                            unprocessed_only=True,
+                        )
+                        continue
+
+                    # Case B: if one of the flowpaths has no-divide
+                    # Find the best upstream, with different actions depending on if there is a divide for it
+                    elif any(uid not in div_ids for uid in upstream_ids):
+                        best_upstream = max(upstream_info, key=lambda x: (x["streamorder"], x["areasqkm"]))
+                        if best_upstream["flowpath_id"] not in div_ids:
+                            result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
+                            _uids = upstream_ids.copy()
+                            _uids.remove(best_upstream["flowpath_id"])
+                            for _uid in _uids:
+                                result.force_queue_flowpaths.add(_uid)
+                                _traverse_and_mark_as_minor(_uid, current_id, result, digraph, node_indices)
+                            _queue_upstream(
+                                [best_upstream["flowpath_id"]],
+                                to_process,
+                                result.processed_flowpaths,
+                                unprocessed_only=True,
+                            )
+                            continue
+                        else:
+                            result.connector_segments.append(current_id)
+                            _queue_upstream(
+                                upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                            )
+                            continue
+
+                    # Case C: all upstreams have divs. This is a connector
+                    else:
+                        result.connector_segments.append(current_id)
                     for up_info in upstream_info:
                         if up_info["streamorder"] == 1:
                             _traverse_and_mark_as_minor(
@@ -384,6 +442,7 @@ def _trace_stack(
                         result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
                         order_1_2_upstreams.remove(best_upstream)
                         for up_info in order_1_2_upstreams:
+                            result.force_queue_flowpaths.add(up_info["flowpath_id"])
                             _traverse_and_mark_as_minor(
                                 up_info["flowpath_id"], current_id, result, digraph, node_indices
                             )
@@ -396,6 +455,13 @@ def _trace_stack(
                         continue
                 else:
                     # This is an awkward connector. Two divides upstream, two downstream, no divide in the flowpath, all upstream are high order
+                    # if current_id == '14626276':
+                    #     # An edge case in North Dakota that is not following any rules. Catchment is delinated incorrectly
+                    #     bad_id = '14626274'
+                    #     _traverse_and_mark_as_minor(
+                    #         bad_id, current_id, result, digraph, node_indices
+                    #     )
+                    #     result.aggregation_pairs.append((bad_id, current_id))
                     result.aggregation_pairs.append((current_id, ds_id))
                     result.connector_segments.append(ds_id)
                     _queue_upstream(
