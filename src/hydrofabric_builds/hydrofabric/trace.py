@@ -233,35 +233,40 @@ def _trace_stack(
                         all_upstreams_lack_deep_divides = False
                         break
                 if all_upstreams_lack_deep_divides:
-                    result.aggregation_pairs.append((current_id, ds_id))
-                    result.minor_flowpaths.add(current_id)
-                    # Mark all upstreams as minor
-                    for uid in upstream_ids:
-                        _traverse_and_mark_as_minor(uid, current_id, result, digraph, node_indices)
-                    continue
+                    start_idx = node_indices[start_id]
+                    ancestor_indices = rx.ancestors(digraph, start_idx)
+                    ancestor_ids = {digraph[idx] for idx in ancestor_indices}
+                    if ancestor_ids.isdisjoint(div_ids):
+                        # No divides anywhere upstream - mark everything as minor
+                        result.aggregation_pairs.append((current_id, ds_id))
+                        result.minor_flowpaths |= ancestor_ids
+                        result.minor_flowpaths.add(current_id)
+                        result.processed_flowpaths |= ancestor_ids
+                        result.processed_flowpaths.add(current_id)
+                        continue
+
+            upstream_id = upstream_ids[0]
+            upstream_data = upstream_info[0] if upstream_info else fp_lookup[upstream_id]
+
+            # Get cumulative area
+            current_area = fp_info["areasqkm"]
+            cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
+
+            # Check if we should aggregate
+            if cumulative < cfg.divide_aggregation_threshold:
+                # Too small - aggregate
+                result.aggregation_pairs.append((current_id, upstream_id))
+                updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
             else:
-                upstream_id = upstream_ids[0]
-                upstream_data = upstream_info[0] if upstream_info else fp_lookup[upstream_id]
-
-                # Get cumulative area
-                current_area = fp_info["areasqkm"]
-                cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
-
-                # Check if we should aggregate
-                if cumulative < cfg.divide_aggregation_threshold:
-                    # Too small - aggregate
-                    result.aggregation_pairs.append((current_id, upstream_id))
-                    updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
+                # Big enough - independent
+                if current_id in div_ids:
+                    result.independent_flowpaths.append(current_id)
+                # If no divide and big, still aggregate to avoid orphans
                 else:
-                    # Big enough - independent
-                    if current_id in div_ids:
-                        result.independent_flowpaths.append(current_id)
-                    # If no divide and big, still aggregate to avoid orphans
-                    else:
-                        result.aggregation_pairs.append((current_id, upstream_id))
+                    result.aggregation_pairs.append((current_id, upstream_id))
 
-                _queue_upstream([upstream_id], to_process, result.processed_flowpaths, unprocessed_only=True)
-                continue
+            _queue_upstream([upstream_id], to_process, result.processed_flowpaths, unprocessed_only=True)
+            continue
 
         # Rule 3: Multiple upstream (connector case)
         if len(upstream_ids) > 1:
@@ -612,7 +617,7 @@ def _trace_single_flowpath_attributes(
         else:
             basin_graph[node_idx]["dn_hydroseq"] = 0
 
-    # PASS 2: Traverse from ROOT to OUTLET (forward topo order)
+    # PASS 2: Traverse from ancestors to OUTLET (forward topo order)
     for node_idx in topo_order:
         in_edges = basin_graph.in_edges(node_idx)
 
@@ -620,12 +625,28 @@ def _trace_single_flowpath_attributes(
 
         basin_graph[node_idx]["total_da_sqkm"] = upstream_total + basin_graph[node_idx]["area_sqkm"]
 
+        # Calculate stream order (Strahler order)
+        if not in_edges:
+            # Headwater - order 1
+            basin_graph[node_idx]["streamorder"] = 1
+        else:
+            upstream_orders = [basin_graph[src_idx]["streamorder"] for src_idx, _, _ in in_edges]
+            max_order = max(upstream_orders)
+            count_max = upstream_orders.count(max_order)
+
+            # If two or more streams of same order meet, increment order
+            if count_max >= 2:
+                basin_graph[node_idx]["streamorder"] = max_order + 1
+            else:
+                basin_graph[node_idx]["streamorder"] = max_order
+
     # Extract results from graph into lists
     fp_ids = []
     total_das = []
     mainstems = []
     path_lengths = []
     dn_hydroseqs = []
+    streamorders = []
 
     for node_idx in basin_graph.node_indices():
         node_data = basin_graph[node_idx]
@@ -634,8 +655,8 @@ def _trace_single_flowpath_attributes(
         mainstems.append(node_data["mainstem_lp"])
         path_lengths.append(node_data["path_length"])
         dn_hydroseqs.append(node_data["dn_hydroseq"])
+        streamorders.append(node_data["streamorder"])
 
-    # Create Polars DataFrame with results
     traced_df = pl.DataFrame(
         {
             "fp_id": fp_ids,
@@ -643,6 +664,7 @@ def _trace_single_flowpath_attributes(
             "mainstem_lp": mainstems,
             "path_length": path_lengths,
             "dn_hydroseq": dn_hydroseqs,
+            "streamorder": streamorders,
         }
     )
 

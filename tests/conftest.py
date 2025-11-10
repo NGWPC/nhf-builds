@@ -1275,34 +1275,26 @@ def create_partition_data_from_dataframes(
     graph: rx.PyDiGraph,
     node_indices: dict,
 ) -> dict:
-    """Convert DataFrames to partition_data format expected by optimized trace functions. NO GEOMETRIES NEEDED
-
-    Parameters
-    ----------
-    flowpaths_df : pl.DataFrame
-        Flowpaths DataFrame with all required columns
-    divides_df : pl.DataFrame | None
-        Divides DataFrame (can be None for tests)
-    graph : rx.PyDiGraph
-        The graph object
-    node_indices : dict
-        Node indices mapping
-
-    Returns
-    -------
-    dict
-        partition_data dict with fp_lookup, div_lookup, subgraph, node_indices
-    """
+    """Convert DataFrames to partition_data format expected by optimized trace functions."""
     # Create fp_lookup
     _fp_lookup = flowpaths_df.to_dicts()
     fp_lookup = {str(row["flowpath_id"]): row for row in _fp_lookup}
 
-    # Add dummy shapely geometries and flowpath_toid for tests
+    # Add dummy shapely geometries and normalize column names
     for fp_id in fp_lookup:
         fp_lookup[fp_id]["shapely_geometry"] = LineString([(0, 0), (1, 1)])
+
+        # Normalize column names to match what trace expects
+        if "areasqkm" in fp_lookup[fp_id]:
+            fp_lookup[fp_id]["area_sqkm"] = fp_lookup[fp_id]["areasqkm"]
+        if "lengthkm" in fp_lookup[fp_id]:
+            fp_lookup[fp_id]["length_km"] = fp_lookup[fp_id]["lengthkm"]
+        if "totdasqkm" in fp_lookup[fp_id]:
+            fp_lookup[fp_id]["total_da_sqkm"] = fp_lookup[fp_id]["totdasqkm"]
+
         # Add flowpath_toid if not present
         if "flowpath_toid" not in fp_lookup[fp_id]:
-            fp_lookup[fp_id]["flowpath_toid"] = "0"  # Default to outlet
+            fp_lookup[fp_id]["flowpath_toid"] = "0"
 
     # Create div_lookup
     div_lookup = {}
@@ -1311,13 +1303,16 @@ def create_partition_data_from_dataframes(
         div_lookup = {str(row["divide_id"]): row for row in _div_lookup}
         for div_id in div_lookup:
             div_lookup[div_id]["shapely_geometry"] = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+            # Normalize areasqkm
+            if "areasqkm" in div_lookup[div_id]:
+                div_lookup[div_id]["area_sqkm"] = div_lookup[div_id]["areasqkm"]
 
     return {
         "subgraph": graph,
         "node_indices": node_indices,
         "fp_lookup": fp_lookup,
         "div_lookup": div_lookup,
-        "flowpaths": flowpaths_df,  # Keep for backward compat if needed
+        "flowpaths": flowpaths_df,
         "divides": divides_df,
     }
 

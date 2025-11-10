@@ -231,8 +231,8 @@ class TestIntegration:
             final_divides = runner.ti.xcom_pull(task_id="reduce_base", key="divides")
             final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
 
-            assert len(final_flowpaths) == 50
-            assert len(final_divides) == 50
+            assert len(final_flowpaths) == 46
+            assert len(final_divides) == 46
             assert len(final_nexus) == 38
 
             flowpath_ids = set(final_flowpaths["fp_id"])

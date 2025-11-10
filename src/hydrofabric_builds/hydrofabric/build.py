@@ -251,6 +251,12 @@ def _build_base_hydrofabric(
                 downstream_ref_id = str(downstream_fp["flowpath_id"])
                 downstream_unit_id = ref_id_to_new_id.get(downstream_ref_id)
 
+        # Check for divide polygon
+        polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
+        if polygon_geom is None or polygon_geom.is_empty:
+            logger.debug(f"Unit {ref_ids} has no divide polygon - skipping")
+            _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
+
         # Get or create nexus
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
             nexus_id = downstream_fp_to_nexus[downstream_unit_id]
@@ -275,12 +281,6 @@ def _build_base_hydrofabric(
 
             if downstream_unit_id is not None:
                 downstream_fp_to_nexus[downstream_unit_id] = nexus_id
-
-        # Check for divide polygon
-        polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
-        if polygon_geom is None or polygon_geom.is_empty:
-            logger.warning(f"Unit {ref_ids} has no divide polygon - skipping")
-            _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
 
         # Create flowpath
         fp_data.append(
