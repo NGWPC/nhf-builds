@@ -295,17 +295,9 @@ def _trace_stack(
 
                 if len(higher_order_upstreams) == 0:
                     best_upstream = max(order_1_upstreams, key=lambda x: (x["streamorder"], x["areasqkm"]))
-                    current_area = fp_info["areasqkm"]
-                    cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
-                    if cumulative < cfg.divide_aggregation_threshold:
-                        result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
-                        result.aggregation_set.add(current_id)
-                        result.aggregation_set.add(best_upstream["flowpath_id"])
-                        updated_cumulative_areas[best_upstream["flowpath_id"]] = (
-                            cumulative + best_upstream["areasqkm"]
-                        )
-                    else:
-                        result.connector_segments.append(current_id)
+                    result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
+                    result.aggregation_set.add(current_id)
+                    result.aggregation_set.add(best_upstream["flowpath_id"])
                     _queue_upstream(
                         [best_upstream["flowpath_id"]],
                         to_process,
