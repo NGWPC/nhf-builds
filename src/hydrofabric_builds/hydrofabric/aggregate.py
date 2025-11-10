@@ -100,7 +100,7 @@ def _process_aggregation_pairs(
             div_data = [div_lookup[fp_id] for fp_id in fp_ids if fp_id in div_lookup]
 
             if not fp_data:
-                logger.warning(f"Cannot find flowpaths for {group_ids}")
+                logger.debug(f"Cannot find flowpaths for {group_ids}")
                 continue
 
             # Sort by hydroseq

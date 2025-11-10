@@ -200,6 +200,8 @@ def _build_base_hydrofabric(
         if current_ref_id not in ref_id_to_unit:
             if not fp_data:  # Starting outlet case
                 continue
+            if current_ref_id in classifications.aggregation_set:  # headwater case
+                continue
             logger.error(f"Flowpath {current_ref_id} not found in any unit and not minor")
             raise ValueError(f"Flowpath {current_ref_id} not found in any unit")
 

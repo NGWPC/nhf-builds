@@ -32,8 +32,8 @@ class Classifications(BaseModel):
             "Reference flowpaths classified as 'minor' tributaries. These are flowpaths that are stream-order 1, with a total DA of < threshold where routing will not be run"
         ),
     )
-    independent_flowpaths: list[str] = Field(
-        default_factory=list,
+    independent_flowpaths: set[str] = Field(
+        default_factory=set,
         description=(
             "Flowpaths that remain independent and are NOT aggregated. These are large catchments (areasqkm > threshold) that form their own divides"
         ),
@@ -74,6 +74,10 @@ class Classifications(BaseModel):
     force_queue_flowpaths: set[str] = Field(
         default_factory=set,
         description="flowpaths that are required to be queued. These are only for streams deeply nested in no-divide connectors",
+    )
+    aggregation_set: set[str] = Field(
+        default_factory=set,
+        description=("A set flowpaths that have been aggregated together"),
     )
 
 
