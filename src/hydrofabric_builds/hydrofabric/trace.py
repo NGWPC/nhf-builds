@@ -275,7 +275,8 @@ def _trace_stack(
                         result.aggregation_set.add(current_id)
                         result.aggregation_set.add(upstream_id)
                     else:
-                        result.independent_flowpaths.add(current_id)
+                        if current_id not in result.aggregation_set:
+                            result.independent_flowpaths.add(current_id)
                 # If no divide and big, still aggregate to avoid orphans
                 else:
                     result.aggregation_pairs.append((current_id, upstream_id))
@@ -295,48 +296,89 @@ def _trace_stack(
 
                 if len(higher_order_upstreams) == 0:
                     best_upstream = max(order_1_upstreams, key=lambda x: (x["streamorder"], x["areasqkm"]))
-                    result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
-                    result.aggregation_set.add(current_id)
-                    result.aggregation_set.add(best_upstream["flowpath_id"])
-                    _queue_upstream(
-                        [best_upstream["flowpath_id"]],
-                        to_process,
-                        result.processed_flowpaths,
-                        unprocessed_only=True,
-                    )
-
-                    order_1_upstreams.remove(best_upstream)
-                    _ids = [_info["flowpath_id"] for _info in order_1_upstreams]
-                    for _id in _ids:
-                        _traverse_and_mark_as_minor(_id, current_id, result, digraph, node_indices)
-                    continue
-                else:
-                    if len(upstream_ids) == 2:
-                        # Mark all order 1 upstreams as minor
-                        for order_1 in order_1_upstreams:
-                            upstream_id = order_1["flowpath_id"]
-                            _traverse_and_mark_as_minor(
-                                upstream_id, current_id, result, digraph, node_indices
-                            )
-
-                        # If 2+ higher-order streams meet, this is a connector. else we aggregate to the higher-order
-                        if len(higher_order_upstreams) > 1:
-                            result.connector_segments.append(current_id)
-                        else:
-                            result.aggregation_pairs.append(
-                                (current_id, higher_order_upstreams[0]["flowpath_id"])
-                            )
-                            result.aggregation_set.add(current_id)
-                            result.aggregation_set.add(higher_order_upstreams[0]["flowpath_id"])
-                        # Queue higher-order upstreams
-                        higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
+                    current_area = fp_info["areasqkm"]
+                    cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
+                    if cumulative < cfg.divide_aggregation_threshold:
+                        result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
+                        result.aggregation_set.add(current_id)
+                        result.aggregation_set.add(best_upstream["flowpath_id"])
+                        updated_cumulative_areas[best_upstream["flowpath_id"]] = (
+                            cumulative + best_upstream["areasqkm"]
+                        )
+                        for _info in order_1_upstreams:
+                            if _info["flowpath_id"] != best_upstream["flowpath_id"]:
+                                _traverse_and_mark_as_minor(
+                                    _info["flowpath_id"], current_id, result, digraph, node_indices
+                                )
                         _queue_upstream(
-                            higher_order_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                            [best_upstream["flowpath_id"]],
+                            to_process,
+                            result.processed_flowpaths,
+                            unprocessed_only=True,
                         )
                         continue
                     else:
+                        if current_id not in result.aggregation_set:
+                            result.connector_segments.append(current_id)
+                        _queue_upstream(
+                            upstream_ids,
+                            to_process,
+                            result.processed_flowpaths,
+                            unprocessed_only=True,
+                        )
+                        continue
+
+                else:
+                    if len(upstream_ids) == 2:
+                        # If 2+ higher-order streams meet, this is a connector. else we aggregate to the higher-order
+                        if len(higher_order_upstreams) > 1:
+                            if current_id not in result.aggregation_set:
+                                result.connector_segments.append(current_id)
+                            _queue_upstream(
+                                upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                            )
+                            continue
+                        else:
+                            current_area = fp_info["areasqkm"]
+                            cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
+                            if cumulative < cfg.divide_aggregation_threshold:
+                                result.aggregation_pairs.append(
+                                    (current_id, higher_order_upstreams[0]["flowpath_id"])
+                                )
+                                result.aggregation_set.add(current_id)
+                                result.aggregation_set.add(higher_order_upstreams[0]["flowpath_id"])
+                                updated_cumulative_areas[higher_order_upstreams[0]["flowpath_id"]] = (
+                                    cumulative + higher_order_upstreams[0]["areasqkm"]
+                                )
+                                # Mark all order 1 upstreams as minor
+                                for order_1 in order_1_upstreams:
+                                    upstream_id = order_1["flowpath_id"]
+                                    _traverse_and_mark_as_minor(
+                                        upstream_id, current_id, result, digraph, node_indices
+                                    )
+                                # Queue higher-order upstreams
+                                higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
+                                _queue_upstream(
+                                    higher_order_ids,
+                                    to_process,
+                                    result.processed_flowpaths,
+                                    unprocessed_only=True,
+                                )
+                                continue
+                            else:
+                                if current_id not in result.aggregation_set:
+                                    result.connector_segments.append(current_id)
+                                _queue_upstream(
+                                    upstream_ids,
+                                    to_process,
+                                    result.processed_flowpaths,
+                                    unprocessed_only=True,
+                                )
+                                continue
+                    else:
                         # 3+ upstream IDs. Mark as connector
-                        result.connector_segments.append(current_id)
+                        if current_id not in result.aggregation_set:
+                            result.connector_segments.append(current_id)
                         _queue_upstream(
                             upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
                         )
@@ -407,7 +449,8 @@ def _trace_stack(
                             )
                             continue
                         else:
-                            result.connector_segments.append(current_id)
+                            if current_id not in result.aggregation_set:
+                                result.connector_segments.append(current_id)
                             _queue_upstream(
                                 upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
                             )
@@ -415,20 +458,22 @@ def _trace_stack(
 
                     # Case C: all upstreams have divs. This is a connector
                     else:
-                        result.connector_segments.append(current_id)
-                    for up_info in upstream_info:
-                        if up_info["streamorder"] == 1:
-                            _traverse_and_mark_as_minor(
-                                up_info["flowpath_id"], current_id, result, digraph, node_indices
-                            )
-                    # Queue non-order-1 upstreams
-                    higher_order_ids = [
-                        info["flowpath_id"] for info in upstream_info if info["streamorder"] > 1
-                    ]
-                    _queue_upstream(
-                        higher_order_ids, to_process, result.processed_flowpaths, unprocessed_only=True
-                    )
-                    continue
+                        if current_id not in result.aggregation_set:
+                            result.connector_segments.append(current_id)
+
+                        for up_info in upstream_info:
+                            if up_info["streamorder"] == 1:
+                                _traverse_and_mark_as_minor(
+                                    up_info["flowpath_id"], current_id, result, digraph, node_indices
+                                )
+                        # Queue non-order-1 upstreams
+                        higher_order_ids = [
+                            info["flowpath_id"] for info in upstream_info if info["streamorder"] > 1
+                        ]
+                        _queue_upstream(
+                            higher_order_ids, to_process, result.processed_flowpaths, unprocessed_only=True
+                        )
+                        continue
 
                 # Step 2: Check if both upstreams have no divides in many layers
                 all_upstreams_lack_deep_divides = True
@@ -516,7 +561,7 @@ def _trace_stack(
                     result.aggregation_set.add(current_id)
                     result.aggregation_set.add(ds_id)
                     result.independent_flowpaths.discard(ds_id)
-                    result.connector_segments.append(ds_id)
+                    # result.connector_segments.append(ds_id)
                     _queue_upstream(
                         upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
                     )
