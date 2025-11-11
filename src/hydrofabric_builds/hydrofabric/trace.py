@@ -267,6 +267,13 @@ def _trace_stack(
                 result.aggregation_set.add(current_id)
                 result.aggregation_set.add(upstream_id)
                 updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
+
+            # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+            elif current_area == 0.0:
+                result.aggregation_pairs.append((current_id, ds_id))
+                result.aggregation_set.add(current_id)
+                result.aggregation_set.add(ds_id)
+                result.independent_flowpaths.discard(ds_id)
             else:
                 # Big enough - independent
                 if current_id in div_ids:
@@ -312,6 +319,19 @@ def _trace_stack(
                                 )
                         _queue_upstream(
                             [best_upstream["flowpath_id"]],
+                            to_process,
+                            result.processed_flowpaths,
+                            unprocessed_only=True,
+                        )
+                        continue
+                    # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+                    elif current_area == 0.0:
+                        result.aggregation_pairs.append((current_id, ds_id))
+                        result.aggregation_set.add(current_id)
+                        result.aggregation_set.add(ds_id)
+                        result.independent_flowpaths.discard(ds_id)
+                        _queue_upstream(
+                            upstream_ids,
                             to_process,
                             result.processed_flowpaths,
                             unprocessed_only=True,
@@ -365,6 +385,19 @@ def _trace_stack(
                                     unprocessed_only=True,
                                 )
                                 continue
+                            # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+                            elif current_area == 0.0:
+                                result.aggregation_pairs.append((current_id, ds_id))
+                                result.aggregation_set.add(current_id)
+                                result.aggregation_set.add(ds_id)
+                                result.independent_flowpaths.discard(ds_id)
+                                _queue_upstream(
+                                    upstream_ids,
+                                    to_process,
+                                    result.processed_flowpaths,
+                                    unprocessed_only=True,
+                                )
+                                continue
                             else:
                                 if current_id not in result.aggregation_set:
                                     result.connector_segments.append(current_id)
@@ -376,6 +409,21 @@ def _trace_stack(
                                 )
                                 continue
                     else:
+                        # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+                        current_area = fp_info["areasqkm"]
+                        if current_area == 0.0:
+                            result.aggregation_pairs.append((current_id, ds_id))
+                            result.aggregation_set.add(current_id)
+                            result.aggregation_set.add(ds_id)
+                            result.independent_flowpaths.discard(ds_id)
+                            _queue_upstream(
+                                upstream_ids,
+                                to_process,
+                                result.processed_flowpaths,
+                                unprocessed_only=True,
+                            )
+                            continue
+
                         # 3+ upstream IDs. Mark as connector
                         if current_id not in result.aggregation_set:
                             result.connector_segments.append(current_id)
