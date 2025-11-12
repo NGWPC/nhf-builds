@@ -254,26 +254,24 @@ def _trace_stack(
                             continue
 
             upstream_id = upstream_ids[0]
-            upstream_data = upstream_info[0] if upstream_info else fp_lookup[upstream_id]
 
             # Get cumulative area
             current_area = fp_info["areasqkm"]
             cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
 
-            # Check if we should aggregate
-            if cumulative < cfg.divide_aggregation_threshold:
-                # Too small - aggregate
-                result.aggregation_pairs.append((current_id, upstream_id))
-                result.aggregation_set.add(current_id)
-                result.aggregation_set.add(upstream_id)
-                updated_cumulative_areas[upstream_id] = cumulative + upstream_data["areasqkm"]
-
             # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
-            elif current_area == 0.0:
+            if current_area == 0.0:
                 result.aggregation_pairs.append((current_id, ds_id))
                 result.aggregation_set.add(current_id)
                 result.aggregation_set.add(ds_id)
                 result.independent_flowpaths.discard(ds_id)
+            # Check if we should aggregate
+            elif cumulative < cfg.divide_aggregation_threshold:
+                # Too small - aggregate
+                result.aggregation_pairs.append((current_id, upstream_id))
+                result.aggregation_set.add(current_id)
+                result.aggregation_set.add(upstream_id)
+                updated_cumulative_areas[upstream_id] = cumulative
             else:
                 # Big enough - independent
                 if current_id in div_ids:
@@ -305,13 +303,24 @@ def _trace_stack(
                     best_upstream = max(order_1_upstreams, key=lambda x: (x["streamorder"], x["areasqkm"]))
                     current_area = fp_info["areasqkm"]
                     cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
-                    if cumulative < cfg.divide_aggregation_threshold:
+                    # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+                    if current_area == 0.0:
+                        result.aggregation_pairs.append((current_id, ds_id))
+                        result.aggregation_set.add(current_id)
+                        result.aggregation_set.add(ds_id)
+                        result.independent_flowpaths.discard(ds_id)
+                        _queue_upstream(
+                            upstream_ids,
+                            to_process,
+                            result.processed_flowpaths,
+                            unprocessed_only=True,
+                        )
+                        continue
+                    elif cumulative < cfg.divide_aggregation_threshold:
                         result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
                         result.aggregation_set.add(current_id)
                         result.aggregation_set.add(best_upstream["flowpath_id"])
-                        updated_cumulative_areas[best_upstream["flowpath_id"]] = (
-                            cumulative + best_upstream["areasqkm"]
-                        )
+                        updated_cumulative_areas[best_upstream["flowpath_id"]] = cumulative
                         for _info in order_1_upstreams:
                             if _info["flowpath_id"] != best_upstream["flowpath_id"]:
                                 _traverse_and_mark_as_minor(
@@ -319,19 +328,6 @@ def _trace_stack(
                                 )
                         _queue_upstream(
                             [best_upstream["flowpath_id"]],
-                            to_process,
-                            result.processed_flowpaths,
-                            unprocessed_only=True,
-                        )
-                        continue
-                    # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
-                    elif current_area == 0.0:
-                        result.aggregation_pairs.append((current_id, ds_id))
-                        result.aggregation_set.add(current_id)
-                        result.aggregation_set.add(ds_id)
-                        result.independent_flowpaths.discard(ds_id)
-                        _queue_upstream(
-                            upstream_ids,
                             to_process,
                             result.processed_flowpaths,
                             unprocessed_only=True,
@@ -361,14 +357,27 @@ def _trace_stack(
                         else:
                             current_area = fp_info["areasqkm"]
                             cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
-                            if cumulative < cfg.divide_aggregation_threshold:
+                            # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
+                            if current_area == 0.0:
+                                result.aggregation_pairs.append((current_id, ds_id))
+                                result.aggregation_set.add(current_id)
+                                result.aggregation_set.add(ds_id)
+                                result.independent_flowpaths.discard(ds_id)
+                                _queue_upstream(
+                                    upstream_ids,
+                                    to_process,
+                                    result.processed_flowpaths,
+                                    unprocessed_only=True,
+                                )
+                                continue
+                            elif cumulative < cfg.divide_aggregation_threshold:
                                 result.aggregation_pairs.append(
                                     (current_id, higher_order_upstreams[0]["flowpath_id"])
                                 )
                                 result.aggregation_set.add(current_id)
                                 result.aggregation_set.add(higher_order_upstreams[0]["flowpath_id"])
                                 updated_cumulative_areas[higher_order_upstreams[0]["flowpath_id"]] = (
-                                    cumulative + higher_order_upstreams[0]["areasqkm"]
+                                    cumulative
                                 )
                                 # Mark all order 1 upstreams as minor
                                 for order_1 in order_1_upstreams:
@@ -380,19 +389,6 @@ def _trace_stack(
                                 higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
                                 _queue_upstream(
                                     higher_order_ids,
-                                    to_process,
-                                    result.processed_flowpaths,
-                                    unprocessed_only=True,
-                                )
-                                continue
-                            # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
-                            elif current_area == 0.0:
-                                result.aggregation_pairs.append((current_id, ds_id))
-                                result.aggregation_set.add(current_id)
-                                result.aggregation_set.add(ds_id)
-                                result.independent_flowpaths.discard(ds_id)
-                                _queue_upstream(
-                                    upstream_ids,
                                     to_process,
                                     result.processed_flowpaths,
                                     unprocessed_only=True,
