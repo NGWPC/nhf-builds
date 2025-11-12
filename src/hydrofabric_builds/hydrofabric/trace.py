@@ -265,7 +265,8 @@ def _trace_stack(
                 result.aggregation_set.add(current_id)
                 result.aggregation_set.add(ds_id)
                 result.independent_flowpaths.discard(ds_id)
-                updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
+                if ds_id in fp_lookup:
+                    updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
             # Check if we should aggregate
             elif cumulative < cfg.divide_aggregation_threshold:
                 # Too small - aggregate
@@ -310,7 +311,10 @@ def _trace_stack(
                         result.aggregation_set.add(current_id)
                         result.aggregation_set.add(ds_id)
                         result.independent_flowpaths.discard(ds_id)
-                        updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
+                        if ds_id in fp_lookup:
+                            updated_cumulative_areas[upstream_id] = (
+                                fp_lookup[ds_id]["areasqkm"] + current_area
+                            )
                         _queue_upstream(
                             upstream_ids,
                             to_process,
@@ -365,7 +369,10 @@ def _trace_stack(
                                 result.aggregation_set.add(current_id)
                                 result.aggregation_set.add(ds_id)
                                 result.independent_flowpaths.discard(ds_id)
-                                updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
+                                if ds_id in fp_lookup:
+                                    updated_cumulative_areas[upstream_id] = (
+                                        fp_lookup[ds_id]["areasqkm"] + current_area
+                                    )
                                 _queue_upstream(
                                     upstream_ids,
                                     to_process,
@@ -415,7 +422,10 @@ def _trace_stack(
                             result.aggregation_set.add(current_id)
                             result.aggregation_set.add(ds_id)
                             result.independent_flowpaths.discard(ds_id)
-                            updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
+                            if ds_id in fp_lookup:
+                                updated_cumulative_areas[upstream_id] = (
+                                    fp_lookup[ds_id]["areasqkm"] + current_area
+                                )
                             _queue_upstream(
                                 upstream_ids,
                                 to_process,
