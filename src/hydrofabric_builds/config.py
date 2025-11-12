@@ -48,8 +48,21 @@ class HFConfig(BaseModel):
         description="YAML model definition for building divide attributes",
     )
 
+    run_build_hydrofabric_tasks: bool = Field(
+        default=True, description="Decides if we want to run the hydrofabric build tasks"
+    )
+
     run_divide_attributes_task: bool = Field(
         default=True, description="Decides if we want to run the divide attributes task"
+    )
+
+    run_flowpath_attributes_task: bool = Field(
+        default=True, description="Decides if we want to run the flowpath attributes task"
+    )
+
+    flowpath_attributes_config: dict = Field(
+        description="Dictionary of flowpath attributes values as found in FlowpathAttributesModelConfig",
+        default=None,
     )
 
     @field_validator("debug_outlet_count")

@@ -6,7 +6,9 @@ from typing import Any, Self
 
 import pyarrow as pa
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pyprojroot import here
 
+from hydrofabric_builds._version import __version__
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 
 
@@ -372,4 +374,168 @@ class DivideAttributeModelConfig(BaseModel):
     def make_tmp_dir(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Model validator to create a temp directory if it does not exist"""
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        return self
+
+
+class FlowpathAttributesModelConfig(BaseModel):
+    """Configurations for running flowpath attributes"""
+
+    hf_path: Path = Field(
+        default=here() / Path(f"data/base_hydrofabric_{__version__}.gpkg"),
+        title="Hydrofabric Path",
+        description="Path to input hydrofabric",
+    )
+    flowpath_id: str = Field(default="fp_id", title="Flowpath ID", description="Flowpath ID field")
+    use_stream_order: bool = Field(
+        title="Stream Order Setting",
+        description="Setting to use stream order to calculate Manning's n (n), Bottom Width (BtmWdth), and Channel side slope (ChSlp). When true, calculate these attributes from stream order. When false, use defaults.",
+        default=True,
+    )
+    dem_path: Path = Field(
+        default=here() / Path("data/usgs_250m_dem_5070.tif"), title="DEM Path", description="Path to DEM"
+    )
+    tw_path: Path = Field(
+        default=here() / Path("data/TW_bf_predictions.parquet"),
+        title="Topwidth Path",
+        description="Path to RiverML topwidth predictions",
+    )
+    y_path: Path = Field(
+        default=here() / Path("data/Y_bf_predictions.parquet"),
+        title="Y Path",
+        description="Path to RiverML Y predictions",
+    )
+    output: Path = Field(
+        default=here() / Path(f"data/base_hydrofabric_{__version__}.gpkg"),
+        title="Output path",
+        description="Output file path",
+    )
+
+
+class StreamOrder:
+    """Returns dictionary of stream-order derived parameters from WRF GIS Preprocessor
+
+    Source: https://github.com/NCAR/wrf_hydro_gis_preprocessor/blob/5781ad4788434e8fd4ec16f3a3805d98536a9f82/wrfhydro_gis/wrfhydro_functions.py#L128
+    Accessed 10/20/25
+    """
+
+    @classmethod
+    def n(cls) -> dict:
+        """Order-based Mannings N values for Strahler orders 1-10"""
+        return {
+            1: 0.096,
+            2: 0.076,
+            3: 0.060,
+            4: 0.047,
+            5: 0.037,
+            6: 0.030,
+            7: 0.025,
+            8: 0.021,
+            9: 0.018,
+            10: 0.022,
+        }
+
+    @classmethod
+    def chsslp(cls) -> dict:
+        """Order-based Channel Side-Slope values for Strahler orders 1-10"""
+        return {1: 0.03, 2: 0.03, 3: 0.03, 4: 0.04, 5: 0.04, 6: 0.04, 7: 0.04, 8: 0.04, 9: 0.05, 10: 0.10}
+
+    @classmethod
+    def bw(cls) -> dict:
+        """Order-based Bottom-width values for Strahler orders 1-10"""
+        return {1: 1.6, 2: 2.4, 3: 3.5, 4: 5.3, 5: 7.4, 6: 11.0, 7: 14.0, 8: 16.0, 9: 26.0, 10: 110.0}
+
+
+class FlowpathAttributesConfig(BaseModel):
+    """Flowpath attributes model to configure and calculate attributes
+
+    Defaults from WRF GIS Preprocessor
+    Source: https://github.com/NCAR/wrf_hydro_gis_preprocessor/blob/5781ad4788434e8fd4ec16f3a3805d98536a9f82/wrfhydro_gis/wrfhydro_functions.py#L128
+    Accessed 10/20/25
+    """
+
+    use_stream_order: bool = Field(
+        title="Stream Order Setting",
+        description="Setting to use stream order to calculate Manning's n (n), Bottom Width (BtmWdth), and Channel side slope (ChSlp). When true, calculate these attributes from stream order. When false, use defaults.",
+        default=True,
+    )
+    streamorder: int | None = Field(
+        None, title="Strahler Stream Order", description="Strahler Stream Order 1-10"
+    )
+    y: float | None = Field(
+        None, title="Estimated Depth", description="Estimated depth associated with TopWdth (m)", alias="Y"
+    )
+    n: float = Field(
+        title="Mannning's in channel roughness",
+        description="Manning's in channel roughness / n. Can be derived from Strahler stream order. Defaults to 0.035 without stream order",
+        default=0.035,
+        alias="n",
+    )
+    ncc: float | None = Field(
+        None,
+        title="Compound Channel Top Width",
+        description="Compound Channel Top Width (m). 2*n",
+        alias="nCC",
+    )
+    btmwdth: float = Field(
+        title="Bottom width of channel",
+        description="Bottom width of channel (m). Can be derived from Strahler stream order. Defaults to 5 without stream order",
+        default=5,
+        alias="BtmWdth",
+    )
+    topwdth: float | None = Field(None, title="Top Width", description="Top Width (m)", alias="TopWdth")
+    topwdthcc: float | None = Field(
+        None,
+        title="Compound Channel Top Width",
+        description="Compound Channel Top Width (m)",
+        alias="TopWdthCC",
+    )
+    chslp: float = Field(
+        title="Channel Side Slope",
+        description="Channel side slope. Can be derived from Strahler stream order. Defaults to 0.05 without stream order.",
+        default=0.05,
+        alias="ChSlp",
+    )
+    mean_elevation: float | None = Field(
+        None, title="Elevation", description="Mean elevation (m) between nodes from 3DEP", alias="alt"
+    )
+    slope: float | None = Field(
+        None, title="Slope", description="Slope (meters/meters) computed from 3DEP", alias="So"
+    )
+    musx: float = Field(
+        title="Muskingum Weighting Coeffiecent",
+        description="Muskingum Weighting Coefficient. Defaults to 0.2",
+        default=0.2,
+        alias="MusX",
+    )
+    musk: float = Field(
+        title="Muskingum routing time",
+        default=3600,
+        description="Muskingum routing time (seconds). Defaults to 3600",
+        alias="MusK",
+    )
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+
+    @model_validator(mode="after")
+    def stream_order_classify(self: Any) -> Any:
+        """Model validator derive variables from stream order"""
+        if self.use_stream_order and self.streamorder:
+            for field, func in zip(
+                ["n", "chslp", "btmwdth"],
+                [StreamOrder.n, StreamOrder.chsslp, StreamOrder.bw],
+                strict=False,
+            ):
+                try:
+                    setattr(self, field, func()[self.streamorder])
+                except KeyError:
+                    continue
+
+        # set compound channel - from WRF-Hydro
+        self.ncc = 2 * self.n
+
+        # set topwdthcc - from WRF-Hydro
+        self.topwdthcc = (3 * self.topwdth) if self.topwdth else None
+
         return self
