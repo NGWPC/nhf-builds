@@ -9,6 +9,7 @@ from astropy.stats.circstats import circmean
 from pandas.testing import assert_frame_equal
 from pyprojroot import here
 
+from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 from hydrofabric_builds.hydrofabric.divide_attributes import (
     _calculate_attribute,
@@ -107,18 +108,16 @@ class TestDivideAttributesSchemas:
                 agg_type="mode", field_name="test2", data_loader="tif", file_name="test2.tif"
             ),
         ]
-        model = DivideAttributeModelConfig(
-            data_dir="./data", divides_path="./data/divides.gpkg", attributes=attributes
-        )
+        model = DivideAttributeModelConfig(attributes=attributes)
 
         # model validator creates tmp folder
         assert tmp_dir.exists()
 
-        assert model.data_dir == Path("./data")
-        assert model.divides_path == Path("./data/divides.gpkg")
+        assert model.data_dir == here() / "data"  # default
+        assert model.divides_path == HYDROFABRIC_OUTPUT_FILE  # default
         assert model.divide_id == "divide_id"  # default
         assert model.attributes == attributes
-        assert model.output == Path("./data/divides_output.gpkg")  # default
+        assert model.output == HYDROFABRIC_OUTPUT_FILE  # default
         assert model.divides_path_list is None  # default
         assert model.tmp_dir == Path("/tmp/divide-attributes")  # default
         assert model.split_vpu is False  # default

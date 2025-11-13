@@ -8,6 +8,10 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 from pyprojroot import here
 
+from hydrofabric_builds._version import __version__
+
+HYDROFABRIC_OUTPUT_FILE = here() / f"data/base_hydrofabric_{__version__}.gpkg"
+
 
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""
@@ -25,6 +29,8 @@ class HFConfig(BaseModel):
         default=here() / "data/",
         description="The directory for output files to be saved from Hydrofabric builds",
     )
+
+    output_file: Path = Field(default=HYDROFABRIC_OUTPUT_FILE, description="The output file")
 
     reference_divides_path: str = Field(
         default="s3://edfs-data/reference/super_conus/reference_divides.parquet",

@@ -8,7 +8,7 @@ import pyarrow as pa
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pyprojroot import here
 
-from hydrofabric_builds._version import __version__
+from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 
 
@@ -345,14 +345,14 @@ class DivideAttributeConfig(BaseModel):
 class DivideAttributeModelConfig(BaseModel):
     """Pydantic model for divide attributes model configuration"""
 
-    data_dir: Path = Field(description="Directory of all input data")
-    divides_path: Path = Field(description="Divides path for entire domain")
+    data_dir: Path = Field(description="Directory of all input data", default=here() / "data")
+    divides_path: Path = Field(description="Divides path for entire domain", default=HYDROFABRIC_OUTPUT_FILE)
     divide_id: str = Field(description="Field name for unique divide id", default="divide_id")
     attributes: list[DivideAttributeConfig] = Field(
         description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
     )
     output: Path = Field(
-        description="Output file path", default_factory=lambda data: data["data_dir"] / "divides_output.gpkg"
+        description="Output file path. Defaults to same as input.", default=HYDROFABRIC_OUTPUT_FILE
     )
     divides_path_list: list[Path] | None | None = Field(
         description="List of divides paths to use for parallel run. ex. list of VPU subsets.",
@@ -381,7 +381,7 @@ class FlowpathAttributesModelConfig(BaseModel):
     """Configurations for running flowpath attributes"""
 
     hf_path: Path = Field(
-        default=here() / Path(f"data/base_hydrofabric_{__version__}.gpkg"),
+        default=HYDROFABRIC_OUTPUT_FILE,
         title="Hydrofabric Path",
         description="Path to input hydrofabric",
     )
@@ -405,7 +405,7 @@ class FlowpathAttributesModelConfig(BaseModel):
         description="Path to RiverML Y predictions",
     )
     output: Path = Field(
-        default=here() / Path(f"data/base_hydrofabric_{__version__}.gpkg"),
+        default=HYDROFABRIC_OUTPUT_FILE,
         title="Output path",
         description="Output file path",
     )

@@ -4,9 +4,6 @@ import logging
 import sqlite3
 from typing import Any, cast
 
-from pyprojroot import here
-
-from hydrofabric_builds._version import __version__
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.task_instance import TaskInstance
 
@@ -34,7 +31,7 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     """
     cfg = cast(HFConfig, context["config"])
     ti = cast(TaskInstance, context["ti"])
-    file_name = cfg.output_dir / f"base_hydrofabric_{__version__}.gpkg"
+    file_name = cfg.output_file
     file_name.unlink(missing_ok=True)  # deletes files that exist with the same name
 
     final_flowpaths = ti.xcom_pull(task_id="trace_attributes", key="flowpaths_with_attributes")
@@ -50,4 +47,4 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     conn.close()
 
     logger.info(f"write_base task: wrote base geopackage layers to {file_name}")
-    return {"base_file_path": here() / file_name}
+    return {"base_file_path": file_name}

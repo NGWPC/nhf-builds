@@ -4,9 +4,8 @@ reference_flowpaths_path: "data/reference_flowpaths.parquet"
 divide_attributes_processes: 1
 run_build_hydrofabric_tasks: True
 run_divide_attributes_task: False
-run_flowpath_attribute_task: False
+run_flowpath_attributes_task: False
 
 # flowpaths
 flowpath_attributes_config:
-  hf_path: "data/base_hydrofabric_0.1.1.dev11+g3e63dc951.d20251110.gpkg"
   use_stream_order: true

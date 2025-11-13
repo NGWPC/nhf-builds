@@ -329,7 +329,7 @@ def _write_output(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFram
     if ".parquet" in model_cfg.output.name:
         gdf.to_parquet(model_cfg.output, compression="snappy")
     else:
-        gdf.to_file(model_cfg.output, layer="flowpaths")
+        gdf.to_file(model_cfg.output, layer="flowpaths", driver="GPKG")
 
     del df_pd, gdf, df
 

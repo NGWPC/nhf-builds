@@ -13,7 +13,7 @@ from pyprojroot import here
 from rasterio.transform import from_bounds
 from shapely.geometry import LineString, MultiLineString
 
-from hydrofabric_builds._version import __version__
+from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.hydrofabric.flowpath_attributes import (
     _config_reader,
     _create_base_polars,
@@ -217,7 +217,7 @@ class TestFlowpathAttributesSchemas:
         """Flowpath Attribues Model Config defaults"""
         model = FlowpathAttributesModelConfig()
         assert model.use_stream_order is True
-        assert model.hf_path == here() / Path(f"data/base_hydrofabric_{__version__}.gpkg")
+        assert model.hf_path == HYDROFABRIC_OUTPUT_FILE
         assert model.flowpath_id == "fp_id"
         assert model.dem_path == here() / Path("data/usgs_250m_dem_5070.tif")
         assert model.tw_path == here() / Path("data/TW_bf_predictions.parquet")
@@ -297,7 +297,7 @@ class TestFlowpathAttributes:
         """Config reader defaults"""
         model = _config_reader()
         assert model.use_stream_order is True
-        assert model.hf_path == here() / Path(f"data/base_hydrofabric_{__version__}.gpkg")
+        assert model.hf_path == HYDROFABRIC_OUTPUT_FILE
         assert model.flowpath_id == "fp_id"
         assert model.dem_path == here() / Path("data/usgs_250m_dem_5070.tif")
         assert model.tw_path == here() / Path("data/TW_bf_predictions.parquet")
