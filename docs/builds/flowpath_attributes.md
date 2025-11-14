@@ -6,7 +6,7 @@ The flowpath attributes task calculates metrics per flowpath linestring from mul
 
 1. Download source data from AWS test account:
 - DEM 250 m: s3://edfs-data/attributes/5070/usgs/usgs_250m_dem_5070.tif * TBD: Change to higher resolution
-- RiverML Y: s3://edfs-data/reference/super_conus/TW_bf_predictions.parquet
+- RiverML Y: s3://edfs-data/reference/super_conus/Y_bf_predictions.parquet
 - RiverML TW: s3://edfs-data/reference/super_conus/TW_bf_predictions.parquet
 
 Save to this `data` folder in this repo. `aws cp [file] [location]` can be used

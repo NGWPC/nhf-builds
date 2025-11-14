@@ -115,7 +115,7 @@ class TestDivideAttributesSchemas:
 
         assert model.data_dir == here() / "data"  # default
         assert model.divides_path == HYDROFABRIC_OUTPUT_FILE  # default
-        assert model.divide_id == "divide_id"  # default
+        assert model.divide_id == "div_id"  # default
         assert model.attributes == attributes
         assert model.output == HYDROFABRIC_OUTPUT_FILE  # default
         assert model.divides_path_list is None  # default
@@ -157,7 +157,7 @@ class TestDivideAttributes:
             for gpkg in gpkgs:
                 assert gpkg.exists() is True
                 gdf = gpd.read_file(gpkg, layer="divides")
-                assert len(gdf["vpuid"].unique()) == 1
+                assert len(gdf["vpu_id"].unique()) == 1
         finally:
             for gpkg in gpkgs:
                 gpkg.unlink(missing_ok=True)
@@ -210,6 +210,7 @@ class TestDivideAttributes:
         self,
         divide_attributes_model_config: DivideAttributeModelConfig,
         divide_attributes_aspect: dict[str, Any],
+        divide_attributes_aspect_lake: dict[str, Any],
     ) -> None:
         """Fixture includes config, VPU03N, and results. Custom exactextract"""
         try:
@@ -227,8 +228,23 @@ class TestDivideAttributes:
                 check_exact=False,
             )
 
+            _calculate_attribute(
+                divide_attributes_model_config,
+                divide_attributes_aspect_lake["config"],
+                alt_divides_path=divide_attributes_aspect_lake["vpu_path"],
+            )
+
+            assert divide_attributes_aspect_lake["config"].tmp.exists() is True
+            df = pd.read_parquet(divide_attributes_aspect_lake["config"].tmp)
+            assert_frame_equal(
+                df[["aspect_circmean"]],
+                divide_attributes_aspect_lake["results"],
+                check_exact=False,
+            )
+
         finally:
             divide_attributes_aspect["config"].tmp.unlink(missing_ok=True)
+            divide_attributes_aspect_lake["config"].tmp.unlink(missing_ok=True)
 
     def test_calculate_attributes__gmean(
         self,

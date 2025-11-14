@@ -1140,7 +1140,7 @@ def divide_attributes_bexp() -> dict[str, Any]:
         file_name=here() / "tests/data/divide_attributes/bexp_0.tif", agg_type="mode", field_name="bexp_mode"
     )
     vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
-    results = pd.DataFrame(data={"bexp_mode": [3.8358047008514404] * 3})
+    results = pd.DataFrame(data={"bexp_mode": [3.8358047008514404] * 2})
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
 
 
@@ -1155,10 +1155,10 @@ def divide_attributes_twi() -> dict[str, Any]:
     vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
     results = pd.DataFrame(
         data={
-            "twi_q25": [2.694071054458618, 3.019684076309204, 2.3839735984802246],
-            "twi_q50": [3.398449182510376, 3.584394693374634, 3.3415729999542236],
-            "twi_q75": [4.452366352081299, 4.816798686981201, 4.956294059753418],
-            "twi_q100": [9.391340255737305, 9.557568550109863, 9.391340255737305],
+            "twi_q25": [2.515662670135498, 3.0192484855651855],
+            "twi_q50": [3.3970980644226074, 3.5839314460754395],
+            "twi_q75": [4.570732116699219, 4.815537929534912],
+            "twi_q100": [9.391340255737305, 9.557568550109863],
         }
     )
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
@@ -1175,7 +1175,24 @@ def divide_attributes_aspect() -> dict[str, Any]:
     vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
     results = pd.DataFrame(
         data={
-            "aspect_circmean": [2.99664231374856, 1.49115191281852, 1.93281955851195],
+            "aspect_circmean": [2.6788329323693696, 1.4929676850304032],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_aspect_lake() -> dict[str, Any]:
+    """Fixture contains config, lakes (VPU 16) path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
+        agg_type="weighted_circular_mean",
+        field_name="aspect_circmean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/lake_16_111425.gpkg"
+    results = pd.DataFrame(
+        data={
+            "aspect_circmean": [pd.NA],
         }
     )
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
@@ -1192,7 +1209,7 @@ def divide_attributes_dksat() -> dict[str, Any]:
     vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
     results = pd.DataFrame(
         data={
-            "dksat_geomean": [7.41350989298916e-06, 1.34066861468563e-05, 1.17470439333527e-05],
+            "dksat_geomean": [8.584832031904611e-06, 1.341045813479675e-05],
         }
     )
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
@@ -1203,67 +1220,53 @@ def pipeline_results() -> dict[str, Any]:
     return pd.DataFrame(
         data={
             "bexp_mode": [
-                3.83580470085144,
-                3.83580470085144,
-                3.83580470085144,
-                6.04997158050537,
-                8.37030601501465,
-                3.83580470085144,
-                9.27090930938721,
+                3.8358047008514404,
+                3.8358047008514404,
+                9.270909309387207,
+                8.370306015014648,
+                8.370306015014648,
             ],
             "dksat_geomean": [
-                7.41350989298916e-06,
-                1.34066861468563e-05,
-                1.17470439333527e-05,
-                1.38974877995705e-06,
-                4.46308076016753e-06,
-                5.91530080981635e-06,
-                2.30610919442801e-06,
+                8.584832031904611e-06,
+                1.341045813479675e-05,
+                2.2422710502747236e-06,
+                4.831606554425143e-06,
+                2.8500623676763363e-06,
             ],
             "twi_q25": [
-                2.69407105445862,
-                3.0196840763092,
-                2.38397359848022,
-                3.51079273223877,
-                3.25145959854126,
-                3.64542818069458,
-                3.2723867893219,
+                2.515662670135498,
+                3.0192484855651855,
+                3.173346996307373,
+                3.290754556655884,
+                4.159274578094482,
             ],
             "twi_q50": [
-                3.39844918251038,
-                3.58439469337463,
-                3.34157299995422,
-                4.04998207092285,
-                3.90506148338318,
-                3.95171666145325,
-                4.1548490524292,
+                3.3970980644226074,
+                3.5839314460754395,
+                3.767436981201172,
+                3.9177677631378174,
+                4.271378517150879,
             ],
             "twi_q75": [
-                4.4523663520813,
-                4.8167986869812,
-                4.95629405975342,
-                6.03084325790405,
-                5.51765108108521,
-                4.64258718490601,
-                5.35527324676514,
+                4.570732116699219,
+                4.815537929534912,
+                6.707566261291504,
+                5.501246452331543,
+                4.462091445922852,
             ],
             "twi_q100": [
-                9.39134025573731,
-                9.55756855010986,
-                9.39134025573731,
-                14.7246837615967,
-                12.0086498260498,
-                7.19441413879395,
-                7.29458808898926,
+                9.391340255737305,
+                9.557568550109863,
+                14.696468353271484,
+                12.008649826049805,
+                6.724186897277832,
             ],
             "aspect_circmean": [
-                2.99664231374856,
-                1.49115191281852,
-                1.93281955851195,
-                -2.35675646702983,
-                -2.21318957597644,
-                -2.20789058997582,
-                -1.79286152557521,
+                2.6788329323693696,
+                1.4929676850304032,
+                2.949461597005031,
+                -2.211277378349467,
+                0.6647588929701888,
             ],
         }
     )

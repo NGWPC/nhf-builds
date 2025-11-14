@@ -12,6 +12,7 @@ import xarray as xr
 import yaml
 from exactextract import exact_extract
 
+from hydrofabric_builds.hydrofabric.graph import _validate_and_fix_geometries
 from hydrofabric_builds.schemas.hydrofabric import (
     DivideAttributeConfig,
     DivideAttributeModelConfig,
@@ -63,11 +64,14 @@ def _vpu_splitter(model_cfg: DivideAttributeModelConfig) -> list[Path]:
     list[Path]
         list of temp VPU files created to be used in model_cfg's `divides_path_list`
     """
-    gdf = gpd.read_file(model_cfg.divides_path)
-    vpus = gdf["vpuid"].unique()
+    gdf = gpd.read_file(model_cfg.divides_path, layer="divides")
+    gdf = _validate_and_fix_geometries(gdf, geom_type="divides")
+    vpus = gdf["vpu_id"].unique()
     for vpu in vpus:
-        gdf_temp = gdf[gdf["vpuid"] == vpu].copy()
-        gdf_temp.to_file(model_cfg.tmp_dir / f"vpu_{vpu}.gpkg", layer="divides")
+        gdf_temp = gdf[gdf["vpu_id"] == vpu].copy()
+        gdf_temp.to_file(
+            model_cfg.tmp_dir / f"vpu_{vpu}.gpkg", layer="divides", driver="GPKG", overwrite=True
+        )
         del gdf_temp
 
     return [model_cfg.tmp_dir / f"vpu_{vpu}.gpkg" for vpu in vpus]
@@ -172,7 +176,7 @@ def _merge_divide_attributes_parallel(model_cfg: DivideAttributeModelConfig) -> 
             df_temp = pd.read_parquet(list_f[i])
             gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
         tmp_file = model_cfg.tmp_dir / f"tmp_{divides.name}"
-        gdf.to_file(tmp_file, layer="divides")
+        gdf.to_file(tmp_file, layer="divides", driver="GPKG", overwrite=True)
         logger.info(f"{tmp_file} created")
 
 
@@ -188,7 +192,7 @@ def _concatenate_divides_parallel(model_cfg: DivideAttributeModelConfig) -> None
     file_list = [model_cfg.tmp_dir / f"tmp_{divides.name}" for divides in model_cfg.divides_path_list]  # type: ignore[union-attr]
     gdfs = [gpd.read_file(f, layer="divides") for f in file_list]
     gdf = pd.concat(gdfs, axis=0, ignore_index=True)
-    gdf.to_file(model_cfg.output, layer="divides")
+    gdf.to_file(model_cfg.output, layer="divides", overwrite=True)
     logger.info(f"{model_cfg.output}: {round((perf_counter() - t0) / 60, 2)} min")
 
 

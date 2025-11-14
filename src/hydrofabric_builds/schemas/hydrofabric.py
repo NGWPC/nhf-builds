@@ -347,7 +347,7 @@ class DivideAttributeModelConfig(BaseModel):
 
     data_dir: Path = Field(description="Directory of all input data", default=here() / "data")
     divides_path: Path = Field(description="Divides path for entire domain", default=HYDROFABRIC_OUTPUT_FILE)
-    divide_id: str = Field(description="Field name for unique divide id", default="divide_id")
+    divide_id: str = Field(description="Field name for unique divide id", default="div_id")
     attributes: list[DivideAttributeConfig] = Field(
         description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
     )

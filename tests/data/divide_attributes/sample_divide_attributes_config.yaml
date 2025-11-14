@@ -1,6 +1,6 @@
 data_dir: "./tests/data/divide_attributes"
 divides_path: "./tests/data/divide_attributes/divide_attributes_divides.gpkg"
-divide_id: "divide_id"
+divide_id: "div_id"
 output: "./tests/data/divide_attributes_divides.gpkg"
 tmp_dir: "./tests/data/divide_attributes/tmp/divide-attributes"
 split_vpu: True

@@ -140,6 +140,198 @@ def _traverse_and_mark_as_minor(
             _traverse_and_mark_as_minor(next_id, downstream_id, result, graph, node_indices)
 
 
+def _fix_no_divide_anomalies(
+    current_id: str,
+    result: Classifications,
+    fp_lookup: dict[str, Any],
+    digraph: rx.PyDiGraph,
+    node_indices: dict[str, int],
+    to_process: deque,
+) -> bool:
+    """Provides rules that are outside of the current specification to account for bad flowpaths
+
+    Parameters
+    ----------
+    current_id : str
+        Starting flowpath ID
+    result : Classifications
+        Results container to update
+    fp_lookup : dict[str, Any]
+        lookup for all information related to flowpaths
+    graph : rx.PyDiGraph
+        Network graph
+    node_indices : dict[str, int]
+        Mapping of flowpath IDs to node indices
+    to_process: deque
+        the stack of flowpaths to model
+
+    Returns
+    -------
+    bool
+        if there was a fix applied
+    """
+    ds_id = str(int(fp_lookup[current_id]["flowpath_toid"]))
+    if current_id in ["9272756"]:
+        # Flowpath in 10L upstream of 9272686 that is a no-divide connector and does not create a divide
+        _traverse_and_mark_as_minor("9272732", current_id, result, digraph, node_indices)
+        result.aggregation_pairs.append((current_id, "9272706"))
+        result.aggregation_pairs.append(("9272706", "9272686"))
+        result.aggregation_pairs.append(("9272686", "9270812"))
+        result.aggregation_set.add(current_id)
+        result.aggregation_set.add("9272732")
+        result.aggregation_set.add("9272706")
+        result.aggregation_set.add("9272686")
+        result.aggregation_set.add("9270812")
+        _traverse_and_mark_as_minor("9272688", "9272686", result, digraph, node_indices)
+        result.independent_flowpaths.discard(ds_id)
+        _queue_upstream(
+            ["9270812"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["7262417"]:
+        # Flowpath in 10L with too large of an upstream area within an irigated field
+        _traverse_and_mark_as_minor("7262465", current_id, result, digraph, node_indices)
+        result.independent_flowpaths.add(current_id)
+        _queue_upstream(
+            ["7262413"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["7262801"]:
+        # Upstream Flowpaths in 10L with many no divides
+        result.connector_segments.append(current_id)
+
+        result.minor_flowpaths.add("7262683")
+        result.aggregation_pairs.append(("7262727", "7262683"))
+        result.aggregation_set.add("7262683")
+        result.aggregation_set.add("7262727")
+
+        result.minor_flowpaths.add("7262819")
+        result.aggregation_pairs.append(("7262819", "7262727"))
+        result.aggregation_set.add("7262819")
+
+        result.aggregation_pairs.append(("7262727", "7262805"))
+        result.aggregation_set.add("7262805")
+
+        _traverse_and_mark_as_minor("7262803", "7262805", result, digraph, node_indices)
+
+        result.aggregation_pairs.append(("7262805", "7262887"))
+        result.aggregation_set.add("7262887")
+
+        _traverse_and_mark_as_minor("7262933", "7262887", result, digraph, node_indices)
+        result.aggregation_pairs.append(("7262887", "7262959"))
+        result.aggregation_set.add("7262959")
+        _queue_upstream(
+            ["940200288"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["7264125"]:
+        # Flowpath in 10L with many flowpaths connected that have no divides. Stream order 3
+        _traverse_and_mark_as_minor(current_id, ds_id, result, digraph, node_indices)
+        result.independent_flowpaths.discard(ds_id)
+        return True
+
+    elif current_id in ["13257313"]:
+        # Flowpath in 10L with many flowpaths connected that have no divides. Stream order 3
+        _traverse_and_mark_as_minor(current_id, ds_id, result, digraph, node_indices)
+        result.independent_flowpaths.discard(ds_id)
+        return True
+
+    elif current_id in ["4342468"]:
+        # Flowpath in 10L with many flowpaths connected that have no divides. Stream order 3
+        _traverse_and_mark_as_minor(current_id, ds_id, result, digraph, node_indices)
+        result.independent_flowpaths.discard(ds_id)
+        return True
+
+    elif current_id in ["22769238"]:
+        # Flowpath in VPU 8 on the coast that doesn't have a catchment
+        _traverse_and_mark_as_minor("22769236", current_id, result, digraph, node_indices)
+        result.aggregation_pairs.append((current_id, "22769244"))
+        result.aggregation_set.add(current_id)
+        result.aggregation_set.add("22769244")
+        _queue_upstream(
+            ["22769244"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["7257691"]:
+        # Flowpath in VPU 10L whos outlet is not in a divide. Queueing the first flowpath that has a divide
+        result.aggregation_pairs.append((current_id, "7258923"))
+        result.aggregation_pairs.append(("7258923", "7257829"))
+        result.aggregation_set.add(current_id)
+        result.aggregation_set.add("7258923")
+        result.aggregation_set.add("7257829")
+        _queue_upstream(
+            ["7257829"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["940180111"]:
+        # Flowpath in 10L that is filled with flowpaths with no divides. Some divide headwaters
+        _traverse_and_mark_as_minor("19058304", current_id, result, digraph, node_indices)
+        result.aggregation_pairs.append((current_id, "940180110"))
+        result.aggregation_set.add(current_id)
+        result.aggregation_set.add("940180110")
+        _queue_upstream(
+            ["940180110"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["21532894"]:
+        # Flowpath in VPU 10U whos outlet is not in a divide and has an upstream that isn't connected. Passing
+        return True
+
+    elif current_id in ["21534286"]:
+        # Flowpath in VPU 10U whos outlet is not in a divide. Queueing the first flowpath that has a divide
+        result.aggregation_pairs.append(("21533002", "21534452"))
+        result.aggregation_set.add("21533002")
+        result.aggregation_set.add("21534452")
+        _queue_upstream(
+            ["21534452"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["12745197"]:
+        # Flowpath in VPU 10U whos outlet is not in a divide and belongs to a null divide. Queueing the first flowpath that has a divide
+        result.aggregation_pairs.append(("12744931", "12745039"))
+        result.aggregation_pairs.append(("12745039", "12745041"))
+        result.aggregation_set.add("12744931")
+        result.aggregation_set.add("12745039")
+        result.aggregation_set.add("12745041")
+        _queue_upstream(
+            ["12745041"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+    else:
+        return False
+
+
 def _trace_stack(
     start_id: str,
     div_ids: set[str],
@@ -203,6 +395,8 @@ def _trace_stack(
         upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp_lookup, result.processed_flowpaths)
 
         result.processed_flowpaths.add(current_id)
+        if _fix_no_divide_anomalies(current_id, result, fp_lookup, digraph, node_indices, to_process):
+            continue
 
         # Rule 1: No upstream (headwater)
         if not upstream_ids:
@@ -262,10 +456,16 @@ def _trace_stack(
             # If the drainage area close to nothing, we have a BAD reference line. This should be aggregated downstream
             if current_area < 0.005:
                 ds_id = str(int(fp_info["flowpath_toid"]))
-                result.aggregation_pairs.append((current_id, ds_id))
+                if ds_id == "0":
+                    result.aggregation_pairs.append((current_id, upstream_id))
+                    result.aggregation_set.add(upstream_id)
+                    result.independent_flowpaths.discard(upstream_id)
+                else:
+                    result.aggregation_pairs.append((current_id, ds_id))
+                    result.aggregation_set.add(ds_id)
+                    result.independent_flowpaths.discard(ds_id)
+
                 result.aggregation_set.add(current_id)
-                result.aggregation_set.add(ds_id)
-                result.independent_flowpaths.discard(ds_id)
                 if ds_id in fp_lookup:
                     updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
             # Check if we should aggregate
@@ -309,10 +509,16 @@ def _trace_stack(
                     # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
                     if current_area < 0.005:
                         ds_id = str(int(fp_info["flowpath_toid"]))
-                        result.aggregation_pairs.append((current_id, ds_id))
+                        if ds_id == "0":
+                            result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
+                            result.aggregation_set.add(best_upstream["flowpath_id"])
+                            result.independent_flowpaths.discard(best_upstream["flowpath_id"])
+                        else:
+                            result.aggregation_pairs.append((current_id, ds_id))
+                            result.aggregation_set.add(ds_id)
+                            result.independent_flowpaths.discard(ds_id)
+
                         result.aggregation_set.add(current_id)
-                        result.aggregation_set.add(ds_id)
-                        result.independent_flowpaths.discard(ds_id)
                         _queue_upstream(
                             upstream_ids,
                             to_process,
@@ -358,22 +564,41 @@ def _trace_stack(
                                 upstream_ids, to_process, result.processed_flowpaths, unprocessed_only=True
                             )
                             continue
-                        else:
+                        else:  # one higher order, one order 1 stream. 2 total upstream
                             ds_id = str(int(fp_info["flowpath_toid"]))
+                            higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
                             current_area = fp_info["areasqkm"]
                             cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
                             # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
                             if current_area < 0.005:
-                                result.aggregation_pairs.append((current_id, ds_id))
-                                result.aggregation_set.add(current_id)
-                                result.aggregation_set.add(ds_id)
-                                result.independent_flowpaths.discard(ds_id)
-                                _queue_upstream(
-                                    upstream_ids,
-                                    to_process,
-                                    result.processed_flowpaths,
-                                    unprocessed_only=True,
-                                )
+                                if ds_id == "0":
+                                    result.aggregation_pairs.append((current_id, higher_order_ids[0]))
+                                    result.aggregation_set.add(higher_order_ids[0])
+                                    result.aggregation_set.add(current_id)
+                                    result.independent_flowpaths.discard(higher_order_ids[0])
+                                    for order_1 in order_1_upstreams:
+                                        upstream_id = order_1["flowpath_id"]
+                                        _traverse_and_mark_as_minor(
+                                            upstream_id, current_id, result, digraph, node_indices
+                                        )
+                                    _queue_upstream(
+                                        higher_order_ids,
+                                        to_process,
+                                        result.processed_flowpaths,
+                                        unprocessed_only=True,
+                                    )
+
+                                else:
+                                    result.aggregation_pairs.append((current_id, ds_id))
+                                    result.aggregation_set.add(ds_id)
+                                    result.independent_flowpaths.discard(ds_id)
+                                    result.aggregation_set.add(current_id)
+                                    _queue_upstream(
+                                        upstream_ids,
+                                        to_process,
+                                        result.processed_flowpaths,
+                                        unprocessed_only=True,
+                                    )
                                 continue
                             elif cumulative < cfg.divide_aggregation_threshold:
                                 result.aggregation_pairs.append(
@@ -391,7 +616,6 @@ def _trace_stack(
                                         upstream_id, current_id, result, digraph, node_indices
                                     )
                                 # Queue higher-order upstreams
-                                higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
                                 _queue_upstream(
                                     higher_order_ids,
                                     to_process,

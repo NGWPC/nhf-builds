@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 from scipy.stats.mstats import gmean
 
 
-def weighted_circular_mean(values: NDArray, coverage: NDArray) -> NDArray:
+def weighted_circular_mean(values: NDArray, coverage: NDArray) -> NDArray | float:
     """Circular mean aggregation function for exactextract
 
     Adapted from Astropy under BSD 3-Clause
@@ -18,9 +18,13 @@ def weighted_circular_mean(values: NDArray, coverage: NDArray) -> NDArray:
 
     Returns
     -------
-    NDArray
-        Array with circular mean on interval [-np.pi, np.pi)
+    NDArray | float
+        Array with circular mean on interval [-np.pi, np.pi) or NaN if inside of a lake
     """
+    if isinstance(values, np.ma.MaskedArray):
+        if values.count() == 0:
+            return np.nan
+
     # Constants from astropy.circmean
     p = 1.0
     phi = 0.0
@@ -30,10 +34,11 @@ def weighted_circular_mean(values: NDArray, coverage: NDArray) -> NDArray:
 
     if coverage is None:
         weights = np.ones((1,))
-    try:
-        weights = np.broadcast_to(coverage, values.shape)
-    except ValueError as e:
-        raise ValueError("Weights and data have inconsistent shape.") from e
+    else:
+        try:
+            weights = np.broadcast_to(coverage, values.shape)
+        except ValueError as e:
+            raise ValueError("Weights and data have inconsistent shape.") from e
 
     C = np.sum(weights * np.cos(p * (values - phi)), axis) / np.sum(weights, axis)
     S = np.sum(weights * np.sin(p * (values - phi)), axis) / np.sum(weights, axis)

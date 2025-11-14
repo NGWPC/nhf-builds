@@ -256,8 +256,9 @@ def _build_base_hydrofabric(
         # Check for divide polygon
         polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
         if polygon_geom is None or polygon_geom.is_empty:
-            logger.debug(f"Unit {ref_ids} has no divide polygon - skipping")
-            _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
+            logger.error(f"Unit {ref_ids} has no divide polygon")
+            # _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
+            # continue
 
         # Get or create nexus
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
