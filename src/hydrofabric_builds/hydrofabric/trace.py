@@ -168,10 +168,19 @@ def _traverse_and_aggregate(
     if start_id not in node_indices:
         return
 
-    start_order = fp_lookup[start_id]["streamorder"]
+    _ = fp_lookup[start_id]["streamorder"]
     start_idx = node_indices[start_id]
     ancestor_indices = rx.ancestors(graph, start_idx)
-    ancestor_ids = [graph[idx] for idx in ancestor_indices]
+    ancestor_ids = [graph[idx] for idx in ancestor_indices] + [start_id]
+
+    # Find longest path in the ancestor subgraph
+    ancestor_subgraph = graph.subgraph(list(ancestor_indices) + [start_idx])
+    simple_path_pairs = rx.all_pairs_all_simple_paths(ancestor_subgraph)
+    longest_path = max(
+        (u for y in simple_path_pairs.values() for z in y.values() for u in z),
+        key=lambda x: len(x),
+    )
+    longest_path_ids = {ancestor_subgraph[idx] for idx in longest_path}
 
     all_virtual = False
     if set(ancestor_ids).isdisjoint(div_ids):
@@ -179,14 +188,13 @@ def _traverse_and_aggregate(
         all_virtual = True
 
     for _id in ancestor_ids:
-        order = fp_lookup[_id]["streamorder"]
-        if order != start_order or all_virtual:
+        # Mark as virtual if NOT in longest path, or if different stream order, or if all_virtual
+        if _id not in longest_path_ids or all_virtual:
             result.virtual_flowpaths.add(_id)
+
         result.aggregation_pairs.append((_id, start_id))
         result.aggregation_set.add(_id)
         result.processed_flowpaths.add(_id)
-
-    result.aggregation_set.add(start_id)
 
 
 def _fix_no_divide_anomalies(
@@ -196,6 +204,7 @@ def _fix_no_divide_anomalies(
     digraph: rx.PyDiGraph,
     node_indices: dict[str, int],
     to_process: deque,
+    div_ids: set,
 ) -> bool:
     """Provides rules that are outside of the current specification to account for bad flowpaths
 
@@ -213,6 +222,8 @@ def _fix_no_divide_anomalies(
         Mapping of flowpath IDs to node indices
     to_process: deque
         the stack of flowpaths to model
+    div_ids: set
+        the set of flowpath ids that have divides delineated
 
     Returns
     -------
@@ -445,6 +456,15 @@ def _fix_no_divide_anomalies(
             unprocessed_only=True,
         )
         return True
+    elif current_id in ["17245948", "14625948", "7264125"]:
+        # very large catchments in 10L that have an incorrect delineations
+        _traverse_and_aggregate(current_id, result, digraph, node_indices, fp_lookup, div_ids)
+        return True
+    elif current_id in ["7264125"]:
+        # very large catchments in 10L that have an incorrect delineations
+        _traverse_and_mark_as_virtual(current_id, ds_id, result, digraph, node_indices)
+        result.connector_segments.remove(ds_id)
+        return True
     else:
         return False
 
@@ -515,7 +535,9 @@ def _trace_stack(
         upstream_info = _get_unprocessed_upstream_info(upstream_ids, fp_lookup, result.processed_flowpaths)
 
         result.processed_flowpaths.add(current_id)
-        if _fix_no_divide_anomalies(current_id, result, fp_lookup, digraph, node_indices, to_process):
+        if _fix_no_divide_anomalies(
+            current_id, result, fp_lookup, digraph, node_indices, to_process, div_ids
+        ):
             continue
 
         # Rule 1: No upstream (headwater)
@@ -556,16 +578,14 @@ def _trace_stack(
                     ancestor_ids = {digraph[idx] for idx in ancestor_indices}
                     if ancestor_ids.isdisjoint(div_ids):
                         # No divides anywhere upstream - mark everything as virtual
-                        _traverse_and_mark_as_virtual(current_id, ds_id, result, digraph, node_indices)
-                        result.independent_flowpaths.discard(ds_id)
+                        if ds_id in result.connector_segments:
+                            _traverse_and_aggregate(
+                                current_id, result, digraph, node_indices, fp_lookup, div_ids
+                            )
+                        else:
+                            _traverse_and_mark_as_virtual(current_id, ds_id, result, digraph, node_indices)
+                            result.independent_flowpaths.discard(ds_id)
                         continue
-                    # remaining_ids = ancestor_ids - div_ids
-                    # if remaining_ids:
-                    #     max_remaining_id = max(fp_lookup[_id]["streamorder"] for _id in remaining_ids)
-                    #     if max_remaining_id < 4:  # stream order 3 or below will be aggregated
-                    #         _traverse_and_mark_as_virtual(current_id, ds_id, result, digraph, node_indices)
-                    #         result.independent_flowpaths.discard(ds_id)
-                    #         continue
 
             upstream_id = upstream_ids[0]
 
@@ -576,21 +596,8 @@ def _trace_stack(
             # If the drainage area close to nothing, we have a BAD reference line. This should be aggregated downstream
             if current_area < 0.005:
                 ds_id = str(int(fp_info["flowpath_toid"]))
-                # if ds_id == "0":
                 result.aggregation_pairs.append((current_id, upstream_id))
                 result.aggregation_set.add(upstream_id)
-                # result.independent_flowpaths.discard(upstream_id)
-                # elif ds_id in result.connector_segments:
-                # result.aggregation_pairs.append((current_id, upstream_id))
-                # result.aggregation_set.add(upstream_id)
-                # elif upstream_id in div_ids:
-                # result.aggregation_pairs.append((current_id, upstream_id))
-                # result.aggregation_set.add(upstream_id)
-                # else:
-                #     result.aggregation_pairs.append((current_id, ds_id))
-                #     result.aggregation_set.add(ds_id)
-                #     result.independent_flowpaths.discard(ds_id)
-
                 result.aggregation_set.add(current_id)
                 if ds_id in fp_lookup:
                     updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
@@ -893,25 +900,12 @@ def _trace_stack(
                     if has_divide_layer2:
                         all_upstreams_lack_deep_divides = False
                         break
-                    # Check layer 3
-                    # has_divide_layer3 = False
-                    # for l2_id in layer2_ids:
-                    #     layer3_ids = _get_upstream_ids(l2_id, digraph, node_indices)
-                    #     if any(l3_id in div_ids for l3_id in layer3_ids):
-                    #         has_divide_layer3 = True
-                    #         break
-                    # if has_divide_layer3:
-                    #     all_upstreams_lack_deep_divides = False
-                    #     break
                 if all_upstreams_lack_deep_divides:
-                    result.aggregation_pairs.append((current_id, ds_id))
-                    result.aggregation_set.add(current_id)
-                    result.aggregation_set.add(ds_id)
-                    result.independent_flowpaths.discard(ds_id)
-                    result.virtual_flowpaths.add(current_id)
-                    # Mark all upstreams as virtual
-                    for uid in upstream_ids:
-                        _traverse_and_mark_as_virtual(uid, current_id, result, digraph, node_indices)
+                    if ds_id in result.connector_segments:
+                        _traverse_and_aggregate(current_id, result, digraph, node_indices, fp_lookup, div_ids)
+                    else:
+                        _traverse_and_mark_as_virtual(current_id, ds_id, result, digraph, node_indices)
+                        result.independent_flowpaths.discard(ds_id)
                     continue
 
                 # Step 3: Check if there are order 1s or 2s that can be made virtual
@@ -960,13 +954,6 @@ def _trace_stack(
                         continue
                 else:
                     # This is an awkward connector. Two divides upstream, two downstream, no divide in the flowpath, all upstream are high order
-                    # if current_id == '14626276':
-                    #     # An edge case in North Dakota that is not following any rules. Catchment is delinated incorrectly
-                    #     bad_id = '14626274'
-                    #     _traverse_and_mark_as_virtual(
-                    #         bad_id, current_id, result, digraph, node_indices
-                    #     )
-                    #     result.aggregation_pairs.append((bad_id, current_id))
                     result.aggregation_pairs.append((current_id, ds_id))
                     result.aggregation_set.add(current_id)
                     result.aggregation_set.add(ds_id)
