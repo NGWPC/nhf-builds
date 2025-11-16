@@ -13,7 +13,7 @@ from hydrofabric_builds.hydrofabric.trace import (
     _queue_upstream,
     _trace_single_flowpath_attributes,
     _trace_stack,
-    _traverse_and_mark_as_minor,
+    _traverse_and_mark_as_virtual,
 )
 from hydrofabric_builds.schemas.hydrofabric import Classifications
 
@@ -153,18 +153,18 @@ class TestQueueUpstream:
         assert len(to_process) == 0
 
 
-class TestTraverseAndMarkAsMinor:
-    """Tests for _traverse_and_mark_as_minor function."""
+class TestTraverseAndMarkAsvirtual:
+    """Tests for _traverse_and_mark_as_virtual function."""
 
     def test_mark_single_flowpath(self) -> None:
-        """Test marking single flowpath as minor."""
+        """Test marking single flowpath as virtual."""
         network_graph = {"fp1": [], "downstream": ["fp1"]}
         graph, node_indices = dict_to_graph(network_graph)
         result = Classifications()
 
-        _traverse_and_mark_as_minor("fp1", "downstream", result, graph, node_indices)
+        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
 
-        assert "fp1" in result.minor_flowpaths
+        assert "fp1" in result.virtual_flowpaths
         assert ("fp1", "downstream") in result.aggregation_pairs
         assert "fp1" in result.processed_flowpaths
 
@@ -174,11 +174,11 @@ class TestTraverseAndMarkAsMinor:
         graph, node_indices = dict_to_graph(network_graph)
         result = Classifications()
 
-        _traverse_and_mark_as_minor("fp1", "downstream", result, graph, node_indices)
+        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
 
-        assert "fp1" in result.minor_flowpaths
-        assert "fp2" in result.minor_flowpaths
-        assert "fp3" in result.minor_flowpaths
+        assert "fp1" in result.virtual_flowpaths
+        assert "fp2" in result.virtual_flowpaths
+        assert "fp3" in result.virtual_flowpaths
         assert all(fp in result.processed_flowpaths for fp in ["fp1", "fp2", "fp3"])
 
     def test_mark_branching(self) -> None:
@@ -194,9 +194,9 @@ class TestTraverseAndMarkAsMinor:
         graph, node_indices = dict_to_graph(network_graph)
         result = Classifications()
 
-        _traverse_and_mark_as_minor("fp1", "downstream", result, graph, node_indices)
+        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
 
-        assert all(fp in result.minor_flowpaths for fp in ["fp1", "fp2", "fp3", "fp4", "fp5"])
+        assert all(fp in result.virtual_flowpaths for fp in ["fp1", "fp2", "fp3", "fp4", "fp5"])
 
     def test_mark_already_processed(self) -> None:
         """Test that already processed flowpaths still get marked."""
@@ -205,11 +205,11 @@ class TestTraverseAndMarkAsMinor:
         result = Classifications()
         result.processed_flowpaths.add("fp2")
 
-        _traverse_and_mark_as_minor("fp1", "downstream", result, graph, node_indices)
+        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
 
         # Both should be marked even though fp2 was already processed
-        assert "fp1" in result.minor_flowpaths
-        assert "fp2" in result.minor_flowpaths
+        assert "fp1" in result.virtual_flowpaths
+        assert "fp2" in result.virtual_flowpaths
 
 
 class TestTraceStackRule1:
@@ -240,10 +240,10 @@ class TestTraceStackRule1:
         result = _trace_stack("1", div_ids, sample_config, partition_data)
 
         assert "1" in result.independent_flowpaths
-        assert "1" not in result.minor_flowpaths
+        assert "1" not in result.virtual_flowpaths
 
     def test_headwater_without_divide(self, sample_config: HFConfig) -> None:
-        """Test headwater without divide becomes minor."""
+        """Test headwater without divide becomes virtual."""
         flowpath_data = pl.DataFrame(
             {
                 "flowpath_id": ["1"],
@@ -266,8 +266,8 @@ class TestTraceStackRule1:
         div_ids: set = set()  # No divide
         result = _trace_stack("1", div_ids, sample_config, partition_data)
 
-        assert "1" in result.minor_flowpaths
-        assert "1" not in result.independent_flowpaths
+        assert not result.virtual_flowpaths
+        assert not result.independent_flowpaths
 
 
 class TestTraceStackRule2:
@@ -350,10 +350,10 @@ class TestTraceStackRule2:
         div_ids: set = set()  # No divides anywhere
         result = _trace_stack("1", div_ids, sample_config, partition_data)
 
-        # All should be marked as minor
-        assert "1" in result.minor_flowpaths
-        assert "2" in result.minor_flowpaths
-        assert "3" in result.minor_flowpaths
+        # All should be marked as virtual
+        assert not result.virtual_flowpaths
+        assert not result.virtual_flowpaths
+        assert not result.virtual_flowpaths
 
 
 class TestTraceStackRule3CaseA:
@@ -477,12 +477,12 @@ class TestTraceStackRule3CaseB:
         result = _trace_stack("1", div_ids, sample_config, partition_data)
 
         # 2 aggregates to 1 (downstream) since it has no competition
-        # Upstreams 4 and 6 (without divides) are marked as minor
+        # Upstreams 4 and 6 (without divides) are marked as virtual
         assert ("2", "1") in result.aggregation_pairs
-        assert "4" in result.minor_flowpaths or "6" in result.minor_flowpaths
+        assert "4" in result.virtual_flowpaths or "6" in result.virtual_flowpaths
 
-    def test_order_1_2_can_be_made_minor(self, sample_config: HFConfig) -> None:
-        """Test making order 1/2 streams minor."""
+    def test_order_1_2_can_be_made_virtual(self, sample_config: HFConfig) -> None:
+        """Test making order 1/2 streams virtual."""
         flowpath_data = pl.DataFrame(
             {
                 "flowpath_id": ["1", "2", "3", "4", "5"],

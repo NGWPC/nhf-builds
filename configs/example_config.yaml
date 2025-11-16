@@ -1,11 +1,12 @@
 reference_divides_path: data/reference_divides.parquet
 reference_flowpaths_path: data/reference_flowpaths.parquet
 # debug_outlet_count: 2000
-divide_attributes_processes: 1
+divide_attributes_processes: 10
 run_build_hydrofabric_tasks: True
 run_divide_attributes_task: True
 run_flowpath_attributes_task: True
 
 # flowpaths
 flowpath_attributes_config:
-  use_stream_order: true
+  use_stream_order: True
+  dem_path: data/divide_attributes/usgs/usgs_250m_dem_5070.tif

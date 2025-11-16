@@ -22,16 +22,10 @@ class Classifications(BaseModel):
             "A list of tuples for flowpaths to be aggregated together. Format: (downstream_id, upstream_id, ...) where downstream merges into upstream"
         ),
     )
-    no_divide_connectors: list[str] = Field(
-        default_factory=list,
-        description=(
-            "A list of flowpath IDs that do not have divides and connect rivers. These are errors in the reference that will not be carried into the hydrofabric"
-        ),
-    )
-    minor_flowpaths: set[str] = Field(
+    virtual_flowpaths: set[str] = Field(
         default_factory=set,
         description=(
-            "Reference flowpaths classified as 'minor' tributaries. These are flowpaths that are stream-order 1, with a total DA of < threshold where routing will not be run"
+            "Reference flowpaths classified as 'virtual' tributaries. These are flowpaths that are stream-order 1, with a total DA of < threshold where routing will not be run"
         ),
     )
     independent_flowpaths: set[str] = Field(
@@ -95,13 +89,8 @@ class Aggregations(BaseModel):
     independents: list[dict] = Field(
         description=("A list of independent segments and their geometries"),
     )
-    minor_flowpaths: list[dict] = Field(
-        description=("A list of minor flowpaths and their geometries"),
-    )
-    no_divide_connectors: list[dict] = Field(
-        description=(
-            "A list of flowpaths that connect to multiple upstream components that do not have geometries"
-        ),
+    virtual_flowpaths: list[dict] = Field(
+        description=("A list of virtual flowpaths and their geometries"),
     )
     small_scale_connectors: list[dict] = Field(
         description=("A list of small-scale connection segments and their geometries"),

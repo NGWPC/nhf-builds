@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, Any]]:
     """Take multiple aggregations and order them to build a base hydrofabric for NGEN.
 
-    NOTE: the aggregations used are only aggregates, independents, and connectors as Minor
+    NOTE: the aggregations used are only aggregates, independents, and connectors as virtual
     flowpaths and subdivide-connectors are for routing
 
     Parameters
@@ -174,7 +174,7 @@ def _build_base_hydrofabric(
     div_data: list[dict[str, Any]] = []
     nexus_data: list[dict[str, Any]] = []
     reference_flowpaths_data: list[dict[str, Any]] = []
-    base_minor_data: list[dict[str, Any]] = []
+    base_virtual_data: list[dict[str, Any]] = []
 
     ref_id_to_new_id: dict[str, int] = {}
     downstream_fp_to_nexus: dict[int, int] = {}
@@ -192,8 +192,8 @@ def _build_base_hydrofabric(
             continue
         visited_ref_ids.add(current_ref_id)
 
-        # Skip minor flowpaths
-        if current_ref_id in classifications.minor_flowpaths:
+        # Skip virtual flowpaths
+        if current_ref_id in classifications.virtual_flowpaths:
             continue
 
         # Validate current flowpath
@@ -202,7 +202,7 @@ def _build_base_hydrofabric(
                 continue
             if current_ref_id in classifications.aggregation_set:  # headwater case
                 continue
-            logger.error(f"Flowpath {current_ref_id} not found in any unit and not minor")
+            logger.error(f"Flowpath {current_ref_id} not found in any unit and not virtual")
             raise ValueError(f"Flowpath {current_ref_id} not found in any unit")
 
         unit_info = ref_id_to_unit[current_ref_id]
@@ -320,9 +320,9 @@ def _build_base_hydrofabric(
                 }
             )
 
-        # Track aggregates for minor flowpaths
+        # Track aggregates for virtual flowpaths
         if unit_type == "aggregate" and unit_info.get("dn_id"):
-            base_minor_data.append(
+            base_virtual_data.append(
                 {
                     "fp_id": new_id,
                     "dn_ref_id": unit_info["dn_id"],
@@ -363,6 +363,6 @@ def _build_base_hydrofabric(
         "flowpaths": flowpaths_gdf,
         "divides": divides_gdf,
         "nexus": nexus_gdf,
-        "base_minor_flowpaths": base_minor_data,
+        "base_virtual_flowpaths": base_virtual_data,
         "reference_flowpaths": reference_flowpaths_df,
     }

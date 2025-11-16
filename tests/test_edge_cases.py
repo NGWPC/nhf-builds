@@ -261,9 +261,8 @@ class TestEmptyInputs:
             aggregates=[],
             independents=[],
             connectors=[],
-            minor_flowpaths=[],
+            virtual_flowpaths=[],
             small_scale_connectors=[],
-            no_divide_connectors=[],
         )
 
         result = _order_aggregates_base(empty)
@@ -279,8 +278,7 @@ class TestEmptyInputs:
 
         empty_classifications = Classifications(
             aggregation_pairs=[],
-            no_divide_connectors=[],
-            minor_flowpaths=set(),
+            virtual_flowpaths=set(),
             independent_flowpaths=[],
             connector_segments=[],
             subdivide_candidates=[],

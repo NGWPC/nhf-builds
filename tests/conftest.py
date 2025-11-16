@@ -438,7 +438,7 @@ def sample_aggregate_data() -> Aggregations:
                 "polygon_geometry": Polygon([(86, 86), (88, 86), (88, 88), (86, 88)]),
             },
         ],
-        minor_flowpaths=[
+        virtual_flowpaths=[
             {
                 "ref_ids": "6720517",
                 "line_geometry": LineString([(100, 100), (101, 101)]),
@@ -487,7 +487,6 @@ def sample_aggregate_data() -> Aggregations:
         ],
         connectors=[],
         small_scale_connectors=[],
-        no_divide_connectors=[],
     )
 
 
@@ -526,8 +525,7 @@ def sample_classifications() -> Classifications:
             ("6720493", "6720497"),
             ("6720493", "6720437"),
         ],
-        no_divide_connectors=[],
-        minor_flowpaths={
+        virtual_flowpaths={
             "6720381",
             "6722499",
             "6720883",
@@ -869,8 +867,7 @@ def contradictory_classifications() -> Classifications:
     """Classifications with same flowpath in multiple conflicting categories."""
     return Classifications(
         aggregation_pairs=[("fp1", "fp2")],
-        no_divide_connectors=[],
-        minor_flowpaths={"fp1"},  # fp1 is also in aggregation!
+        virtual_flowpaths={"fp1"},  # fp1 is also in aggregation!
         independent_flowpaths=["fp1"],  # fp1 is also independent!
         connector_segments=["fp2"],  # fp2 is also in aggregation!
         subdivide_candidates=[],
@@ -885,8 +882,7 @@ def missing_reference_flowpath_ids() -> tuple[Classifications, list[str]]:
     """Classifications referencing flowpath IDs that don't exist in reference data."""
     classifications = Classifications(
         aggregation_pairs=[("fp_exists", "fp_missing")],  # fp_missing doesn't exist
-        no_divide_connectors=[],
-        minor_flowpaths=set(),
+        virtual_flowpaths=set(),
         independent_flowpaths=["fp_also_missing"],  # Also doesn't exist
         connector_segments=[],
         subdivide_candidates=[],

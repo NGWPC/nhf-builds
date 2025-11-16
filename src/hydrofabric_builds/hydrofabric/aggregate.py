@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-import polars as pl
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -84,14 +83,14 @@ def _process_aggregation_pairs(
     groups = _merge_tuples_with_common_values(classifications.aggregation_pairs)
 
     results: list[dict[str, Any]] = []
-    minor_flowpaths_set: set[str] = set(classifications.minor_flowpaths)
+    virtual_flowpaths_set: set[str] = set(classifications.virtual_flowpaths)
 
     for group_ids in groups:
-        # Filter out minor flowpaths
-        fp_ids = [fp_id for fp_id in group_ids if fp_id not in minor_flowpaths_set]
+        # Filter out virtual flowpaths
+        fp_ids = [fp_id for fp_id in group_ids if fp_id not in virtual_flowpaths_set]
 
         if not fp_ids:
-            logger.debug(f"Skipping group {group_ids} - all flowpaths are minor")
+            logger.debug(f"Skipping group {group_ids} - all flowpaths are virtual")
             continue
 
         try:
@@ -147,60 +146,6 @@ def _process_aggregation_pairs(
     return results
 
 
-def _process_no_divide_connectors(
-    classifications: Classifications, reference_flowpaths: pl.DataFrame, fp_lookup: dict[str, dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """Process no-divide connectors using Polars for fast lookups.
-
-    Parameters
-    ----------
-    classifications : Classifications
-        Classification results
-    reference_flowpaths : pl.DataFrame
-        Reference flowpaths DataFrame
-    fp_lookup : dict[str, dict[str, Any]]
-        Flowpath lookup dictionary
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        No-divide connector data
-    """
-    results: list[dict[str, Any]] = []
-    for fp in classifications.no_divide_connectors:
-        if fp not in fp_lookup:
-            continue
-
-        fp_data = fp_lookup[fp]
-
-        fp_float = float(fp)
-        upstream_ids = (
-            reference_flowpaths.filter(pl.col("flowpath_toid") == fp_float)
-            .select("flowpath_id")
-            .to_series()
-            .cast(pl.Utf8)
-            .to_list()
-        )
-
-        # Find downstream ID
-        ds_id = fp_data.get("flowpath_toid")
-        if ds_id is None:
-            raise ValueError("No compatible downstream id")
-        downstream_id: str | None = str(int(ds_id)) if fp_data.get("flowpath_toid") else None
-
-        if downstream_id:
-            results.append(
-                {
-                    "ref_ids": fp,
-                    "dn_id": downstream_id,
-                    "up_id": upstream_ids,
-                    "line_geometry": fp_data["shapely_geometry"],
-                }
-            )
-
-    return results
-
-
 def _process_independent_flowpaths(
     classifications: Classifications,
     fp_lookup: dict[str, dict[str, Any]],
@@ -252,12 +197,12 @@ def _process_independent_flowpaths(
     return results
 
 
-def _process_minor_flowpaths(
+def _process_virtual_flowpaths(
     classifications: Classifications,
     fp_lookup: dict[str, dict[str, Any]],
     div_lookup: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Process minor flowpaths using dictionary lookups.
+    """Process virtual flowpaths using dictionary lookups.
 
     Parameters
     ----------
@@ -271,10 +216,10 @@ def _process_minor_flowpaths(
     Returns
     -------
     list[dict[str, Any]]
-        Minor flowpath data
+        virtual flowpath data
     """
     results: list[dict[str, Any]] = []
-    for fp in classifications.minor_flowpaths:
+    for fp in classifications.virtual_flowpaths:
         if fp in fp_lookup:
             results.append(
                 {
@@ -408,25 +353,21 @@ def _aggregate_geometries(
     """
     fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
     div_lookup: dict[str, dict[str, Any]] = partition_data["div_lookup"]
-    filtered_flowpaths: pl.DataFrame = partition_data["flowpaths"]
 
     aggregates = _process_aggregation_pairs(classifications, fp_lookup, div_lookup)
-
-    no_divide_connectors = _process_no_divide_connectors(classifications, filtered_flowpaths, fp_lookup)
 
     independents = _process_independent_flowpaths(classifications, fp_lookup, div_lookup)
 
     small_scale_connectors = _process_small_scale_connectors(classifications, fp_lookup, div_lookup)
 
-    minor_flowpaths = _process_minor_flowpaths(classifications, fp_lookup, div_lookup)
+    virtual_flowpaths = _process_virtual_flowpaths(classifications, fp_lookup, div_lookup)
 
     connectors = _process_connectors(classifications, fp_lookup, div_lookup)
 
     return Aggregations(
         aggregates=aggregates,
         independents=independents,
-        minor_flowpaths=minor_flowpaths,
-        no_divide_connectors=no_divide_connectors,
+        virtual_flowpaths=virtual_flowpaths,
         small_scale_connectors=small_scale_connectors,
         connectors=connectors,
     )

@@ -36,7 +36,7 @@ The tables highlighted in green are the infomation needed for lumped modeling to
 
 ##### Routing Schema
 
-The tables highlighted in yellow are the information needed for routing at a high resolution. T-Route is expected to run at a fine-scale (~300m segments) with many `minor_flowpaths`. There should be a many -> one relationship between `minor_flowpaths` and `flowpaths`, with some `minor flowpaths` not being represented in the `flowpaths` table. These non-represented `flowpaths` are not routed on, but used in post-processing.
+The tables highlighted in yellow are the information needed for routing at a high resolution. T-Route is expected to run at a fine-scale (~300m segments) with many `virtual_flowpaths`. There should be a many -> one relationship between `virtual_flowpaths` and `flowpaths`, with some `virtual flowpaths` not being represented in the `flowpaths` table. These non-represented `flowpaths` are not routed on, but used in post-processing.
 
 ##### Reference Crosswalks
 
@@ -46,4 +46,4 @@ The NGWPC Hydrofabric is build using many reference materials:
 - Reference POIs
 - NHD+ COMIDs
 
-To ensure `flowpaths` can be mapped to back to the materials that created them, each of the reference materials is mapped to `flowpaths`, `hydrolocations`, and `minor flowpaths`.
+To ensure `flowpaths` can be mapped to back to the materials that created them, each of the reference materials is mapped to `flowpaths`, `hydrolocations`, and `virtual flowpaths`.

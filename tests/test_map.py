@@ -94,8 +94,8 @@ class TestOrderAggregatesBase:
         assert "up_id" not in ind  # independents don't have up/dn_id
         assert "dn_id" not in ind
 
-    def test_minor_flowpath_structure(self, sample_aggregate_data: Aggregations) -> None:
-        """Test that minor flowpath entries exist in aggregates.
+    def test_virtual_flowpath_structure(self, sample_aggregate_data: Aggregations) -> None:
+        """Test that virtual flowpath entries exist in aggregates.
 
         Parameters
         ----------
@@ -104,20 +104,20 @@ class TestOrderAggregatesBase:
         """
         result = _order_aggregates_base(sample_aggregate_data)
 
-        # Minor flowpaths that are also in aggregates should appear
-        # 6720681 is in both minor_flowpaths and aggregate 4
+        # virtual flowpaths that are also in aggregates should appear
+        # 6720681 is in both virtual_flowpaths and aggregate 4
         assert "6720681" in result
         assert result["6720681"]["type"] == "aggregate"
 
-        # 6720651 is in both minor_flowpaths and aggregate 2
+        # 6720651 is in both virtual_flowpaths and aggregate 2
         assert "6720651" in result
         assert result["6720651"]["type"] == "aggregate"
 
-        # 6720883 is in both minor_flowpaths and aggregate 1
+        # 6720883 is in both virtual_flowpaths and aggregate 1
         assert "6720883" in result
         assert result["6720883"]["type"] == "aggregate"
 
-        # 6720517 is in both minor_flowpaths and aggregate 5
+        # 6720517 is in both virtual_flowpaths and aggregate 5
         assert "6720517" in result
         assert result["6720517"]["type"] == "aggregate"
 
@@ -144,9 +144,8 @@ class TestOrderAggregatesBase:
             aggregates=[],
             independents=[],
             connectors=[],
-            minor_flowpaths=[],
+            virtual_flowpaths=[],
             small_scale_connectors=[],
-            no_divide_connectors=[],  # Added missing required field
         )
 
         result = _order_aggregates_base(empty_agg)
@@ -171,9 +170,8 @@ class TestOrderAggregatesBase:
             ],
             independents=[],
             connectors=[],
-            minor_flowpaths=[],
+            virtual_flowpaths=[],
             small_scale_connectors=[],
-            no_divide_connectors=[],
         )
 
         result = _order_aggregates_base(only_agg)
@@ -254,7 +252,7 @@ class TestBuildBaseHydrofabric:
         assert "flowpaths" in result
         assert "divides" in result
         assert "nexus" in result
-        assert "base_minor_flowpaths" in result
+        assert "base_virtual_flowpaths" in result
 
     def test_creates_geodataframes(
         self,
@@ -297,7 +295,7 @@ class TestBuildBaseHydrofabric:
         assert isinstance(result["flowpaths"], gpd.GeoDataFrame)
         assert isinstance(result["divides"], gpd.GeoDataFrame)
         assert isinstance(result["nexus"], gpd.GeoDataFrame)
-        assert isinstance(result["base_minor_flowpaths"], list)
+        assert isinstance(result["base_virtual_flowpaths"], list)
 
     def test_assigns_unique_ids(
         self,
@@ -991,9 +989,8 @@ class TestAggregateGeometries:
 
         empty_classifications = Classifications(
             aggregation_pairs=[],
-            no_divide_connectors=[],
-            minor_flowpaths=set(),
-            independent_flowpaths=[],
+            virtual_flowpaths=set(),
+            independent_flowpaths=set(),
             connector_segments=[],
             subdivide_candidates=[],
             upstream_merge_points=[],
