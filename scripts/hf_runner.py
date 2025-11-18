@@ -1,16 +1,14 @@
 """Local runner for building the NGWPC hydrofabric"""
 
 import argparse
-import logging
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Self
 
-from dotenv import load_dotenv
 from pydantic import ValidationError
-from pyprojroot import here
 
 from hydrofabric_builds import HFConfig, TaskInstance
+from hydrofabric_builds.logs import setup_logging
 from hydrofabric_builds.pipeline.build_divide_attributes import build_divide_attributes
 from hydrofabric_builds.pipeline.build_flowpath_attributes import build_flowpath_attributes
 from hydrofabric_builds.pipeline.build_graph import build_graph
@@ -24,9 +22,7 @@ from hydrofabric_builds.pipeline.processing import (
 from hydrofabric_builds.pipeline.trace_graph_attributes import trace_hydrofabric_attributes
 from hydrofabric_builds.pipeline.write import write_base_hydrofabric
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-load_dotenv(here() / ".env")
+logger = setup_logging()
 
 
 class LocalRunner:
