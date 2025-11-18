@@ -66,9 +66,18 @@ class HFConfig(BaseModel):
         default=True, description="Decides if we want to run the flowpath attributes task"
     )
 
+    run_waterbodies_task: bool = Field(
+        default=True, description="Decides if we want to run the waterbodies task"
+    )
+
     flowpath_attributes_config: dict = Field(
         description="Dictionary of flowpath attributes values as found in FlowpathAttributesModelConfig",
         default=None,
+    )
+
+    reservoirs_config_path: Path = Field(
+        description="Path to config file for reservoirs",
+        default=here() / "configs/example_reservoir_attrs_config.yaml",
     )
 
     @field_validator("debug_outlet_count")

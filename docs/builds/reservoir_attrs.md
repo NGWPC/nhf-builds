@@ -1,9 +1,27 @@
-## Description:
+## Reservoirs Description:
 
 
-Below is a summary of what the Reservoir Python script is doing and the dependencies it assumes. potential future action items for each data source has been descussed here for record.
+Below is a summary of what the Reservoir Python script is doing and the dependencies it assumes. Potential future action items for each data source has been descussed here for record.
 This issue is mainly about capturing and solidifying the current workflow so we can (a) understand the data dependencies, and (b) reproduce the same processing in our Python-based toolchain.
 
+## Running in Hydrofabric Pipeline
+
+To run in pipeline, you must either retrieve a pre-computed RFC-DA geopackage from s3 or create one within the pipeline. The reservoir config (`example_reservoir_attrs_config.yaml`) specifies the location to create or find the file: `rfc_da -> outputs -> out_gpkg`. Generally this willl be `data/reservoirs/output/rfc-da-hydraulics-v1.gpkg`. If the file exists, the reservoir task will generate the reservoirs table. If the file does not exist, follow the following steps to set up data sources to create the input RFC-DA table.
+
+### Setting up RFC-DA
+
+Download the data to match the file paths found in the example config and sync folders from s3 Data account. See details of data sources below.
+
+```
+aws s3 sync s3://hydrofabric-data/reservoirs/source_files data/reservoirs/source_files
+aws s3 sync s3://hydrofabric-data/reservoirs/reference_reservoirs data/reservoirs/reference_reservoirs
+mkdir data/reservoirs/output
+```
+
+Now, if `data/reservoirs/output/rfc-da-hydraulics-v1.gpkg` does not exist, the RFC-DA pipeline will run using these datasets.
+
+
+## Data Sources
 ### 1. NID (USACE National Inventory of Dams)
 
 
@@ -42,6 +60,7 @@ which has been collected from the original state-based dataset that can be downl
 - Reads all state .gpkg files, extracts the lines layer, filters waterway == 'dam'.
 - Binds them into a single dataset and writes data/osm_dams_all.gpkg.
 
+
 #### Future Action Items
 - Download per state dataset.
 - Document that building OSM data requires ~90GB disk and time.
@@ -52,4 +71,4 @@ which has been collected from the original state-based dataset that can be downl
 - Reproduce the “merge all states into one OSM dams layer” logic in Python (if we support a full pipeline). The code is available in here however it has not been directly tested by state dataset yet
 
 #### Note:
-it takes around 30 minutes to run and create "rc_da_hydraulics-v1.gpkg" file
+it takes around 30 minutes to run and create "rc_da_hydraulics-v1.gpkg" file. Time is dependent on network speed with USGS 3DEP server.

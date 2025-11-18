@@ -12,6 +12,7 @@ from hydrofabric_builds.logs import setup_logging
 from hydrofabric_builds.pipeline.build_divide_attributes import build_divide_attributes
 from hydrofabric_builds.pipeline.build_flowpath_attributes import build_flowpath_attributes
 from hydrofabric_builds.pipeline.build_graph import build_graph
+from hydrofabric_builds.pipeline.build_waterbodies import build_waterbodies
 from hydrofabric_builds.pipeline.download import download_reference_data
 from hydrofabric_builds.pipeline.processing import (
     map_build_base_hydrofabric,
@@ -187,6 +188,9 @@ def main() -> int:
                 task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
             )
             runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
+        if config.run_waterbodies_task:
+            runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
+
         if config.run_divide_attributes_task:
             runner.run_task(
                 task_id="divide_attributes", python_callable=build_divide_attributes, op_kwargs={}

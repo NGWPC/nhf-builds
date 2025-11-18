@@ -21,8 +21,8 @@ network:
     backoff: 0.75
 
 roots:
-  reservoirs_dir: "/home/farshid.rahmani/Documents/Dataset/reservoirs"
-  output_dir: "/home/farshid.rahmani/Documents/Dataset/reservoirs/outputs"
+  reservoirs_dir: "data/reservoirs"
+  output_dir: "data/reservoirs/output"
 
 # -----------------------------
 # INPUT DATASETS
@@ -41,8 +41,6 @@ inputs:
     src_crs: null
     output_crs: "EPSG:5070"
     id_col: "comid"
-
-
 
   reference_reservoirs:
     path: "{reservoirs_dir}/reference_reservoirs/reference-reservoirs-v1.gpkg"
@@ -67,7 +65,7 @@ inputs:
 # DEM / ELEVATION
 # -----------------------------
 dem:
-  path: "/home/farshid.rahmani/Downloads/USGS_Seamless_DEM_13.vrt"  # VRT mosaic
+  path: "data/reservoirs/source_files/USGS_Seamless_DEM_13.vrt"  # VRT mosaic
   prefer_crs_of_dem: true   # reproject polygons to DEM CRS before sampling
   band: 1
   nodata: null              # let rasterio infer if null
@@ -78,7 +76,7 @@ dem:
 # -----------------------------
 rfc_da:
   outputs:
-    out_gpkg: "{output_dir}/rfc_da_hydraulics.gpkg"
+    out_gpkg: "{output_dir}/rfc-da-hydraulics-v1.gpkg"
 
 
 # -----------------------------

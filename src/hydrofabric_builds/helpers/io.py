@@ -88,3 +88,36 @@ def s3_fs(region: str = "us-east-1") -> fs.S3FileSystem:
         secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
         session_token=os.environ["AWS_SESSION_TOKEN"],
     )
+
+
+def _resolve_templates(d: dict, env: dict) -> dict:
+    """Expand {placeholders} in string leaves using env mapping. (gauges and reservoirs)"""
+
+    def expand(val: dict) -> dict:
+        """Expanding the vals in config"""
+        if isinstance(val, str):
+            try:
+                return val.format(**env)
+            except KeyError:
+                return val
+        if isinstance(val, dict):
+            return {k: expand(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [expand(v) for v in val]
+        return val
+
+    return expand(d)
+
+
+def load_config(path: Path) -> dict:
+    """
+    To load a YAML config (gauges and reservoirs)
+
+    :param path: path to config file
+    :return: nested dictionary format of config file
+    """
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    env = {**cfg.get("roots", {})}
+    env.update(os.environ)  # allow env-var overrides
+    return _resolve_templates(cfg, env)

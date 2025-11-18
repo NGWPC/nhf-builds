@@ -5,6 +5,7 @@ divide_attributes_processes: 10
 run_build_hydrofabric_tasks: True
 run_divide_attributes_task: True
 run_flowpath_attributes_task: True
+run_waterbodies_task: True
 
 # flowpaths
 flowpath_attributes_config:

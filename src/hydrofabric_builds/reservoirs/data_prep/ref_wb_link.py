@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from time import perf_counter
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
 from rasterstats import zonal_stats
+
+logger = logging.getLogger(__name__)
 
 
 def build_ref_wb_elevs(
@@ -53,6 +57,8 @@ def build_ref_wb_elevs(
         raise ValueError("No reference waterbodies matched candidate comid IDs.")
 
     # 3) Reproject to DEM CRS if needed and compute mean elevation
+    logger.info("Calculating zonal stats for reference reservoirs")
+    t0 = perf_counter()
     with rasterio.open(dem_path) as src:
         dem_crs = src.crs
         if dem_crs is None:
@@ -74,6 +80,7 @@ def build_ref_wb_elevs(
             ref_wbs["ref_elev"] = [s["mean"] for s in stats]
         else:
             ref_wbs["ref_elev"] = np.nan
+    logger.info(f"Zonal stats for reference reservoirs took {round((perf_counter() - t0) / 60, 2)} min")
 
     # area_sqkm assumed present; if not, compute in 5070 in default
     if "area_sqkm" in ref_wbs.columns:

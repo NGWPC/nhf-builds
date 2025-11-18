@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from time import perf_counter
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
 from rasterstats import zonal_stats
+
+logger = logging.getLogger(__name__)
 
 
 def build_osm_wb_elevs(
@@ -51,6 +55,8 @@ def build_osm_wb_elevs(
     if osm_wbs.empty:
         raise ValueError("No OSM waterbodies matched candidate osm_id.")
 
+    logger.info("Calculating zonal stats for OSM waterbodies")
+    t0 = perf_counter()
     with rasterio.open(dem_path) as src:
         dem_crs = src.crs
         if dem_crs is None:
@@ -72,6 +78,7 @@ def build_osm_wb_elevs(
             osm_wbs["osm_wb_elev"] = [s["mean"] for s in stats]
         else:
             osm_wbs["osm_wb_elev"] = np.nan
+    logger.info(f"Zonal stats for OSM waterbodies took {round((perf_counter() - t0) / 60, 2)} min")
 
     # Compute area in km² in 5070 (default
     osm_work_crs = osm_wbs.to_crs(work_crs)
