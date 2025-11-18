@@ -15,12 +15,13 @@ def setup_logging() -> logging.Logger:
     logger = logging.getLogger(__name__)
     logging.getLogger("rasterio").setLevel(logging.WARNING)  # turning off rasterio INFO logging
 
-    log_file_path = here() / "logs/hf_builder.log"
+    log_file_path = here() / "logs/"
+    log_file_path.mkdir(exist_ok=True)
     max_bytes = int(os.getenv("LOG_MAX_BYTES", 10485760))
     backup_count = int(os.getenv("LOG_BACKUP_COUNT", 5))
 
     file_handler = logging.handlers.RotatingFileHandler(
-        log_file_path, maxBytes=max_bytes, backupCount=backup_count
+        log_file_path / "hf_builder.log", maxBytes=max_bytes, backupCount=backup_count
     )
 
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
