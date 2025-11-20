@@ -1,14 +1,14 @@
 """A file to host all Hydrofabric Schemas"""
 
+import os
 from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, Self
 
 import pyarrow as pa
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pyprojroot import here
 
-from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 
 
@@ -274,6 +274,36 @@ class HydrofabricCRS(Enum):
     PRVI = 32161
 
 
+class BuildHydrofabricConfig(BaseModel):
+    """Configs for buld hydrofabric stage"""
+
+    reference_divides_path: str = Field(
+        default="data/reference_divides.parquet",
+        description="The location of the reference fabric divides.",
+    )
+    reference_flowpaths_path: str = Field(
+        default="data/reference_flowpaths.parquet",
+        description="The location of the reference fabric flowpaths.",
+    )
+
+    divide_aggregation_threshold: float = Field(
+        default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
+    )
+
+    debug_outlet_count: int | None = Field(
+        default=None,
+        description="Debug setting to limit the number of outlets processed. None (default) processes all outlets. Set to a positive integer to limit for testing.",
+    )
+
+    @field_validator("debug_outlet_count")
+    @classmethod
+    def validate_debug_outlet_count(cls, v: int | None) -> int | None:
+        """Validate debug_outlet_count is None or positive."""
+        if v is not None and v <= 0:
+            raise ValueError("debug_outlet_count must be None (for all outlets) or a positive integer")
+        return v
+
+
 class AggTypeEnum(StrEnum):
     """Zonal statistics aggregation types"""
 
@@ -316,6 +346,9 @@ def get_operation(op: str) -> Any:
 class DivideAttributeConfig(BaseModel):
     """Pydantic model for divide attributes attribute configuration"""
 
+    data_dir: Path = Field(
+        description="Top level directory for data layers", default=here() / "data/divide_attributes"
+    )
     agg_type: AggTypeEnum = Field(description="Zonal stats aggregation type")
     field_name: str = Field(description="Output field name for divide attribute")
     file_name: Path = Field(description="File path of attribute raster")
@@ -330,20 +363,28 @@ class DivideAttributeConfig(BaseModel):
         self.tmp.parents[0].mkdir(parents=True, exist_ok=True)
         return self
 
+    @model_validator(mode="after")
+    def full_file_name(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Join the root data dir to the file name"""
+        self.file_name = self.data_dir / self.file_name
+        return self
 
-class DivideAttributeModelConfig(BaseModel):
+
+class DivideAttributesModelConfig(BaseModel):
     """Pydantic model for divide attributes model configuration"""
 
-    data_dir: Path = Field(description="Directory of all input data", default=here() / "data")
-    divides_path: Path = Field(description="Divides path for entire domain", default=HYDROFABRIC_OUTPUT_FILE)
+    hf_path: Path = Field(None, description="Path to input and output hydrofabric")
+    processes: int = Field(
+        description="Number of processes to use for multiprocessing", default=os.cpu_count()
+    )
+    data_dir: Path = Field(
+        description="Directory of all input data", default=here() / "data/divide_attributes"
+    )
     divide_id: str = Field(description="Field name for unique divide id", default="div_id")
     attributes: list[DivideAttributeConfig] = Field(
-        description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
+        None, description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
     )
-    output: Path = Field(
-        description="Output file path. Defaults to same as input.", default=HYDROFABRIC_OUTPUT_FILE
-    )
-    divides_path_list: list[Path] | None | None = Field(
+    divides_path_list: list[Path] | None = Field(
         description="List of divides paths to use for parallel run. ex. list of VPU subsets.",
         default=None,
     )
@@ -370,9 +411,9 @@ class FlowpathAttributesModelConfig(BaseModel):
     """Configurations for running flowpath attributes"""
 
     hf_path: Path = Field(
-        default=HYDROFABRIC_OUTPUT_FILE,
+        None,
         title="Hydrofabric Path",
-        description="Path to input hydrofabric",
+        description="Path to input and output hydrofabric",
     )
     flowpath_id: str = Field(default="fp_id", title="Flowpath ID", description="Flowpath ID field")
     use_stream_order: bool = Field(
@@ -392,11 +433,6 @@ class FlowpathAttributesModelConfig(BaseModel):
         default=here() / Path("data/Y_bf_predictions.parquet"),
         title="Y Path",
         description="Path to RiverML Y predictions",
-    )
-    output: Path = Field(
-        default=HYDROFABRIC_OUTPUT_FILE,
-        title="Output path",
-        description="Output file path",
     )
 
 
@@ -527,4 +563,142 @@ class FlowpathAttributesConfig(BaseModel):
         # set topwdthcc - from WRF-Hydro
         self.topwdthcc = (3 * self.topwdth) if self.topwdth else None
 
+        return self
+
+
+class GagesConfig(BaseModel):
+    """TBD"""
+
+
+# RFC-DA Configs
+class ResNIDInputs(BaseModel):
+    """NID inputs to generate RFC-DA"""
+
+    path: Path = Field(
+        default="source_files/NID2019_U.csv",
+        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    src_crs: str | None = Field(default="EPSG:4326", description="Source CRS")
+    output_crs: str = Field(default="EPSG:5070", description="Output CRS")
+    drop_states: list[str] | None = Field(
+        default=["AK", "HI", "PR", "GU"], description="States to drop from NID"
+    )
+
+
+class ResReferenceWaterbodiesInputs(BaseModel):
+    """Reference waterbodies inputs to generate RFC-DA"""
+
+    path: Path = Field(
+        default="reference_reservoirs/reference_waterbodies.gpkg",
+        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="reference_waterbodies", description="GPKG layer")
+    src_crs: str | None = Field(None, description="Source CRS")
+    output_crs: str = Field(default="EPSG:5070", description="Output CRS")
+    id_col: str = Field(default="comid", description="Reference waterbodies ID column")
+
+
+class ResReferenceReservoirsInputs(BaseModel):
+    """Reference reservoirs inputs to generate RFC-DA"""
+
+    path: Path = Field(
+        default="reference_reservoirs/reference-reservoirs-v1.gpkg",
+        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
+    src_crs: str | None = Field(None, description="Source CRS")
+    output_crs: str = Field(default="EPSG:5070", description="Output CRS")
+    distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
+    wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
+    ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
+    min_wb_area_sqkm: float = Field(
+        default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
+    )
+    max_distance_m: float = Field(
+        default=1000.0,
+        description="max distance of reference reservoir points from column 'distance_to_fp_m'",
+    )
+
+
+class ResOSMInputs(BaseModel):
+    """OSM inputs to generate RFC-DA"""
+
+    path: Path = Field(
+        default="source_files/osm_dams_all.gpkg",
+        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="osm_dams_all", description="GPKG layer")
+    filter_col: str = Field(
+        default="waterway", description="column's name which has dam and non-dam infrastructures"
+    )
+    filter_val: str = Field(default="dam", description="value used to filter column")
+
+
+class ResDEMInputs(BaseModel):
+    """DEM inputs to generate RFC-DA"""
+
+    path: Path = Field(
+        default="source_files/USGS_Seamless_DEM_13.vrt",
+        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    prefer_crs_of_dem: bool = Field(
+        default=True, description="Reproject polygons to DEM CRS before sampling of True"
+    )
+    band: int = Field(default=1, description="Band of raster as opened in rasterio")
+    nodata: int | float | None = Field(None, description="Nodata value. Let rasterio infer if null")
+
+
+class ResRules(BaseModel):
+    """Rules for generating RFC-DA"""
+
+    max_waterbody_nearest_dist_m: float = Field(
+        default=1000.0, description="Max waterbdody nearest distance (m) for nearest WB ↔ dam selection"
+    )
+    min_area_sqkm: float = Field(
+        default=0.2,
+        description="Removes waterbodies smaller than this threshold. Use 0 to remove none.",
+    )
+
+
+class WaterbodiesConfig(BaseModel):
+    """Config for waterbodies. Includes RFC-DA configs."""
+
+    input_dir: Path = Field(
+        default=here() / Path("data/reservoirs"),
+        description="Input data directory. For defaults, this will be prepended to datasets.",
+    )
+    output_dir: Path = Field(
+        default=here() / Path("data/reservoirs/output"),
+        description="Output directory. For defaults, will be prepended to output RFCDA name",
+    )
+    rfcda_output_name: str = Field(default="rfc-da-hydraulics-v1.gpkg", description="Output gpkg name")
+    rfcda_file: Path = Field(
+        default_factory=lambda data: data["output_dir"] / data["rfcda_output_name"],
+        description="Full file path. By default will concatenate output dir and file name",
+    )
+    default_src_crs: str = Field(default="EPSG:4326", description="Default source CRS")
+    work_crs: str = Field(
+        default="EPSG:5070",
+        description="CRS for projected ops, distances, buffers. area-equal crs for SuperCONUS",
+    )
+
+    nid: ResNIDInputs = Field(default=ResNIDInputs(), description="NID config")
+    refwb: ResReferenceWaterbodiesInputs = Field(
+        default=ResReferenceWaterbodiesInputs(), description="Reference waterbodies config"
+    )
+    refres: ResReferenceReservoirsInputs = Field(
+        default=ResReferenceReservoirsInputs(), description="Reference reservoirs configs"
+    )
+    osm: ResOSMInputs = Field(default=ResOSMInputs(), description="OSM configs")
+    dem: ResDEMInputs = Field(default=ResDEMInputs(), description="DEM configs")
+    rules: ResRules = Field(default=ResRules(), description="Rules")
+
+    @model_validator(mode="after")
+    def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Inject input directories into each input config path"""
+        self.nid.path = self.input_dir / self.nid.path
+        self.osm.path = self.input_dir / self.osm.path
+        self.refwb.path = self.input_dir / self.refwb.path
+        self.refres.path = self.input_dir / self.refres.path
+        self.dem.path = self.input_dir / self.dem.path
         return self

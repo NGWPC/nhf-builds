@@ -7,32 +7,26 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from hydrofabric_builds.helpers.io import load_config
 from hydrofabric_builds.reservoirs.data_prep.rfc_da import build_rfc_da_hydraulics
+from hydrofabric_builds.schemas.hydrofabric import WaterbodiesConfig
 
 logger = logging.getLogger(__name__)
 
 
-def rfc_da_pipeline(cfg_path: Path) -> None:
+def rfc_da_pipeline(cfg: WaterbodiesConfig) -> None:
     """The main file entering reservoir attributes calculation"""
-    cfg = load_config(cfg_path)
-    dem_path = Path(cfg["dem"]["path"])
-    ref_reservoirs_path = Path(cfg["inputs"]["reference_reservoirs"]["path"])
-    ref_wb_path = Path(cfg["inputs"]["reference_waterbodies"]["path"])
-    osm_ref_wb_path = Path(cfg["inputs"]["osm_build"]["path"])
-    nid_path_clean = Path(cfg["inputs"]["nid"]["path"])
-    out_dir = Path(cfg["roots"]["output_dir"])
     hydr = build_rfc_da_hydraulics(
-        dem_path=dem_path,
-        ref_reservoirs_path=ref_reservoirs_path,
-        ref_wb_path=ref_wb_path,
-        osm_ref_wb_path=osm_ref_wb_path,
-        nid_clean_path=nid_path_clean,  # or .parquet
-        max_waterbody_nearest_dist_m=cfg["matching"]["max_waterbody_nearest_dist_m"],
-        min_area_sqkm=cfg["matching"]["min_area_sqkm"],
-        out_dir=out_dir,
-        work_crs=cfg["crs"]["work_crs"],
-        default_crs=cfg["crs"]["default_src_crs"],
+        dem_path=cfg.dem.path,
+        ref_reservoirs_path=cfg.refres.path,
+        ref_wb_path=cfg.refwb.path,
+        osm_ref_wb_path=cfg.osm.path,
+        nid_clean_path=cfg.nid.path,  # or .parquet
+        max_waterbody_nearest_dist_m=cfg.rules.max_waterbody_nearest_dist_m,
+        min_area_sqkm=cfg.rules.min_area_sqkm,
+        out_dir=cfg.output_dir,
+        out_rfcda=cfg.rfcda_file,
+        work_crs=cfg.work_crs,
+        default_crs=cfg.default_src_crs,
         use_hazard=True,
     )
     logger.info(f"[OK] attributes have been estimated for {len(hydr)} reservoirs")

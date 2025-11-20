@@ -602,7 +602,7 @@ def _trace_stack(
                 if ds_id in fp_lookup:
                     updated_cumulative_areas[upstream_id] = fp_lookup[ds_id]["areasqkm"] + current_area
             # Check if we should aggregate
-            elif cumulative < cfg.divide_aggregation_threshold:
+            elif cumulative < cfg.build.divide_aggregation_threshold:
                 # Too small - aggregate
                 result.aggregation_pairs.append((current_id, upstream_id))
                 result.aggregation_set.add(current_id)
@@ -659,7 +659,7 @@ def _trace_stack(
                             unprocessed_only=True,
                         )
                         continue
-                    elif cumulative < cfg.divide_aggregation_threshold:
+                    elif cumulative < cfg.build.divide_aggregation_threshold:
                         result.aggregation_pairs.append((current_id, best_upstream["flowpath_id"]))
                         result.aggregation_set.add(current_id)
                         result.aggregation_set.add(best_upstream["flowpath_id"])
@@ -715,7 +715,7 @@ def _trace_stack(
                                     unprocessed_only=True,
                                 )
                                 continue
-                            elif cumulative < cfg.divide_aggregation_threshold:
+                            elif cumulative < cfg.build.divide_aggregation_threshold:
                                 result.aggregation_pairs.append(
                                     (current_id, higher_order_upstreams[0]["flowpath_id"])
                                 )

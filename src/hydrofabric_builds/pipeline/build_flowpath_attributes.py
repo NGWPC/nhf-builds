@@ -24,6 +24,6 @@ def build_flowpath_attributes(**context: dict[str, Any]) -> dict[str, Any]:
     """
     cfg = cast(HFConfig, context["config"])
 
-    flowpath_attributes_pipeline(cfg.flowpath_attributes_config)
+    flowpath_attributes_pipeline(cfg.flowpath_attributes)
 
     return {"flowpath_attributes": "done"}

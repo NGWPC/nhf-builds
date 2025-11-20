@@ -13,9 +13,7 @@ from pyprojroot import here
 from rasterio.transform import from_bounds
 from shapely.geometry import LineString, MultiLineString
 
-from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.hydrofabric.flowpath_attributes import (
-    _config_reader,
     _create_base_polars,
     _dem_attributes,
     _other_flowpath_attributes,
@@ -33,7 +31,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
 def flowpath_attributes_model_cfg() -> Path:
     data_dir = here() / "tests/data/flowpath_attributes"
     return FlowpathAttributesModelConfig(
-        hf_path=data_dir / "sample_fp.gpkg",
+        hf_path=data_dir / "sample_fp_tmp.gpkg",
         flowpath_id="fp_id",
         use_stream_order=True,
         dem_path=data_dir / "sample_dem.tif",
@@ -70,20 +68,20 @@ def flowpath_attributes_dummy_dem(flowpath_attributes_model_cfg: FlowpathAttribu
 def flowpath_attributes_dummy_gpkg(flowpath_attributes_model_cfg: FlowpathAttributesModelConfig) -> Path:
     """Dummy flowpaths for flowpath attributes"""
     fp = flowpath_attributes_model_cfg.hf_path
-    if not fp.exists():
-        g1 = LineString([(-5, -1), (-5, -4)])
-        g2 = LineString([(-5, -4), (-4, 2)])
-        g3 = LineString([(1, 1), (-2, 1)])
-        g4 = MultiLineString([[(0, -3.5), (0, -1)], [(0, -1.5), (-1, -1)]])
 
-        data = {"fp_id": [1, 2, 3, 4], "streamorder": [1, 2, 3, 3]}
-        geometry = [g1, g2, g3, g4]
-        gdf = gpd.GeoDataFrame(data=data, geometry=geometry, crs=4326)
+    g1 = LineString([(-5, -1), (-5, -4)])
+    g2 = LineString([(-5, -4), (-4, 2)])
+    g3 = LineString([(1, 1), (-2, 1)])
+    g4 = MultiLineString([[(0, -3.5), (0, -1)], [(0, -1.5), (-1, -1)]])
 
-        gdf.to_file(fp, layer="flowpaths")
+    data = {"fp_id": [1, 2, 3, 4], "streamorder": [1, 2, 3, 3]}
+    geometry = [g1, g2, g3, g4]
+    gdf = gpd.GeoDataFrame(data=data, geometry=geometry, crs=4326)
 
-        ref_fp = gpd.GeoDataFrame(data={"fp_id": [1, 2, 3, 4], "ref_fp_id": [900, 800, 700, 600]})
-        ref_fp.to_file(fp, layer="reference_flowpaths")
+    gdf.to_file(fp, layer="flowpaths")
+
+    ref_fp = gpd.GeoDataFrame(data={"fp_id": [1, 2, 3, 4], "ref_fp_id": [900, 800, 700, 600]})
+    ref_fp.to_file(fp, layer="reference_flowpaths")
 
     return fp
 
@@ -217,7 +215,6 @@ class TestFlowpathAttributesSchemas:
         """Flowpath Attribues Model Config defaults"""
         model = FlowpathAttributesModelConfig()
         assert model.use_stream_order is True
-        assert model.hf_path == HYDROFABRIC_OUTPUT_FILE
         assert model.flowpath_id == "fp_id"
         assert model.dem_path == here() / Path("data/usgs_250m_dem_5070.tif")
         assert model.tw_path == here() / Path("data/TW_bf_predictions.parquet")
@@ -293,33 +290,6 @@ class TestFlowpathAttributesSchemas:
 class TestFlowpathAttributes:
     """Tests for Flowpath Attributes"""
 
-    def test_flowpath_attributes_config_reader__default(self) -> None:
-        """Config reader defaults"""
-        model = _config_reader()
-        assert model.use_stream_order is True
-        assert model.hf_path == HYDROFABRIC_OUTPUT_FILE
-        assert model.flowpath_id == "fp_id"
-        assert model.dem_path == here() / Path("data/usgs_250m_dem_5070.tif")
-        assert model.tw_path == here() / Path("data/TW_bf_predictions.parquet")
-        assert model.y_path == here() / Path("data/Y_bf_predictions.parquet")
-
-    def test_flowpath_attributes_config_reader__value(self) -> None:
-        """Populate model config with custom values"""
-        input_cfg = {
-            "use_stream_order": False,
-            "hf_path": "/data/different.gpkg",
-            "dem_path": "data/dem.tif",
-            "tw_path": "data/tw.parquet",
-            "y_path": "data/y.parquet",
-        }
-        model = _config_reader(input_cfg)
-        assert model.use_stream_order is False
-        assert model.hf_path == Path("/data/different.gpkg")
-        assert model.flowpath_id == "fp_id"
-        assert model.dem_path == Path("data/dem.tif")
-        assert model.tw_path == Path("data/tw.parquet")
-        assert model.y_path == Path("data/y.parquet")
-
     def test_dem_attributes(
         self,
         flowpath_attributes_model_cfg: FlowpathAttributesModelConfig,
@@ -328,9 +298,12 @@ class TestFlowpathAttributes:
         flowpath_attributes_dem_values: gpd.GeoDataFrame,
     ) -> None:
         """Compares DEM values. Requires all un-called fixtures to run correctly."""
-        gdf = gpd.read_file(flowpath_attributes_model_cfg.hf_path, layer="flowpaths")
-        gdf = _dem_attributes(flowpath_attributes_model_cfg, gdf)
-        assert_geodataframe_equal(gdf, flowpath_attributes_dem_values, check_less_precise=True)
+        try:
+            gdf = gpd.read_file(flowpath_attributes_model_cfg.hf_path, layer="flowpaths")
+            gdf = _dem_attributes(flowpath_attributes_model_cfg, gdf)
+            assert_geodataframe_equal(gdf, flowpath_attributes_dem_values, check_less_precise=True)
+        finally:
+            flowpath_attributes_model_cfg.hf_path.unlink(missing_ok=True)
 
     def test_create_base_polars(
         self, flowpath_attributes_dummy_gpkg: Path, flowpath_attributes_base_polars_df: pl.DataFrame
@@ -372,8 +345,8 @@ class TestFlowpathAttributes:
         """Run whole pipeline. Requires all un-called fixtures to run correctly."""
         try:
             flowpath_attributes_pipeline(flowpath_attributes_model_cfg)
-            output = gpd.read_file(flowpath_attributes_model_cfg.output)
+            output = gpd.read_file(flowpath_attributes_model_cfg.hf_path, layer="flowpaths")
             assert_geodataframe_equal(output, flowpath_attributes_output)
 
         finally:
-            flowpath_attributes_model_cfg.output.unlink(missing_ok=True)
+            flowpath_attributes_model_cfg.hf_path.unlink(missing_ok=True)

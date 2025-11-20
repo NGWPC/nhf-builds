@@ -2,7 +2,6 @@
 
 from collections import deque
 from pathlib import Path
-from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -10,16 +9,14 @@ import pandas as pd
 import polars as pl
 import pytest
 import rustworkx as rx
-import yaml
 from pyprojroot import here
 from shapely.geometry import LineString, Polygon
 
-from hydrofabric_builds import HFConfig
+from hydrofabric_builds.config import HFConfig, TaskSelection
 from hydrofabric_builds.schemas.hydrofabric import (
     Aggregations,
+    BuildHydrofabricConfig,
     Classifications,
-    DivideAttributeConfig,
-    DivideAttributeModelConfig,
 )
 from scripts.hf_runner import TaskInstance
 
@@ -58,8 +55,16 @@ def sample_flowpaths() -> gpd.GeoDataFrame:
 def sample_config(mock_geopackages: tuple[str, str], tmp_path: Path) -> HFConfig:
     """Fixture providing a sample HFConfig."""
     return HFConfig(
-        reference_divides_path=mock_geopackages[0],
-        reference_flowpaths_path=mock_geopackages[1],
+        build=BuildHydrofabricConfig(
+            reference_divides_path=mock_geopackages[0], reference_flowpaths_path=mock_geopackages[1]
+        ),
+        tasks=TaskSelection(
+            build_hydrofabric=True,
+            divide_attributes=False,
+            flowpath_attributes=False,
+            waterbodies=False,
+            gages=False,
+        ),
         output_dir=tmp_path,
     )
 
@@ -1096,176 +1101,6 @@ def dict_to_graph(network_dict: dict[str, list[str]]) -> tuple[rx.PyDiGraph, dic
                 graph.add_edge(node_map[upstream], node_map[downstream], None)
 
     return graph, node_map
-
-
-@pytest.fixture
-def divide_attributes_config_yaml() -> Path:
-    return here() / "tests/data/divide_attributes/sample_divide_attributes_config.yaml"
-
-
-@pytest.fixture
-def divide_attribute_tmp_dir() -> Path:
-    tmp_dir = here() / "tests/data/divide_attributes/tmp/divide-attributes"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    return tmp_dir
-
-
-@pytest.fixture
-def divide_attributes_model_config() -> DivideAttributeModelConfig:
-    (here() / "tests/data/divide_attributes/tmp/divide-attributes").mkdir(exist_ok=True)
-
-    with open(here() / "tests/data/divide_attributes/sample_divide_attributes_config.yaml") as f:
-        data = yaml.safe_load(f)
-
-    # prepare attribute list
-    attributes = []
-    for _, val in enumerate(data["attributes"]):
-        data["attributes"][val]["file_name"] = Path(data["data_dir"]) / data["attributes"][val]["file_name"]
-        attr = DivideAttributeConfig.model_validate(data["attributes"][val])
-        attributes.append(attr)
-    data["attributes"] = attributes
-
-    model = DivideAttributeModelConfig.model_validate(data)
-    return model
-
-
-@pytest.fixture
-def divide_attributes_bexp() -> dict[str, Any]:
-    """Fixture contains config, vpu 03N path, and results"""
-    cfg = DivideAttributeConfig(
-        file_name=here() / "tests/data/divide_attributes/bexp_0.tif", agg_type="mode", field_name="bexp_mode"
-    )
-    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
-    results = pd.DataFrame(data={"bexp_mode": [3.8358047008514404] * 2})
-    return {"config": cfg, "vpu_path": vpu_path, "results": results}
-
-
-@pytest.fixture
-def divide_attributes_twi() -> dict[str, Any]:
-    """Fixture contains config, vpu 03N path, and results"""
-    cfg = DivideAttributeConfig(
-        file_name=here() / "tests/data/divide_attributes/twi.tif",
-        agg_type="quartile_dist",
-        field_name="twi_quartile",
-    )
-    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
-    results = pd.DataFrame(
-        data={
-            "twi_q25": [2.515662670135498, 3.0192484855651855],
-            "twi_q50": [3.3970980644226074, 3.5839314460754395],
-            "twi_q75": [4.570732116699219, 4.815537929534912],
-            "twi_q100": [9.391340255737305, 9.557568550109863],
-        }
-    )
-    return {"config": cfg, "vpu_path": vpu_path, "results": results}
-
-
-@pytest.fixture
-def divide_attributes_aspect() -> dict[str, Any]:
-    """Fixture contains config, vpu 03N path, and results"""
-    cfg = DivideAttributeConfig(
-        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
-        agg_type="weighted_circular_mean",
-        field_name="aspect_circmean",
-    )
-    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
-    results = pd.DataFrame(
-        data={
-            "aspect_circmean": [2.6788329323693696, 1.4929676850304032],
-        }
-    )
-    return {"config": cfg, "vpu_path": vpu_path, "results": results}
-
-
-@pytest.fixture
-def divide_attributes_aspect_lake() -> dict[str, Any]:
-    """Fixture contains config, lakes (VPU 16) path, and results"""
-    cfg = DivideAttributeConfig(
-        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
-        agg_type="weighted_circular_mean",
-        field_name="aspect_circmean",
-    )
-    vpu_path = here() / "tests/data/divide_attributes/lake_16_111425.gpkg"
-    results = pd.DataFrame(
-        data={
-            "aspect_circmean": [pd.NA],
-        }
-    )
-    return {"config": cfg, "vpu_path": vpu_path, "results": results}
-
-
-@pytest.fixture
-def divide_attributes_dksat() -> dict[str, Any]:
-    """Fixture contains config, vpu 03N path, and results"""
-    cfg = DivideAttributeConfig(
-        file_name=here() / "tests/data/divide_attributes/dksat_0.tif",
-        agg_type="weighted_geometric_mean",
-        field_name="dksat_geomean",
-    )
-    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
-    results = pd.DataFrame(
-        data={
-            "dksat_geomean": [8.584832031904611e-06, 1.341045813479675e-05],
-        }
-    )
-    return {"config": cfg, "vpu_path": vpu_path, "results": results}
-
-
-@pytest.fixture
-def pipeline_results() -> dict[str, Any]:
-    return pd.DataFrame(
-        data={
-            "bexp_mode": [
-                3.8358047008514404,
-                3.8358047008514404,
-                9.270909309387207,
-                8.370306015014648,
-                8.370306015014648,
-            ],
-            "dksat_geomean": [
-                8.584832031904611e-06,
-                1.341045813479675e-05,
-                2.2422710502747236e-06,
-                4.831606554425143e-06,
-                2.8500623676763363e-06,
-            ],
-            "twi_q25": [
-                2.515662670135498,
-                3.0192484855651855,
-                3.173346996307373,
-                3.290754556655884,
-                4.159274578094482,
-            ],
-            "twi_q50": [
-                3.3970980644226074,
-                3.5839314460754395,
-                3.767436981201172,
-                3.9177677631378174,
-                4.271378517150879,
-            ],
-            "twi_q75": [
-                4.570732116699219,
-                4.815537929534912,
-                6.707566261291504,
-                5.501246452331543,
-                4.462091445922852,
-            ],
-            "twi_q100": [
-                9.391340255737305,
-                9.557568550109863,
-                14.696468353271484,
-                12.008649826049805,
-                6.724186897277832,
-            ],
-            "aspect_circmean": [
-                2.6788329323693696,
-                1.4929676850304032,
-                2.949461597005031,
-                -2.211277378349467,
-                0.6647588929701888,
-            ],
-        }
-    )
 
 
 def create_partition_data_from_dataframes(

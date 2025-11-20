@@ -14,13 +14,12 @@ Save to this `data` folder in this repo. `aws cp [file] [location]` can be used
 2. Update HF config as needed: see `example_config.yaml`
 - Set `run_flowpath_attribute_task: True`
 - All configurable options found under `hydrofabric_builds/schemas/hydrofabric.py` - `FlowpathAttributesModelConfig` are
-     - `hf_path`: Path to hydrofabric. This defaults to hydrofabric built in your model. Change to another HF here. Default to `data/base_hydrofabric_{__version__}.gpkg`.
+     - `hf_path`: Path to hydrofabric. This defaults to hydrofabric built in your model. Change to another HF here.
      - `flowpath_id`: Field name for flowpath id, default `fp_id`.
      - `use_stream_order`: Bool to use stream-order derived values for `n`, `chsslp`, and `bw`. See more info below in 'Attribute Notes'. Default to `True`.
      - `dem_path`: Path to DEM, defaut to `data/usgs_250m_dem_5070.tif`. * TBD: Change to higher resolution
      - `tw_path`: Path to topwdth parquet, default to `data/TW_bf_predictions.parquet`.
      - `y_path`: Path to y parquet, default to `data/Y_bf_predictions.parquet`.
-     - `output`: Path for output file, default to `data/base_hydrofabric_{__version__}.gpkg`
 
 3. Run via HF pipeline
 

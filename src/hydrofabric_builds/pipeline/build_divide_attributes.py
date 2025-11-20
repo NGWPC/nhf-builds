@@ -27,11 +27,9 @@ def build_divide_attributes(**context: dict[str, Any]) -> dict[str, Any]:
     """
     cfg = cast(HFConfig, context["config"])
 
-    if cfg.divide_attributes_processes > 1:
-        divide_attributes_pipeline_parallel(
-            cfg.divide_attributes_config_path, processes=cfg.divide_attributes_processes
-        )
+    if cfg.divide_attributes.processes > 1:
+        divide_attributes_pipeline_parallel(cfg.divide_attributes, processes=cfg.divide_attributes.processes)
     else:
-        divide_attributes_pipeline_single(cfg.divide_attributes_config_path)
+        divide_attributes_pipeline_single(cfg.divide_attributes)
 
     return {"divide_attributes": "done"}

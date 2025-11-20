@@ -1,13 +1,150 @@
-reference_divides_path: data/reference_divides.parquet
-reference_flowpaths_path: data/reference_flowpaths.parquet
-# debug_outlet_count: 2000
-divide_attributes_processes: 10
-run_build_hydrofabric_tasks: True
-run_divide_attributes_task: True
-run_flowpath_attributes_task: True
-run_waterbodies_task: True
+# main
+output_name: "hydrofabric_test.gpkg" # If not specified, will default to version
+output_dir: "data/"
+crs: "EPSG:5070"
+
+# build hf
+build:
+  reference_divides_path: data/reference_divides.parquet
+  reference_flowpaths_path: data/reference_flowpaths.parquet
+  debug_outlet_count: 2000
+  divide_aggregation_threshold: 3.0
+
+# choose tasks to run
+tasks:
+  build_hydrofabric: True
+  divide_attributes: True
+  flowpath_attributes: True
+  waterbodies: True
+  hydrolocations: False
+  gages: False
 
 # flowpaths
-flowpath_attributes_config:
+flowpath_attributes:
+  flowpath_id: fp_id
   use_stream_order: True
   dem_path: data/divide_attributes/usgs/usgs_250m_dem_5070.tif
+  tw_path: data/TW_bf_predictions.parquet
+  y_path: data/Y_bf_predictions.parquet
+
+# divide attributes
+divide_attributes:
+  processes: 10
+  data_dir: data/divide_attributes
+  divide_id: div_id
+  tmp_dir: data/tmp/divide-attributes
+  split_vpu: True
+  debug: False
+  attributes: # attributes must be specified - there are no defaults
+    bexp1:
+      file_name: 'nwm/bexp_0.tif'
+      agg_type: 'mode'
+      field_name: 'bexp_mode'
+    isltyp:
+      file_name: 'nwm/ISLTYP.tif'
+      agg_type: 'mode'
+      field_name: 'isltyp_mode'
+    ivgtyp:
+      file_name: 'nwm/IVGTYP.tif'
+      agg_type: 'mode'
+      field_name: 'ivgtyp_mode'
+    dksat:
+      file_name: 'nwm/dksat_0.tif'
+      agg_type: 'weighted_geometric_mean'
+      field_name: 'dksat_geomean'
+    psisat:
+      file_name: 'nwm/psisat_0.tif'
+      agg_type: 'weighted_geometric_mean'
+      field_name: 'psisat_geommean'
+    cwpvt:
+      file_name: 'nwm/cwpvt.tif'
+      agg_type: 'mean'
+      field_name: 'cwpvt_mean'
+    mfsno:
+      file_name: 'nwm/mfsno.tif'
+      agg_type: 'mean'
+      field_name: 'msfno_mean'
+    refkdt:
+      file_name: 'nwm/refkdt.tif'
+      agg_type: 'mean'
+      field_name: 'refkdt_mean'
+    slope_1km:
+      file_name: 'nwm/slope.tif'
+      agg_type: 'mean'
+      field_name: 'slope1km_mean'
+    smcmax:
+      file_name: 'nwm/smcmax_0.tif'
+      agg_type: 'mean'
+      field_name: 'smcmax_mean'
+    smcwlt:
+      file_name: 'nwm/smcwlt_0.tif'
+      agg_type: 'mean'
+      field_name: 'smcwlt_mean'
+    vcmx:
+      file_name: 'nwm/vcmx25.tif'
+      agg_type: 'mean'
+      field_name: 'vcmx_mean'
+    impervious:
+      file_name: 'nwm/imperv.tif'
+      agg_type: 'mean'
+      field_name: 'imperv_mean'
+    twi:
+      file_name: 'twi/twi.tif'
+      agg_type: 'quartile_dist'
+      field_name: 'twi_quartile'
+    elevation:
+      file_name: 'usgs/usgs_250m_dem_5070.tif'
+      agg_type: 'mean'
+      field_name: 'elevation_mean'
+    slope:
+      file_name: 'usgs/usgs_250m_slope_5070.tif'
+      agg_type: 'mean'
+      field_name: 'slope250m_mean'
+    aspect:
+      file_name: 'usgs/usgs_250m_aspect_5070.tif'
+      agg_type: 'weighted_circular_mean'
+      field_name: 'aspect_circmean'
+
+
+# waterbodies - all values have defaults
+waterbodies:
+  input_dir: "data/reservoirs"
+  output_dir: "data/reservoirs/output"
+  rfcda_output_name: "rfc-da-hydraulics-v1.gpkg"
+  rfcda_file: "data/reservoirs/output/rfc-da-hydraulics-v1.gpkg" # Note: By default this concatenates output_dir and rfcda_output_name but can be specified
+  default_src_crs: "EPSG:4326"
+  work_crs: "EPSG:5070"
+  nid:
+    path: "source_files/NID2019_U.csv"
+    src_crs: "EPGS:4326"
+    output_crs: "EPSG:5070"
+    drop_states: ["AK", "HI", "PR", "GU"]
+  refwb:
+    path: "reference_reservoirs/reference_waterbodies.gpkg"
+    layer: "reference_waterbodies"
+    src_crs: null
+    output_crs: "EPSG:5070"
+    id_col: "comid"
+  refres:
+    path: "reference_reservoirs/reference-reservoirs-v1.gpkg"
+    layer: "reference-reservoirs-v1"
+    src_crs: null
+    output_crs: "EPSG:5070"
+    distance_to_fp_col: "distance_to_fp_m"
+    wb_area_col: "wb_areasqkm"
+    ref_wb_id_col: "ref_fab_wb"
+    min_wb_area_sqkm: 0.2
+    max_distance_m: 1000.0
+  osm:
+    path: "source_files/osm_dams_all.gpkg"
+    layer: "osm_dams_all"
+    filter_col: "waterway"
+    filter_val: "dam"
+  dem:
+    path: "source_files/USGS_Seamless_DEM_13.vrt"
+    prefer_crs_of_dem: True
+    band: 1
+    nodata: null
+  rules:
+    max_waterbody_nearest_dist_m: 1000.0
+    min_area_sqkm: 0.2

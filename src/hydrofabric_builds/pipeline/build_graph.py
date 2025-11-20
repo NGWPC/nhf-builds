@@ -50,7 +50,7 @@ def build_graph(**context: dict[str, Any]) -> dict[str, Any] | list[str]:
     logger.info("build_graph task: Finding all outlets")
     outlets = _find_outlets_by_hydroseq(reference_flowpaths)
 
-    outlets_to_process = outlets[: cfg.debug_outlet_count] if cfg.debug_outlet_count else outlets
+    outlets_to_process = outlets[: cfg.build.debug_outlet_count] if cfg.build.debug_outlet_count else outlets
     logger.info("build_graph task: Partitioning Data via outlet")
     outlet_subgraphs = _partition_all_outlet_subgraphs(
         outlets_to_process,

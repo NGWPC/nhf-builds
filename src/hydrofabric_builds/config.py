@@ -1,92 +1,83 @@
 """A pydantic basemodel for setting HFConfig defaults"""
 
-import os
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 from pyprojroot import here
 
 from hydrofabric_builds._version import __version__
+from hydrofabric_builds.schemas.hydrofabric import (
+    BuildHydrofabricConfig,
+    DivideAttributesModelConfig,
+    FlowpathAttributesModelConfig,
+    GagesConfig,
+    WaterbodiesConfig,
+)
 
-HYDROFABRIC_OUTPUT_FILE = here() / f"data/base_hydrofabric_{__version__}.gpkg"
+
+class TaskSelection(BaseModel):
+    """Config class for selecting tasks to run"""
+
+    build_hydrofabric: bool = Field(
+        default=True, description="Decides if we want to run the hydrofabric build tasks"
+    )
+
+    divide_attributes: bool = Field(
+        default=True, description="Decides if we want to run the divide attributes task"
+    )
+
+    flowpath_attributes: bool = Field(
+        default=True, description="Decides if we want to run the flowpath attributes task"
+    )
+
+    waterbodies: bool = Field(default=True, description="Decides if we want to run the waterbodies task")
+
+    gages: bool = Field(default=True, description="Decides if we want to run the gages task")
 
 
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""
-
-    crs: str = Field(
-        default="EPSG:5070",
-        description="Coordinate Reference System for the hydrofabric builds. Defaults to Conus Albers",
-    )
-
-    divide_aggregation_threshold: float = Field(
-        default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
-    )
 
     output_dir: Path = Field(
         default=here() / "data/",
         description="The directory for output files to be saved from Hydrofabric builds",
     )
 
-    output_file: Path = Field(default=HYDROFABRIC_OUTPUT_FILE, description="The output file")
+    output_name: Path = Field(default=f"hydrofabric_{__version__}.gpkg", description="The output file name")
 
-    reference_divides_path: str = Field(
-        default="s3://edfs-data/reference/super_conus/reference_divides.parquet",
-        description="The location of the reference fabric divides. Default is in the NGWPC Test AWS account",
-    )
-    reference_flowpaths_path: str = Field(
-        default="s3://edfs-data/reference/super_conus/reference_flowpaths.parquet",
-        description="The location of the reference fabric flowpaths. Default is in the NGWPC Test AWS account",
+    output_file_path: Path = Field(
+        default_factory=lambda data: data["output_dir"] / data["output_name"],
+        description="The full output file path",
     )
 
-    debug_outlet_count: int | None = Field(
-        default=None,
-        description="Debug setting to limit the number of outlets processed. None (default) processes all outlets. Set to a positive integer to limit for testing.",
-    )
-    divide_attributes_processes: int = Field(
-        description="Number of processes to run during multiprocessing for divide attributes",
-        default=os.cpu_count(),
-    )
-    divide_attributes_config_path: str = Field(
-        default=here() / "configs/example_divide_attributes_config.yaml",
-        description="YAML model definition for building divide attributes",
+    tasks: TaskSelection = Field(description="Which tasks to run")
+
+    crs: str = Field(
+        default="EPSG:5070",
+        description="Coordinate Reference System for the hydrofabric builds. Defaults to Conus Albers",
     )
 
-    run_build_hydrofabric_tasks: bool = Field(
-        default=True, description="Decides if we want to run the hydrofabric build tasks"
+    build: BuildHydrofabricConfig = Field(
+        description="Settings for hydrofabric build", default=BuildHydrofabricConfig()
     )
 
-    run_divide_attributes_task: bool = Field(
-        default=True, description="Decides if we want to run the divide attributes task"
+    divide_attributes: DivideAttributesModelConfig = Field(
+        default=DivideAttributesModelConfig(),
+        description="Settings for building divide attributes",
     )
 
-    run_flowpath_attributes_task: bool = Field(
-        default=True, description="Decides if we want to run the flowpath attributes task"
+    flowpath_attributes: FlowpathAttributesModelConfig = Field(
+        description="Settings for building flowpath attributes",
+        default=FlowpathAttributesModelConfig(),
     )
 
-    run_waterbodies_task: bool = Field(
-        default=True, description="Decides if we want to run the waterbodies task"
+    waterbodies: WaterbodiesConfig = Field(
+        default=WaterbodiesConfig(), description="Settings for building waterbodies"
     )
 
-    flowpath_attributes_config: dict = Field(
-        description="Dictionary of flowpath attributes values as found in FlowpathAttributesModelConfig",
-        default=None,
-    )
-
-    reservoirs_config_path: Path = Field(
-        description="Path to config file for reservoirs",
-        default=here() / "configs/example_reservoir_attrs_config.yaml",
-    )
-
-    @field_validator("debug_outlet_count")
-    @classmethod
-    def validate_debug_outlet_count(cls, v: int | None) -> int | None:
-        """Validate debug_outlet_count is None or positive."""
-        if v is not None and v <= 0:
-            raise ValueError("debug_outlet_count must be None (for all outlets) or a positive integer")
-        return v
+    gages: GagesConfig = Field(default=GagesConfig(), description="Settings for building gages")
 
     @classmethod
     def from_yaml(cls, path: str) -> Self:
@@ -104,4 +95,29 @@ class HFConfig(BaseModel):
         """
         with open(path) as f:
             data = yaml.safe_load(f)
+
+        # create the divide attributes list
+        try:
+            attributes = []
+            for _, val in enumerate(data["divide_attributes"]["attributes"]):
+                # if there is no data_dir specified for each attribute, append the model's main data dir
+                try:
+                    data["divide_attributes"]["attributes"][val]["data_dir"]
+                except KeyError:
+                    data["divide_attributes"]["attributes"][val]["data_dir"] = data["divide_attributes"][
+                        "data_dir"
+                    ]
+                attributes.append(data["divide_attributes"]["attributes"][val])
+            data["divide_attributes"]["attributes"] = attributes
+            data["divide_attributes"] = DivideAttributesModelConfig.model_validate(data["divide_attributes"])
+        except KeyError:
+            pass
+
         return cls(**data)
+
+    @model_validator(mode="after")
+    def inject_hf_path(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Inject the hydrofabric path into divide and flowpath attributes"""
+        self.divide_attributes.hf_path = self.output_file_path
+        self.flowpath_attributes.hf_path = self.output_file_path
+        return self

@@ -31,7 +31,7 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     """
     cfg = cast(HFConfig, context["config"])
     ti = cast(TaskInstance, context["ti"])
-    file_name = cfg.output_file
+    file_name = cfg.output_file_path
     file_name.unlink(missing_ok=True)  # deletes files that exist with the same name
 
     final_flowpaths = ti.xcom_pull(task_id="trace_attributes", key="flowpaths_with_attributes")

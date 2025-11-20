@@ -161,7 +161,7 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("No outlets found. Aborting run")
 
     # Apply debug limit if configured
-    outlets_to_process = outlets[: cfg.debug_outlet_count] if cfg.debug_outlet_count else outlets
+    outlets_to_process = outlets[: cfg.build.debug_outlet_count] if cfg.build.debug_outlet_count else outlets
 
     results: list[dict[str, Any]] = []
 

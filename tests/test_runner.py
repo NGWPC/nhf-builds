@@ -127,7 +127,7 @@ class TestLocalRunner:
 
         def task_using_config(**context: dict[str, Any]) -> dict:
             config = context["config"]
-            assert config.divide_aggregation_threshold == 3.0  # type: ignore
+            assert config.build.divide_aggregation_threshold == 3.0  # type: ignore
             return {}
 
         with LocalRunner(sample_config) as runner:

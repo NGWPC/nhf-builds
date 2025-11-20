@@ -9,47 +9,19 @@ from time import perf_counter
 import geopandas as gpd
 import pandas as pd
 import xarray as xr
-import yaml
 from exactextract import exact_extract
 
 from hydrofabric_builds.hydrofabric.graph import _validate_and_fix_geometries
 from hydrofabric_builds.schemas.hydrofabric import (
     DivideAttributeConfig,
-    DivideAttributeModelConfig,
+    DivideAttributesModelConfig,
     get_operation,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _config_reader(config_yaml: str) -> DivideAttributeModelConfig:
-    """Reads model config and list of attributes
-
-    Parameters
-    ----------
-    config_yaml : str
-        Path to Divide Attributes Model Config
-
-    Returns
-    -------
-    DivideAttributeModelConfig
-        Pydantic model for full model config
-    """
-    with open(config_yaml) as f:
-        data = yaml.safe_load(f)
-
-    # prepare attribute list
-    attributes = []
-    for _, val in enumerate(data["attributes"]):
-        data["attributes"][val]["file_name"] = Path(data["data_dir"]) / data["attributes"][val]["file_name"]
-        attr = DivideAttributeConfig.model_validate(data["attributes"][val])
-        attributes.append(attr)
-    data["attributes"] = attributes
-
-    return DivideAttributeModelConfig.model_validate(data)
-
-
-def _vpu_splitter(model_cfg: DivideAttributeModelConfig) -> list[Path]:
+def _vpu_splitter(model_cfg: DivideAttributesModelConfig) -> list[Path]:
     """Splits the model config's divides file into separate file per VPU for parallel processing
 
     Temp files deleted upon script completion
@@ -64,7 +36,7 @@ def _vpu_splitter(model_cfg: DivideAttributeModelConfig) -> list[Path]:
     list[Path]
         list of temp VPU files created to be used in model_cfg's `divides_path_list`
     """
-    gdf = gpd.read_file(model_cfg.divides_path, layer="divides")
+    gdf = gpd.read_file(model_cfg.hf_path, layer="divides")
     gdf = _validate_and_fix_geometries(gdf, geom_type="divides")
     vpus = gdf["vpu_id"].unique()
     for vpu in vpus:
@@ -78,7 +50,7 @@ def _vpu_splitter(model_cfg: DivideAttributeModelConfig) -> list[Path]:
 
 
 def _calculate_attribute(
-    model_cfg: DivideAttributeModelConfig,
+    model_cfg: DivideAttributesModelConfig,
     attribute_cfg: DivideAttributeConfig,
     alt_divides_path: Path | None = None,
 ) -> None:
@@ -98,10 +70,10 @@ def _calculate_attribute(
     t0 = perf_counter()
     if alt_divides_path:
         divides = gpd.read_file(alt_divides_path, layer="divides")
-        logger.info(f"Calculating for {alt_divides_path}")
+        logger.info(f"Calculating {attribute_cfg.field_name} for {alt_divides_path}")
     else:
-        divides = gpd.read_file(model_cfg.divides_path, layer="divides")
-        logger.info(f"Calculating for {model_cfg.divides_path}")
+        divides = gpd.read_file(model_cfg.hf_path, layer="divides")
+        logger.info(f"Calculating for {model_cfg.hf_path}")
 
     ds = xr.open_dataarray(attribute_cfg.file_name)
 
@@ -130,10 +102,10 @@ def _calculate_attribute(
         compression="snappy",
     )
     del df, ds, divides
-    logger.info(f"{attribute_cfg.tmp}: {round((perf_counter() - t0) / 60, 2)} min")
+    logger.debug(f"{attribute_cfg.tmp}: {round((perf_counter() - t0) / 60, 2)} min")
 
 
-def _concatenate_attributes(model_cfg: DivideAttributeModelConfig) -> None:
+def _concatenate_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     """For non-parallel use: Read all saved parquets and aggregates to single divide gdf
 
     Parameters
@@ -142,17 +114,17 @@ def _concatenate_attributes(model_cfg: DivideAttributeModelConfig) -> None:
         Pydantic model for full model config
     """
     t0 = perf_counter()
-    gdf = gpd.read_file(model_cfg.divides_path, layer="divides")
+    gdf = gpd.read_file(model_cfg.hf_path, layer="divides")
     for cfg in model_cfg.attributes:
         df_temp = pd.read_parquet(cfg.tmp)
         gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
         del df_temp
-    gdf.to_file(model_cfg.output, layer="divides")
+    gdf.to_file(model_cfg.hf_path, layer="divides")
     del gdf
-    logger.info(f"{model_cfg.output}: {round((perf_counter() - t0) / 60, 2)} min")
+    logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
 
 
-def _merge_divide_attributes_parallel(model_cfg: DivideAttributeModelConfig) -> None:
+def _merge_divide_attributes_parallel(model_cfg: DivideAttributesModelConfig) -> None:
     """If divides were processed in parallel, merge the attributes for each divide and save to gpkg
 
     Parameters
@@ -177,10 +149,10 @@ def _merge_divide_attributes_parallel(model_cfg: DivideAttributeModelConfig) -> 
             gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
         tmp_file = model_cfg.tmp_dir / f"tmp_{divides.name}"
         gdf.to_file(tmp_file, layer="divides", driver="GPKG", overwrite=True)
-        logger.info(f"{tmp_file} created")
+        logger.debug(f"{tmp_file} created")
 
 
-def _concatenate_divides_parallel(model_cfg: DivideAttributeModelConfig) -> None:
+def _concatenate_divides_parallel(model_cfg: DivideAttributesModelConfig) -> None:
     """Concatenate the set of temporary divide files with attributes to final file
 
     Parameters
@@ -192,8 +164,8 @@ def _concatenate_divides_parallel(model_cfg: DivideAttributeModelConfig) -> None
     file_list = [model_cfg.tmp_dir / f"tmp_{divides.name}" for divides in model_cfg.divides_path_list]  # type: ignore[union-attr]
     gdfs = [gpd.read_file(f, layer="divides") for f in file_list]
     gdf = pd.concat(gdfs, axis=0, ignore_index=True)
-    gdf.to_file(model_cfg.output, layer="divides", overwrite=True)
-    logger.info(f"{model_cfg.output}: {round((perf_counter() - t0) / 60, 2)} min")
+    gdf.to_file(model_cfg.hf_path, layer="divides", overwrite=True)
+    logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
 
 
 def _prep_multiprocessing_rasters(
@@ -225,7 +197,7 @@ def _prep_multiprocessing_rasters(
         new_path = tmp_dir / f"{cfg.file_name.name.split('.')[0]}_{i}.tif"
         shutil.copy(cfg.file_name, new_path)
         raster_list.append(new_path)
-        logger.info(f"Copied raster to {new_path}")
+        logger.debug(f"Copied raster to {new_path}")
 
     return raster_list
 
@@ -281,7 +253,7 @@ def _teardown(tmpdir: Path) -> None:
         f.unlink(missing_ok=True)
 
 
-def divide_attributes_pipeline_single(config_yaml: str) -> None:
+def divide_attributes_pipeline_single(model_cfg: DivideAttributesModelConfig) -> None:
     """A pipeline to calculate divide attributes for a single divides file
 
     Parameters
@@ -290,7 +262,6 @@ def divide_attributes_pipeline_single(config_yaml: str) -> None:
         Path to Divide Attributes Model Config
     """
     t0 = perf_counter()
-    model_cfg = _config_reader(config_yaml)
 
     for cfg in model_cfg.attributes:
         _calculate_attribute(model_cfg, cfg)
@@ -301,7 +272,7 @@ def divide_attributes_pipeline_single(config_yaml: str) -> None:
     logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
 
 
-def divide_attributes_pipeline_parallel(config_yaml: str, processes: int) -> None:
+def divide_attributes_pipeline_parallel(model_cfg: DivideAttributesModelConfig, processes: int) -> None:
     """A pipeline to calculate divide attributes for multiple divides files in parallel
 
     Notes
@@ -326,7 +297,6 @@ def divide_attributes_pipeline_parallel(config_yaml: str, processes: int) -> Non
     """
     try:
         t0 = perf_counter()
-        model_cfg = _config_reader(config_yaml)
         tmp_dir = model_cfg.tmp_dir
         tmp_dir.mkdir(parents=True, exist_ok=True)
 

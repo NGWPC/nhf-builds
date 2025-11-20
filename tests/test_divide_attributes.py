@@ -5,15 +5,14 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from astropy.stats.circstats import circmean
 from pandas.testing import assert_frame_equal
 from pyprojroot import here
 
-from hydrofabric_builds.config import HYDROFABRIC_OUTPUT_FILE
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 from hydrofabric_builds.hydrofabric.divide_attributes import (
     _calculate_attribute,
-    _config_reader,
     _prep_multiprocessing_configs,
     _prep_multiprocessing_rasters,
     _vpu_splitter,
@@ -23,8 +22,184 @@ from hydrofabric_builds.hydrofabric.divide_attributes import (
 from hydrofabric_builds.schemas.hydrofabric import (
     AggTypeEnum,
     DivideAttributeConfig,
-    DivideAttributeModelConfig,
+    DivideAttributesModelConfig,
 )
+
+
+@pytest.fixture
+def tmp_divides() -> Path:
+    tmp_path = here() / "tests/data/divide_attributes/tmp_divide_attributes_divides.gpkg"
+    gdf = gpd.read_file(here() / "tests/data/divide_attributes/divide_attributes_divides.gpkg")
+    gdf.to_file(tmp_path, layer="divides")
+    return tmp_path
+
+
+@pytest.fixture
+def divide_attribute_tmp_dir() -> Path:
+    tmp_dir = here() / "tests/data/divide_attributes/tmp/divide-attributes"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    return tmp_dir
+
+
+@pytest.fixture
+def divide_attributes_model_config() -> DivideAttributesModelConfig:
+    (here() / "tests/data/divide_attributes/tmp/divide-attributes").mkdir(exist_ok=True, parents=True)
+
+    with open(here() / "tests/data/divide_attributes/sample_divide_attributes_config.yaml") as f:
+        data = yaml.safe_load(f)
+
+    # prepare attribute list
+    attributes = []
+    for _, val in enumerate(data["attributes"]):
+        # if there is no data_dir specified for each attribute, append the model's main data dir
+        try:
+            data["attributes"][val]["data_dir"]
+        except KeyError:
+            data["attributes"][val]["data_dir"] = data["data_dir"]
+        attributes.append(data["attributes"][val])
+    data["attributes"] = attributes
+
+    model = DivideAttributesModelConfig.model_validate(data)
+    return model
+
+
+@pytest.fixture
+def divide_attributes_bexp() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/bexp_0.tif", agg_type="mode", field_name="bexp_mode"
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(data={"bexp_mode": [3.8358047008514404] * 2})
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_twi() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/twi.tif",
+        agg_type="quartile_dist",
+        field_name="twi_quartile",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "twi_q25": [2.515662670135498, 3.0192484855651855],
+            "twi_q50": [3.3970980644226074, 3.5839314460754395],
+            "twi_q75": [4.570732116699219, 4.815537929534912],
+            "twi_q100": [9.391340255737305, 9.557568550109863],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_aspect() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
+        agg_type="weighted_circular_mean",
+        field_name="aspect_circmean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "aspect_circmean": [2.6788329323693696, 1.4929676850304032],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_aspect_lake() -> dict[str, Any]:
+    """Fixture contains config, lakes (VPU 16) path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/usgs_250m_aspect_5070.tif",
+        agg_type="weighted_circular_mean",
+        field_name="aspect_circmean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/lake_16_111425.gpkg"
+    results = pd.DataFrame(
+        data={
+            "aspect_circmean": [pd.NA],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def divide_attributes_dksat() -> dict[str, Any]:
+    """Fixture contains config, vpu 03N path, and results"""
+    cfg = DivideAttributeConfig(
+        file_name=here() / "tests/data/divide_attributes/dksat_0.tif",
+        agg_type="weighted_geometric_mean",
+        field_name="dksat_geomean",
+    )
+    vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
+    results = pd.DataFrame(
+        data={
+            "dksat_geomean": [8.584832031904611e-06, 1.341045813479675e-05],
+        }
+    )
+    return {"config": cfg, "vpu_path": vpu_path, "results": results}
+
+
+@pytest.fixture
+def pipeline_results() -> dict[str, Any]:
+    return pd.DataFrame(
+        data={
+            "bexp_mode": [
+                3.8358047008514404,
+                3.8358047008514404,
+                9.270909309387207,
+                8.370306015014648,
+                8.370306015014648,
+            ],
+            "dksat_geomean": [
+                8.584832031904611e-06,
+                1.341045813479675e-05,
+                2.2422710502747236e-06,
+                4.831606554425143e-06,
+                2.8500623676763363e-06,
+            ],
+            "twi_q25": [
+                2.515662670135498,
+                3.0192484855651855,
+                3.173346996307373,
+                3.290754556655884,
+                4.159274578094482,
+            ],
+            "twi_q50": [
+                3.3970980644226074,
+                3.5839314460754395,
+                3.767436981201172,
+                3.9177677631378174,
+                4.271378517150879,
+            ],
+            "twi_q75": [
+                4.570732116699219,
+                4.815537929534912,
+                6.707566261291504,
+                5.501246452331543,
+                4.462091445922852,
+            ],
+            "twi_q100": [
+                9.391340255737305,
+                9.557568550109863,
+                14.696468353271484,
+                12.008649826049805,
+                6.724186897277832,
+            ],
+            "aspect_circmean": [
+                2.6788329323693696,
+                1.4929676850304032,
+                2.949461597005031,
+                -2.211277378349467,
+                0.6647588929701888,
+            ],
+        }
+    )
 
 
 class TestDivideAttributesSchemas:
@@ -36,22 +211,22 @@ class TestDivideAttributesSchemas:
             agg_type="mean",
             field_name="test",
             data_loader="tif",
-            file_name="./data/test.tif",
+            file_name="test.tif",
             tmp="/tmp/divide-attributes/test.parquet",
         )
         assert model.agg_type == AggTypeEnum.mean
         assert model.field_name == "test"
-        assert model.file_name == Path("./data/test.tif")
+        assert model.file_name == here() / "data/divide_attributes/test.tif"
         assert model.tmp == Path("/tmp/divide-attributes/test.parquet")
 
     def test_divide_attribute_config_pydantic__defaults(self) -> None:
         """DivideAttributeConfig model - default factory for DivideAttributeConfig.tmp"""
         model = DivideAttributeConfig(
-            agg_type="mean", field_name="test", data_loader="tif", file_name="./data/test.tif"
+            agg_type="mean", field_name="test", data_loader="tif", file_name="test.tif"
         )
         assert model.agg_type == AggTypeEnum.mean
         assert model.field_name == "test"
-        assert model.file_name == Path("./data/test.tif")
+        assert model.file_name == here() / "data/divide_attributes/test.tif"
         assert model.tmp == Path("/tmp/divide-attributes/tmp_test.parquet")  # default
 
     def test_divide_attribute_model_config_pydantic(self) -> None:
@@ -65,7 +240,7 @@ class TestDivideAttributesSchemas:
                 agg_type="mode", field_name="test2", data_loader="tif", file_name="test2.tif"
             ),
         ]
-        model = DivideAttributeModelConfig(
+        model = DivideAttributesModelConfig(
             data_dir="./data",
             divides_path="./data/divides.gpkg",
             divide_id="div_id",
@@ -79,12 +254,9 @@ class TestDivideAttributesSchemas:
 
         # model validator creates tmp folder
         assert tmp_dir.exists()
-
         assert model.data_dir == Path("./data")
-        assert model.divides_path == Path("./data/divides.gpkg")
         assert model.divide_id == "div_id"
         assert model.attributes == attributes
-        assert model.output == Path("./data/divides.gpkg")
         assert model.divides_path_list == [Path("./data/div1.gpkg"), Path("./data/div2.gpkg")]
         assert model.tmp_dir == Path("./data/tmp/divide-attributes")
         assert model.split_vpu is False
@@ -108,16 +280,13 @@ class TestDivideAttributesSchemas:
                 agg_type="mode", field_name="test2", data_loader="tif", file_name="test2.tif"
             ),
         ]
-        model = DivideAttributeModelConfig(attributes=attributes)
+        model = DivideAttributesModelConfig(attributes=attributes)
 
         # model validator creates tmp folder
         assert tmp_dir.exists()
-
-        assert model.data_dir == here() / "data"  # default
-        assert model.divides_path == HYDROFABRIC_OUTPUT_FILE  # default
+        assert model.data_dir == here() / "data/divide_attributes"  # default
         assert model.divide_id == "div_id"  # default
         assert model.attributes == attributes
-        assert model.output == HYDROFABRIC_OUTPUT_FILE  # default
         assert model.divides_path_list is None  # default
         assert model.tmp_dir == Path("/tmp/divide-attributes")  # default
         assert model.split_vpu is False  # default
@@ -134,18 +303,12 @@ class TestDivideAttributesSchemas:
 class TestDivideAttributes:
     test_tmp_dir = here() / "tests/data/divide_attributes/tmp/divide-attributes"
 
-    def test_config_reader(self, divide_attributes_config_yaml: str) -> None:
-        """Check path logic"""
-        data = _config_reader(divide_attributes_config_yaml)
-
-        assert data.attributes[0].file_name == Path("./tests/data/divide_attributes/bexp_0.tif")
-        assert data.attributes[1].file_name == Path("./tests/data/divide_attributes/dksat_0.tif")
-        assert data.attributes[2].file_name == Path(
-            "./tests/data/divide_attributes/usgs_250m_aspect_5070.tif"
-        )
-        assert data.attributes[3].file_name == Path("./tests/data/divide_attributes/twi.tif")
-
-    def test_vpu_splitter(self, divide_attributes_model_config: DivideAttributeModelConfig) -> None:
+    def test_vpu_splitter(
+        self,
+        divide_attributes_model_config: DivideAttributesModelConfig,
+        tmp_divides: Path,
+        divide_attribute_tmp_dir: Path,
+    ) -> None:
         """VPU spliter splits gpkg with 2 VPUs"""
         gpkgs = _vpu_splitter(divide_attributes_model_config)
 
@@ -164,8 +327,9 @@ class TestDivideAttributes:
 
     def test_calculate_attributes__mode(
         self,
-        divide_attributes_model_config: DivideAttributeModelConfig,
+        divide_attributes_model_config: DivideAttributesModelConfig,
         divide_attributes_bexp: dict[str, Any],
+        tmp_divides: Path,
     ) -> None:
         """Fixture includes config, VPU03N, and result"""
         try:
@@ -184,8 +348,9 @@ class TestDivideAttributes:
 
     def test_calculate_attributes__quartile(
         self,
-        divide_attributes_model_config: DivideAttributeModelConfig,
+        divide_attributes_model_config: DivideAttributesModelConfig,
         divide_attributes_twi: dict[str, Any],
+        tmp_divides: Path,
     ) -> None:
         """Fixture includes config, VPU03N, and results"""
         try:
@@ -208,9 +373,10 @@ class TestDivideAttributes:
 
     def test_calculate_attributes__circmean(
         self,
-        divide_attributes_model_config: DivideAttributeModelConfig,
+        divide_attributes_model_config: DivideAttributesModelConfig,
         divide_attributes_aspect: dict[str, Any],
         divide_attributes_aspect_lake: dict[str, Any],
+        tmp_divides: Path,
     ) -> None:
         """Fixture includes config, VPU03N, and results. Custom exactextract"""
         try:
@@ -248,8 +414,9 @@ class TestDivideAttributes:
 
     def test_calculate_attributes__gmean(
         self,
-        divide_attributes_model_config: DivideAttributeModelConfig,
+        divide_attributes_model_config: DivideAttributesModelConfig,
         divide_attributes_dksat: dict[str, Any],
+        tmp_divides: Path,
     ) -> None:
         """Fixture includes config, VPU03N, and results. Custom exactextract"""
         try:
@@ -299,6 +466,7 @@ class TestDivideAttributes:
         processes: int,
         n_divides: int,
         expected: list[Path],
+        tmp_divides: Path,
     ) -> None:
         """Generates raster per process but no more rasters than divides"""
         raster_list = _prep_multiprocessing_rasters(
@@ -366,6 +534,7 @@ class TestDivideAttributes:
         raster_list: list[Path],
         expected_tmp_files: list[Path],
         expected_file_names: list[Path],
+        tmp_divides: Path,
     ) -> None:
         """Generates config per process with correct raster and temp name"""
         configs = _prep_multiprocessing_configs(
@@ -381,13 +550,16 @@ class TestDivideAttributes:
             assert cfg.file_name == expected_file_names[i]
 
     def test_divide_attributes_pipeline_single(
-        self, divide_attributes_config_yaml: Path, pipeline_results: pd.DataFrame
+        self,
+        divide_attributes_model_config: DivideAttributesModelConfig,
+        pipeline_results: pd.DataFrame,
+        tmp_divides: Path,
     ) -> None:
         """Single pipeline"""
+        cfg = divide_attributes_model_config
         try:
-            cfg = _config_reader(str(divide_attributes_config_yaml))
-            divide_attributes_pipeline_single(str(divide_attributes_config_yaml))
-            gdf = gpd.read_file(cfg.output)
+            divide_attributes_pipeline_single(cfg)
+            gdf = gpd.read_file(tmp_divides)
             assert_frame_equal(
                 gdf[
                     [
@@ -408,15 +580,18 @@ class TestDivideAttributes:
             path_list = cfg.tmp_dir.glob("*")
             for f in path_list:
                 f.unlink(missing_ok=True)
-            cfg.output.unlink(missing_ok=True)
+            tmp_divides.unlink(missing_ok=True)
 
     def test_divide_attributes_pipeline_parallel(
-        self, divide_attributes_config_yaml: Path, pipeline_results: pd.DataFrame
+        self,
+        divide_attributes_model_config: DivideAttributesModelConfig,
+        pipeline_results: pd.DataFrame,
+        tmp_divides: Path,
     ) -> None:
         try:
-            cfg = _config_reader(str(divide_attributes_config_yaml))
-            divide_attributes_pipeline_parallel(str(divide_attributes_config_yaml), processes=2)
-            gdf = gpd.read_file(cfg.output)
+            cfg = divide_attributes_model_config
+            divide_attributes_pipeline_parallel(cfg, processes=2)
+            gdf = gpd.read_file(tmp_divides)
             assert_frame_equal(
                 gdf[
                     [
@@ -437,8 +612,7 @@ class TestDivideAttributes:
             path_list = cfg.tmp_dir.glob("*")
             for f in path_list:
                 f.unlink(missing_ok=True)
-
-            cfg.output.unlink(missing_ok=True)
+            tmp_divides.unlink(missing_ok=True)
 
 
 class TestDivideAttributesStates:

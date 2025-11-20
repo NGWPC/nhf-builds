@@ -144,6 +144,7 @@ def build_rfc_da_hydraulics(
     max_waterbody_nearest_dist_m: float,
     min_area_sqkm: float,
     out_dir: str | Path,
+    out_rfcda: Path,
     work_crs: str,
     default_crs: str,
     use_hazard: bool = True,
@@ -174,7 +175,7 @@ def build_rfc_da_hydraulics(
     ref_wb_elevs_path = out_dir / "ref_wb_elevs.gpkg"
     osm_wb_elevs_path = out_dir / "osm_wb_elevs.gpkg"
     rfc_da_locs_path = out_dir / "rfc-da-locs.gpkg"
-    rfc_da_hydr_path = out_dir / "rfc-da-hydraulics-v1.gpkg"
+    rfc_da_hydr_path = out_rfcda
 
     # 1) WB elevations (ref + OSM)
     logging.info("Building reference reservoirs elevation")

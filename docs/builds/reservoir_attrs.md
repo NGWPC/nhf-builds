@@ -6,7 +6,7 @@ This issue is mainly about capturing and solidifying the current workflow so we 
 
 ## Running in Hydrofabric Pipeline
 
-To run in pipeline, you must either retrieve a pre-computed RFC-DA geopackage from s3 or create one within the pipeline. The reservoir config (`example_reservoir_attrs_config.yaml`) specifies the location to create or find the file: `rfc_da -> outputs -> out_gpkg`. Generally this willl be `data/reservoirs/output/rfc-da-hydraulics-v1.gpkg`. If the file exists, the reservoir task will generate the reservoirs table. If the file does not exist, follow the following steps to set up data sources to create the input RFC-DA table.
+To run in pipeline, you must either retrieve a pre-computed RFC-DA geopackage from s3 or create one within the pipeline. The default location is `data/reservoirs/output/rfc-da-hydraulics-v1.gpkg`. If the file exists, the reservoir task will generate the reservoirs table. If the file does not exist, follow the following steps to set up data sources to create the input RFC-DA table. The defaults for all parameters are shown in `example_config.yaml` > `waterbodies`.
 
 ### Setting up RFC-DA
 

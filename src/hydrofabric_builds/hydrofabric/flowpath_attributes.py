@@ -17,25 +17,6 @@ from hydrofabric_builds.schemas.hydrofabric import (
 logger = logging.getLogger(__name__)
 
 
-def _config_reader(config_dict: dict | None = None) -> FlowpathAttributesModelConfig:
-    """Reads model config if present else return defaults
-
-    Parameters
-    ----------
-    config_dict : dict | None, optional
-        A dict matching FlowpathAtttributesModelConfig. If none specified, defaults used, by default None
-
-    Returns
-    -------
-    FlowpathAttributesModelConfig
-        Populated FlowpathAttributesModelConfig object
-    """
-    if config_dict:
-        return FlowpathAttributesModelConfig.model_validate(config_dict)
-    else:
-        return FlowpathAttributesModelConfig()
-
-
 def _dem_attributes(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Derive DEM-based attributes (slope, mean_elevation)
 
@@ -326,18 +307,13 @@ def _write_output(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFram
     df_pd = gpd.GeoDataFrame(df.drop("streamorder").to_pandas())
     gdf = gdf.merge(df_pd, on="fp_id")
 
-    if ".parquet" in model_cfg.output.name:
-        gdf.to_parquet(model_cfg.output, compression="snappy")
-    else:
-        gdf.to_file(model_cfg.output, layer="flowpaths", driver="GPKG", overwrite=True)
+    gdf.to_file(model_cfg.hf_path, layer="flowpaths", driver="GPKG", overwrite=True)
 
     del df_pd, gdf, df
 
 
-def flowpath_attributes_pipeline(config_dict: dict) -> None:
+def flowpath_attributes_pipeline(model_cfg: FlowpathAttributesModelConfig) -> None:
     """Pipeline to run flowpath attributes"""
-    model_cfg = _config_reader(config_dict)
-
     logger.info("Reading hydrofabric flowpaths file")
     gdf = gpd.read_file(model_cfg.hf_path, layer="flowpaths")
 
@@ -357,4 +333,4 @@ def flowpath_attributes_pipeline(config_dict: dict) -> None:
     df = _other_flowpath_attributes(model_cfg=model_cfg, df=df)
 
     logger.info("Writing flowpath attributes output")
-    _write_output(model_cfg=model_cfg, gdf=gdf, df=df)
+    _write_output(model_cfg, gdf=gdf, df=df)
