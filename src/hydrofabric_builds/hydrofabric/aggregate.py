@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+import rustworkx as rx
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -83,11 +84,11 @@ def _process_aggregation_pairs(
     groups = _merge_tuples_with_common_values(classifications.aggregation_pairs)
 
     results: list[dict[str, Any]] = []
-    virtual_flowpaths_set: set[str] = set(classifications.virtual_flowpaths)
+    non_nextgen_flowpaths_set: set[str] = set(classifications.non_nextgen_flowpaths)
 
     for group_ids in groups:
         # Filter out virtual flowpaths
-        fp_ids = [fp_id for fp_id in group_ids if fp_id not in virtual_flowpaths_set]
+        fp_ids = [fp_id for fp_id in group_ids if fp_id not in non_nextgen_flowpaths_set]
 
         if not fp_ids:
             logger.debug(f"Skipping group {group_ids} - all flowpaths are virtual")
@@ -197,7 +198,7 @@ def _process_independent_flowpaths(
     return results
 
 
-def _process_virtual_flowpaths(
+def _process_non_nextgen_flowpaths(
     classifications: Classifications,
     fp_lookup: dict[str, dict[str, Any]],
     div_lookup: dict[str, dict[str, Any]],
@@ -219,7 +220,7 @@ def _process_virtual_flowpaths(
         virtual flowpath data
     """
     results: list[dict[str, Any]] = []
-    for fp in classifications.virtual_flowpaths:
+    for fp in classifications.non_nextgen_flowpaths:
         if fp in fp_lookup:
             results.append(
                 {
@@ -232,12 +233,14 @@ def _process_virtual_flowpaths(
     return results
 
 
-def _process_small_scale_connectors(
+def _process_virtual_flowpaths(
     classifications: Classifications,
     fp_lookup: dict[str, dict[str, Any]],
-    div_lookup: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Process small scale connectors using dictionary lookups.
+    """Process virtual flowpaths - each tuple pair becomes one virtual flowpath.
+
+    Each (flowpath_id, downstream_target) tuple represents a single virtual flowpath
+    that should NOT be merged with others, even if they share the same downstream.
 
     Parameters
     ----------
@@ -251,34 +254,132 @@ def _process_small_scale_connectors(
     Returns
     -------
     list[dict[str, Any]]
-        Small scale connector data
+        Virtual flowpath data - one entry per tuple pair
     """
     results: list[dict[str, Any]] = []
-    for fp in classifications.subdivide_candidates:
-        try:
-            fp_data = fp_lookup[fp]
-            div_data = div_lookup[fp]
 
-            length_km = float(fp_data["lengthkm"])
-            area_sqkm = float(fp_data["areasqkm"])
-            hydroseq = int(fp_data["hydroseq"])
-            div_area_sqkm = float(div_data["areasqkm"])
-            vpu_id = fp_data["VPUID"]
-            results.append(
-                {
-                    "ref_ids": fp,
-                    "vpu_id": vpu_id,
-                    "hydroseq": hydroseq,
-                    "length_km": length_km,
-                    "area_sqkm": area_sqkm,
-                    "div_area_sqkm": div_area_sqkm,
-                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
-                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
-                }
-            )
-        except KeyError:
-            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
+    # Each tuple (fp_id, downstream_target) is a separate virtual flowpath
+    for fp_id, downstream_target in classifications.virtual_flowpath_pairs:
+        if fp_id not in fp_lookup:
+            logger.debug(f"Flowpath {fp_id} not found in lookup")
             continue
+
+        fp_data = fp_lookup[fp_id]
+
+        # Single flowpath attributes
+        length_km = float(fp_data["lengthkm"])
+        area_sqkm = float(fp_data["areasqkm"])
+        hydroseq = int(fp_data["hydroseq"])
+        vpu_id = fp_data["VPUID"]
+
+        results.append(
+            {
+                "ref_ids": [fp_id],  # Single flowpath in a list
+                "dn_id": downstream_target,  # Where this virtual flowpath connects
+                "up_id": fp_id,  # Same as the only flowpath
+                "vpu_id": vpu_id,
+                "hydroseq": hydroseq,
+                "length_km": length_km,
+                "area_sqkm": area_sqkm,
+                "line_geometry": fp_lookup[fp_id]["shapely_geometry"],
+            }
+        )
+
+    return results
+
+
+def _process_non_nextgen_virtual_flowpaths(
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    graph: rx.PyDiGraph,
+    node_indices: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Process non-NextGen virtual flowpaths - merge connected chains.
+
+    Groups non-NextGen virtual flowpath tuples that share reference IDs into
+    connected chains, then aggregates each chain into a single virtual flowpath.
+
+    Parameters
+    ----------
+    classifications : Classifications
+        Classification results
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    graph: rx.PyDiGraph
+        The graph object for this outlet
+    node_indices: dict[str, Any]
+        The node indices for this graph
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Non-NextGen virtual flowpath data - one entry per connected chain
+    """
+    if not classifications.non_nextgen_virtual_flowpath_pairs:
+        return []
+
+    # Get all non-NextGen flowpath IDs
+    non_nextgen_fp_ids = set()
+    for fp_id, _ in classifications.non_nextgen_virtual_flowpath_pairs:
+        non_nextgen_fp_ids.add(fp_id)
+
+    # Create subgraph with only non-NextGen flowpaths
+    non_nextgen_node_indices = []
+    for fp_id in non_nextgen_fp_ids:
+        if fp_id in node_indices:
+            non_nextgen_node_indices.append(node_indices[fp_id])
+
+    if not non_nextgen_node_indices:
+        return []
+
+    # Create subgraph containing only non-NextGen nodes
+    non_nextgen_subgraph = graph.subgraph(non_nextgen_node_indices)
+
+    # Find connected components (each component is a separate chain)
+    connected_components = rx.weakly_connected_components(non_nextgen_subgraph)
+
+    results: list[dict[str, Any]] = []
+
+    # Process each connected component as one virtual flowpath
+    for component in connected_components:
+        # Get flowpath IDs from component node indices
+        component_fp_ids = [non_nextgen_subgraph[node_idx] for node_idx in component]
+
+        # Get flowpath data for all ref_ids in this component
+        fp_data = [fp_lookup[fp_id] for fp_id in component_fp_ids if fp_id in fp_lookup]
+
+        if not fp_data:
+            continue
+
+        # Sort by hydroseq
+        sorted_fps_asc = sorted(fp_data, key=lambda x: x["hydroseq"])
+        sorted_fps_desc = sorted(fp_data, key=lambda x: x["hydroseq"], reverse=True)
+
+        # Extract IDs
+        sorted_ids_asc = [str(fp["flowpath_id"]) for fp in sorted_fps_asc]
+        fp_geometry_ids = [str(fp["flowpath_id"]) for fp in sorted_fps_desc]
+
+        # Compute aggregates
+        length_km = sum(float(fp["lengthkm"]) for fp in fp_data)
+        area_sqkm = sum(float(fp["areasqkm"]) for fp in fp_data)
+        hydroseq = max(int(fp["hydroseq"]) for fp in fp_data)
+        vpu_id = fp_data[0]["VPUID"]
+
+        # Aggregate geometry
+        line_geoms = [fp_lookup[fp_id]["shapely_geometry"] for fp_id in fp_geometry_ids if fp_id in fp_lookup]
+
+        results.append(
+            {
+                "ref_ids": component_fp_ids,  # All connected ref_ids in this component
+                "dn_id": sorted_ids_asc[0],  # Most downstream
+                "up_id": sorted_ids_asc[-1],  # Most upstream
+                "vpu_id": vpu_id,
+                "hydroseq": hydroseq,
+                "length_km": length_km,
+                "area_sqkm": area_sqkm,
+                "line_geometry": unary_union(line_geoms),
+            }
+        )
 
     return results
 
@@ -353,21 +454,28 @@ def _aggregate_geometries(
     """
     fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
     div_lookup: dict[str, dict[str, Any]] = partition_data["div_lookup"]
+    subgraph = partition_data["subgraph"]
+    node_indices = partition_data["node_indices"]
 
     aggregates = _process_aggregation_pairs(classifications, fp_lookup, div_lookup)
 
     independents = _process_independent_flowpaths(classifications, fp_lookup, div_lookup)
 
-    small_scale_connectors = _process_small_scale_connectors(classifications, fp_lookup, div_lookup)
-
-    virtual_flowpaths = _process_virtual_flowpaths(classifications, fp_lookup, div_lookup)
+    non_nextgen_flowpaths = _process_non_nextgen_flowpaths(classifications, fp_lookup, div_lookup)
 
     connectors = _process_connectors(classifications, fp_lookup, div_lookup)
+
+    virtual_flowpaths = _process_virtual_flowpaths(classifications, fp_lookup)
+
+    non_nextgen_virtual_flowpaths = _process_non_nextgen_virtual_flowpaths(
+        classifications, fp_lookup, subgraph, node_indices
+    )
 
     return Aggregations(
         aggregates=aggregates,
         independents=independents,
-        virtual_flowpaths=virtual_flowpaths,
-        small_scale_connectors=small_scale_connectors,
+        non_nextgen_flowpaths=non_nextgen_flowpaths,
         connectors=connectors,
+        virtual_flowpaths=virtual_flowpaths,
+        non_nextgen_virtual_flowpaths=non_nextgen_virtual_flowpaths,
     )

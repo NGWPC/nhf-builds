@@ -421,8 +421,8 @@ class TestIntegration:
                 assert len(out_edges) == 1, f"fp_id={fp_id} has {len(out_edges)} downstream connections"
 
                 _, downstream_idx, _ = out_edges[0]
-                downstream_fp_id = graph[downstream_idx]
-                downstream_data = fp_dict[downstream_fp_id]
+                dn_flowpath_id = graph[downstream_idx]
+                downstream_data = fp_dict[dn_flowpath_id]
 
                 expected_path = downstream_data["path_length"] + downstream_data["length_km"]
                 actual_path = fp_data["path_length"]
@@ -451,8 +451,8 @@ class TestIntegration:
             else:
                 # Should point to downstream's hydroseq
                 _, downstream_idx, _ = out_edges[0]
-                downstream_fp_id = graph[downstream_idx]
-                downstream_data = fp_dict[downstream_fp_id]
+                dn_flowpath_id = graph[downstream_idx]
+                downstream_data = fp_dict[dn_flowpath_id]
 
                 expected_dn_hydroseq = downstream_data["hydroseq"]
                 actual_dn_hydroseq = fp_data["dn_hydroseq"]
@@ -498,8 +498,8 @@ class TestIntegration:
                         break  # Reached outlet
 
                     _, downstream_idx, _ = out_edges[0]
-                    downstream_fp_id = graph[downstream_idx]
-                    downstream_mainstem = fp_dict[downstream_fp_id]["mainstem_lp"]
+                    dn_flowpath_id = graph[downstream_idx]
+                    downstream_mainstem = fp_dict[dn_flowpath_id]["mainstem_lp"]
 
                     if downstream_mainstem == mainstem_id:
                         visited_mainstem_nodes.add(downstream_idx)

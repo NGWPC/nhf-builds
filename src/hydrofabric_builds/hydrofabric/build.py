@@ -115,7 +115,7 @@ def _queue_all_unit_upstreams(
                 ref_idx = node_indices[ref_id]
                 upstream_ids = [graph[idx] for idx in graph.predecessor_indices(ref_idx)]
                 all_upstream_ids.extend(upstream_ids)
-        unique_upstream_ids = list(set(all_upstream_ids))
+        unique_upstream_ids = sorted(set(all_upstream_ids))
         to_process.extend(unique_upstream_ids)
     else:
         # For independents/connectors, just use current_ref_id
@@ -174,7 +174,6 @@ def _build_base_hydrofabric(
     div_data: list[dict[str, Any]] = []
     nexus_data: list[dict[str, Any]] = []
     reference_flowpaths_data: list[dict[str, Any]] = []
-    base_virtual_data: list[dict[str, Any]] = []
 
     ref_id_to_new_id: dict[str, int] = {}
     downstream_fp_to_nexus: dict[int, int] = {}
@@ -193,7 +192,7 @@ def _build_base_hydrofabric(
         visited_ref_ids.add(current_ref_id)
 
         # Skip virtual flowpaths
-        if current_ref_id in classifications.virtual_flowpaths:
+        if current_ref_id in classifications.non_nextgen_flowpaths:
             continue
 
         # Validate current flowpath
@@ -256,9 +255,8 @@ def _build_base_hydrofabric(
         # Check for divide polygon
         polygon_geom: BaseGeometry | None = unit.get("polygon_geometry")
         if polygon_geom is None or polygon_geom.is_empty:
-            logger.error(f"Unit {ref_ids} has no divide polygon")
-            # _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
-            # continue
+            logger.error(f"Unit {ref_ids} has no divide polygon. Will not be able to run NGEN using it")
+            raise ValueError(f"Unit {ref_ids} has no divide polygon. Will not be able to run NGEN using it")
 
         # Get or create nexus
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
@@ -320,16 +318,6 @@ def _build_base_hydrofabric(
                 }
             )
 
-        # Track aggregates for virtual flowpaths
-        if unit_type == "aggregate" and unit_info.get("dn_id"):
-            base_virtual_data.append(
-                {
-                    "fp_id": new_id,
-                    "dn_ref_id": unit_info["dn_id"],
-                    "up_ref_id": unit_info["up_id"],
-                }
-            )
-
         new_id += 1
 
         _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
@@ -343,6 +331,145 @@ def _build_base_hydrofabric(
         if fp_id in nexus_by_downstream_fp:
             fp_entry["up_nex_id"] = nexus_by_downstream_fp[fp_id]
 
+    virtual_fp_data: list[dict[str, Any]] = []
+    virtual_nexus_data_dict: dict[int, dict[str, Any]] = {}  # Store nexus by ID
+    ref_id_to_virtual_fp_id: dict[str, int] = {}  # Map ref_id to virtual_fp_id
+
+    # Track nexus by the reference ID it connects to
+    # Key: ref_id (the downstream reference flowpath) -> virtual_nexus_id
+    ref_id_to_nexus: dict[str, int] = {}
+
+    virtual_fp_id_counter = 1 + id_offset
+    virtual_nexus_counter = 1 + id_offset
+
+    # FIRST: Process virtual_flowpaths (routing_segment = True)
+    # These create all the nexus points
+    for unit in aggregate_data.virtual_flowpaths:
+        ref_ids = unit["ref_ids"]  # List with single flowpath ID
+        dn_ref_id = unit.get("dn_id")  # Downstream target reference ID
+
+        # Assign virtual flowpath ID
+        virtual_fp_id = virtual_fp_id_counter
+        virtual_fp_id_counter += 1
+
+        # Map this ref_id to virtual_fp_id for nexus lookup
+        for ref_id in ref_ids:
+            ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
+
+        # Find the downstream virtual flowpath ID
+        downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(dn_ref_id) if dn_ref_id else None
+
+        # Get downstream endpoint
+        line_geom = unit["line_geometry"]
+        if line_geom.geom_type == "MultiLineString":
+            endpoint = Point(list(line_geom.geoms)[-1].coords[-1])
+        else:
+            endpoint = Point(line_geom.coords[-1])
+
+        # Check if nexus already exists for this downstream reference ID
+        if dn_ref_id and dn_ref_id in ref_id_to_nexus:
+            # Reuse existing nexus
+            virtual_nexus_id = ref_id_to_nexus[dn_ref_id]
+        else:
+            # Create new nexus
+            virtual_nexus_id = virtual_nexus_counter
+            virtual_nexus_counter += 1
+
+            virtual_nexus_data_dict[virtual_nexus_id] = {
+                "virtual_nex_id": virtual_nexus_id,
+                "dn_virtual_fp_id": downstream_virtual_fp_id,
+                "geometry": endpoint,
+            }
+
+            # Track this nexus by the reference ID it connects to
+            if dn_ref_id:
+                ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
+
+        # Create virtual flowpath
+        virtual_fp_data.append(
+            {
+                "virtual_fp_id": virtual_fp_id,
+                "dn_virtual_nex_id": virtual_nexus_id,
+                "up_virtual_nex_id": None,  # Will be set below
+                "routing_segment": True,
+                "length_km": unit["length_km"],
+                "area_sqkm": unit["area_sqkm"],
+                "hydroseq": unit["hydroseq"],
+                "vpu_id": unit["vpu_id"],
+                "geometry": line_geom,
+            }
+        )
+
+    # SECOND: Process non_nextgen_virtual_flowpaths (routing_segment = False)
+    # These MUST connect to existing virtual flowpaths via existing nexuses
+    for unit in aggregate_data.non_nextgen_virtual_flowpaths:
+        ref_ids = unit["ref_ids"]  # List with all connected ref_ids in the chain
+        line_geom = unit["line_geometry"]
+        dn_ref_id = str(unit["dn_id"])  # This should point to a virtual flowpath
+        ds_id: str = str(int(fp_lookup[dn_ref_id]["flowpath_toid"]))
+
+        virtual_fp_id = virtual_fp_id_counter
+        virtual_fp_id_counter += 1
+
+        # Map all ref_ids to this virtual_fp_id
+        for ref_id in ref_ids:
+            ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
+
+        if ds_id and ds_id in ref_id_to_nexus:
+            virtual_nexus_id = ref_id_to_nexus[ds_id]
+        else:
+            line_geom = unit["line_geometry"]
+            if line_geom.geom_type == "MultiLineString":
+                endpoint = Point(list(line_geom.geoms)[-1].coords[-1])
+            else:
+                endpoint = Point(line_geom.coords[-1])
+            virtual_nexus_id = virtual_nexus_counter
+            virtual_nexus_counter += 1
+            downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
+
+            virtual_nexus_data_dict[virtual_nexus_id] = {
+                "virtual_nex_id": virtual_nexus_id,
+                "dn_virtual_fp_id": downstream_virtual_fp_id,
+                "geometry": endpoint,
+            }
+
+            # Track this nexus by the reference ID it connects to
+            if dn_ref_id:
+                ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
+
+        virtual_fp_data.append(
+            {
+                "virtual_fp_id": virtual_fp_id,
+                "dn_virtual_nex_id": virtual_nexus_id,
+                "up_virtual_nex_id": None,
+                "routing_segment": False,
+                "length_km": unit["length_km"],
+                "area_sqkm": unit["area_sqkm"],
+                "hydroseq": unit["hydroseq"],
+                "vpu_id": unit["vpu_id"],
+                "geometry": line_geom,
+            }
+        )
+
+    # Convert nexus dict to list
+    virtual_nexus_data = list(virtual_nexus_data_dict.values())
+
+    # Fix up_virtual_nex_id references
+    # For each virtual flowpath, find the nexus where this flowpath is the downstream target
+    nexus_pointing_to_virtual_fp: dict[int, int] = {}  # Maps virtual_fp_id -> nexus_id that points to it
+
+    for nexus_entry in virtual_nexus_data:
+        dn_virtual_fp_id = nexus_entry.get("dn_virtual_fp_id")
+        if dn_virtual_fp_id is not None:
+            nexus_pointing_to_virtual_fp[dn_virtual_fp_id] = nexus_entry["virtual_nex_id"]
+
+    # Now assign up_virtual_nex_id to each virtual flowpath
+    for vfp_entry in virtual_fp_data:
+        virtual_fp_id = vfp_entry["virtual_fp_id"]
+        # The upstream nexus is the one that points TO this flowpath
+        if virtual_fp_id in nexus_pointing_to_virtual_fp:
+            vfp_entry["up_virtual_nex_id"] = nexus_pointing_to_virtual_fp[virtual_fp_id]
+
     # Create GeoDataFrames
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
@@ -352,17 +479,42 @@ def _build_base_hydrofabric(
 
         divides_gdf = gpd.GeoDataFrame(div_data, crs=cfg.crs)
         nexus_gdf = gpd.GeoDataFrame(nexus_data, crs=cfg.crs)
+        nexus_gdf["dn_fp_id"] = nexus_gdf["dn_fp_id"].astype("Int64")
         reference_flowpaths_df = pd.DataFrame(reference_flowpaths_data)
+
+        # Virtual layers
+        if virtual_fp_data:
+            virtual_flowpaths_gdf = gpd.GeoDataFrame(virtual_fp_data, crs=cfg.crs)
+            virtual_flowpaths_gdf["virtual_fp_id"] = virtual_flowpaths_gdf["virtual_fp_id"].astype("Int64")
+            virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
+                "Int64"
+            )
+            virtual_flowpaths_gdf["up_virtual_nex_id"] = virtual_flowpaths_gdf["up_virtual_nex_id"].astype(
+                "Int64"
+            )
+        else:
+            virtual_flowpaths_gdf = None
+
+        if virtual_nexus_data:
+            virtual_nexus_gdf = gpd.GeoDataFrame(virtual_nexus_data, crs=cfg.crs)
+            virtual_nexus_gdf["virtual_nex_id"] = virtual_nexus_gdf["virtual_nex_id"].astype("Int64")
+            virtual_nexus_gdf["dn_virtual_fp_id"] = virtual_nexus_gdf["dn_virtual_fp_id"].astype("Int64")
+        else:
+            virtual_nexus_gdf = None
+
     except ValueError:
         flowpaths_gdf = None
         divides_gdf = None
         nexus_gdf = None
         reference_flowpaths_df = None
+        virtual_flowpaths_gdf = None
+        virtual_nexus_gdf = None
 
     return {
         "flowpaths": flowpaths_gdf,
         "divides": divides_gdf,
         "nexus": nexus_gdf,
-        "base_virtual_flowpaths": base_virtual_data,
         "reference_flowpaths": reference_flowpaths_df,
+        "virtual_flowpaths": virtual_flowpaths_gdf,
+        "virtual_nexus": virtual_nexus_gdf,
     }

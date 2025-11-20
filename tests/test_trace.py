@@ -1,688 +1,541 @@
-"""Tests for trace.py functions."""
+"""Test cases to ensure functionality works for the trace functions"""
 
-from collections import deque
+from typing import Any
 
+import pandas as pd
 import polars as pl
-import pytest
-from conftest import create_partition_data_from_dataframes, dict_to_graph
+import rustworkx as rx
+from pyprojroot import here
 
-from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.hydrofabric.trace import (
-    _get_unprocessed_upstream_info,
-    _get_upstream_ids,
-    _queue_upstream,
-    _trace_single_flowpath_attributes,
-    _trace_stack,
-    _traverse_and_mark_as_virtual,
+from hydrofabric_builds import (
+    HFConfig,
+    build_graph,
+    download_reference_data,
+    map_build_base_hydrofabric,
+    map_trace_and_aggregate,
+    reduce_calculate_id_ranges,
+    reduce_combine_base_hydrofabric,
 )
-from hydrofabric_builds.schemas.hydrofabric import Classifications
+from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
+from hydrofabric_builds.hydrofabric.graph import (
+    _build_rustworkx_object,
+    _build_upstream_dict_from_nexus,
+)
+from hydrofabric_builds.hydrofabric.trace import _trace_stack
+from scripts.hf_runner import LocalRunner
 
 
-@pytest.fixture
-def sample_flowpath_data() -> pl.DataFrame:
-    """Create sample flowpath data for unit testing."""
-    data = {
-        "flowpath_id": ["1", "2", "3", "4", "5", "6", "7", "8"],
-        "totdasqkm": [100.0, 50.0, 25.0, 10.0, 5.0, 2.0, 1.0, 0.5],
-        "areasqkm": [5.0, 2.5, 1.5, 0.8, 2.0, 1.0, 0.5, 0.3],
-        "lengthkm": [10.0, 8.0, 6.0, 4.0, 3.0, 2.0, 1.5, 1.0],
-        "streamorder": [3, 2, 2, 1, 1, 1, 1, 1],
-        "hydroseq": [1, 2, 3, 4, 5, 6, 7, 8],
-        "dnhydroseq": [0, 1, 1, 2, 3, 4, 4, 5],
-        "flowpath_toid": [0, 1, 1, 2, 3, 4, 4, 5],
-        "mainstemlp": [300.0, 300.0, 100.0, 50.0, 100.0, 100.0, 300.0, 300.0],
-        "VPUID": ["01"] * 8,
-    }
-    return pl.DataFrame(data)
+def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_upstream_no_divide_config)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
 
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    outlet = outlets[0]
+    partition_data = outlet_subgraphs[outlet]
+    filtered_divides = partition_data["divides"]
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+    classifications = _trace_stack(
+        start_id=outlet,
+        div_ids=valid_divide_ids,
+        cfg=trace_case_upstream_no_divide_config,
+        partition_data=partition_data,
+    )
 
-@pytest.fixture
-def sample_fp_lookup(sample_flowpath_data: pl.DataFrame) -> dict:
-    """Create fp_lookup dictionary from sample flowpath data."""
-    return {str(row["flowpath_id"]): row for row in sample_flowpath_data.to_dicts()}
+    aggregate_data = _aggregate_geometries(
+        classifications=classifications,
+        partition_data=partition_data,
+    )
 
+    assert len(aggregate_data.aggregates) == 3, "Incorrect number of aggregates"
+    assert len(aggregate_data.independents) == 1, "Incorrect number of independents"
+    assert len(aggregate_data.connectors) == 0, "Incorrect number of connectors"
+    assert len(aggregate_data.non_nextgen_flowpaths) == 3, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 1, (
+        "Incorrect number of non nextgen virtual flowpaths"
+    )
+    assert len(aggregate_data.virtual_flowpaths) == 11, "Incorrect number of virtual flowpaths"
 
-class TestGetUpstreamIds:
-    """Tests for _get_upstream_ids function."""
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
 
-    def test_get_upstream_ids_single(self) -> None:
-        """Test getting single upstream."""
-        network_graph = {"fp1": ["up1"], "up1": []}
-        graph, node_indices = dict_to_graph(network_graph)
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert rx.is_weakly_connected(graph), "All flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    graph_outlets: list[int] = [node for node in graph.node_indices() if graph.out_degree(node) == 0]
+    assert len(graph_outlets) == 1, f"Should have exactly 1 outlet, found {len(graph_outlets)}"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
-        upstream_ids = _get_upstream_ids("fp1", graph, node_indices)
-        assert upstream_ids == ["up1"]
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
+    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
 
-    def test_get_upstream_ids_multiple(self) -> None:
-        """Test getting multiple upstreams."""
-        network_graph = {"fp1": ["up1", "up2", "up3"], "up1": [], "up2": [], "up3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-
-        upstream_ids = _get_upstream_ids("fp1", graph, node_indices)
-        assert set(upstream_ids) == {"up1", "up2", "up3"}
-
-    def test_get_upstream_ids_headwater(self) -> None:
-        """Test getting upstreams of headwater (none)."""
-        network_graph: dict[str, list] = {"fp1": []}
-        graph, node_indices = dict_to_graph(network_graph)
-
-        upstream_ids = _get_upstream_ids("fp1", graph, node_indices)
-        assert upstream_ids == []
-
-    def test_get_upstream_ids_not_in_graph(self) -> None:
-        """Test getting upstreams of ID not in graph."""
-        network_graph = {"fp1": ["up1"], "up1": []}
-        graph, node_indices = dict_to_graph(network_graph)
-
-        upstream_ids = _get_upstream_ids("fp999", graph, node_indices)
-        assert upstream_ids == []
-
-
-class TestGetUnprocessedUpstreamInfo:
-    """Tests for _get_unprocessed_upstream_info function."""
-
-    def test_get_unprocessed_info(self, sample_fp_lookup: dict) -> None:
-        """Test getting info for unprocessed upstreams."""
-        upstream_ids = ["4", "5"]
-        processed: set = set()
-
-        info = _get_unprocessed_upstream_info(upstream_ids, sample_fp_lookup, processed)
-
-        assert len(info) == 2
-        assert info[0]["flowpath_id"] == "4"
-        assert info[1]["flowpath_id"] == "5"
-
-    def test_skip_processed(self, sample_fp_lookup: dict) -> None:
-        """Test skipping already processed upstreams."""
-        upstream_ids = ["4", "5", "6"]
-        processed = {"5"}
-
-        info = _get_unprocessed_upstream_info(upstream_ids, sample_fp_lookup, processed)
-
-        assert len(info) == 2
-        assert all(x["flowpath_id"] != "5" for x in info)
-
-    def test_skip_missing(self, sample_fp_lookup: dict) -> None:
-        """Test skipping upstreams not in lookup."""
-        upstream_ids = ["4", "999"]
-        processed: set = set()
-
-        info = _get_unprocessed_upstream_info(upstream_ids, sample_fp_lookup, processed)
-
-        assert len(info) == 1
-        assert info[0]["flowpath_id"] == "4"
-
-    def test_empty_upstream_ids(self, sample_fp_lookup: dict) -> None:
-        """Test with empty upstream list."""
-        info = _get_unprocessed_upstream_info([], sample_fp_lookup, set())
-        assert info == []
-
-
-class TestQueueUpstream:
-    """Tests for _queue_upstream function."""
-
-    def test_queue_all(self) -> None:
-        """Test queuing all upstreams."""
-        to_process: deque = deque()
-        processed: set = set()
-        upstream_ids = ["up1", "up2", "up3"]
-
-        _queue_upstream(upstream_ids, to_process, processed, unprocessed_only=False)
-
-        assert len(to_process) == 3
-        assert set(to_process) == {"up1", "up2", "up3"}
-
-    def test_queue_unprocessed_only(self) -> None:
-        """Test queuing only unprocessed upstreams."""
-        to_process: deque = deque()
-        processed = {"up2"}
-        upstream_ids = ["up1", "up2", "up3"]
-
-        _queue_upstream(upstream_ids, to_process, processed, unprocessed_only=True)
-
-        assert len(to_process) == 2
-        assert "up2" not in to_process
-
-    def test_queue_empty(self) -> None:
-        """Test queuing empty list."""
-        to_process: deque = deque()
-        processed: set = set()
-
-        _queue_upstream([], to_process, processed)
-
-        assert len(to_process) == 0
-
-
-class TestTraverseAndMarkAsvirtual:
-    """Tests for _traverse_and_mark_as_virtual function."""
-
-    def test_mark_single_flowpath(self) -> None:
-        """Test marking single flowpath as virtual."""
-        network_graph = {"fp1": [], "downstream": ["fp1"]}
-        graph, node_indices = dict_to_graph(network_graph)
-        result = Classifications()
-
-        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
-
-        assert "fp1" in result.virtual_flowpaths
-        assert ("fp1", "downstream") in result.aggregation_pairs
-        assert "fp1" in result.processed_flowpaths
-
-    def test_mark_chain(self) -> None:
-        """Test marking chain of flowpaths."""
-        network_graph = {"fp1": ["fp2"], "fp2": ["fp3"], "fp3": [], "downstream": ["fp1"]}
-        graph, node_indices = dict_to_graph(network_graph)
-        result = Classifications()
-
-        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
-
-        assert "fp1" in result.virtual_flowpaths
-        assert "fp2" in result.virtual_flowpaths
-        assert "fp3" in result.virtual_flowpaths
-        assert all(fp in result.processed_flowpaths for fp in ["fp1", "fp2", "fp3"])
-
-    def test_mark_branching(self) -> None:
-        """Test marking branching network."""
-        network_graph = {
-            "fp1": ["fp2", "fp3"],
-            "fp2": ["fp4"],
-            "fp3": ["fp5"],
-            "fp4": [],
-            "fp5": [],
-            "downstream": ["fp1"],
+    df = pd.DataFrame(
+        {
+            "nex_id": pd.Series([2, 3, 4], dtype="int64"),
+            "dn_fp_id": pd.Series([pd.NA, 2, 3], dtype="Int64"),
         }
-        graph, node_indices = dict_to_graph(network_graph)
-        result = Classifications()
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), df)
 
-        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
-
-        assert all(fp in result.virtual_flowpaths for fp in ["fp1", "fp2", "fp3", "fp4", "fp5"])
-
-    def test_mark_already_processed(self) -> None:
-        """Test that already processed flowpaths still get marked."""
-        network_graph = {"fp1": ["fp2"], "fp2": [], "downstream": ["fp1"]}
-        graph, node_indices = dict_to_graph(network_graph)
-        result = Classifications()
-        result.processed_flowpaths.add("fp2")
-
-        _traverse_and_mark_as_virtual("fp1", "downstream", result, graph, node_indices)
-
-        # Both should be marked even though fp2 was already processed
-        assert "fp1" in result.virtual_flowpaths
-        assert "fp2" in result.virtual_flowpaths
-
-
-class TestTraceStackRule1:
-    """Tests for Rule 1: No upstream (headwater)."""
-
-    def test_headwater_with_divide(self, sample_config: HFConfig) -> None:
-        """Test headwater with divide becomes independent."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1"],
-                "areasqkm": [5.0],
-                "lengthkm": [10.0],
-                "totdasqkm": [5.0],
-                "streamorder": [1],
-                "hydroseq": [1],
-                "dnhydroseq": [0],
-                "flowpath_toid": [0],
-                "mainstemlp": [100.0],
-                "VPUID": ["01"],
-            }
-        )
-
-        network_graph: dict[str, list] = {"1": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        assert "1" in result.independent_flowpaths
-        assert "1" not in result.virtual_flowpaths
-
-    def test_headwater_without_divide(self, sample_config: HFConfig) -> None:
-        """Test headwater without divide becomes virtual."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1"],
-                "areasqkm": [5.0],
-                "lengthkm": [10.0],
-                "totdasqkm": [5.0],
-                "streamorder": [1],
-                "hydroseq": [1],
-                "dnhydroseq": [0],
-                "flowpath_toid": [0],
-                "mainstemlp": [100.0],
-                "VPUID": ["01"],
-            }
-        )
-
-        network_graph: dict[str, list] = {"1": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids: set = set()  # No divide
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        assert not result.virtual_flowpaths
-        assert not result.independent_flowpaths
-
-
-class TestTraceStackRule2:
-    """Tests for Rule 2: Single upstream."""
-
-    def test_single_upstream_aggregate(self, sample_config: HFConfig) -> None:
-        """Test single upstream gets aggregated."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2"],
-                "areasqkm": [2.0, 1.0],
-                "lengthkm": [5.0, 3.0],
-                "totdasqkm": [3.0, 1.0],
-                "streamorder": [2, 1],
-                "hydroseq": [1, 2],
-                "dnhydroseq": [0, 1],
-                "flowpath_toid": [0, 1],
-                "mainstemlp": [100.0, 100.0],
-                "VPUID": ["01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2"], "2": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "2"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        assert ("1", "2") in result.aggregation_pairs
-
-    def test_single_upstream_no_divide_with_ancestor_divides(self, sample_config: HFConfig) -> None:
-        """Test single upstream without divide but ancestor divides exist."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [2.0, 1.0, 0.5],
-                "lengthkm": [5.0, 3.0, 2.0],
-                "totdasqkm": [3.5, 1.5, 0.5],
-                "streamorder": [2, 1, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 2],
-                "flowpath_toid": [0, 1, 2],
-                "mainstemlp": [100.0, 100.0, 100.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2"], "2": ["3"], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "3"}  # 2 has no divide, but 3 (ancestor) does
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Should aggregate normally since ancestors have divides
-        assert ("1", "2") in result.aggregation_pairs or "2" in result.independent_flowpaths
-
-    def test_single_upstream_no_divides_anywhere(self, sample_config: HFConfig) -> None:
-        """Test single upstream with no divides anywhere in network."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [2.0, 1.0, 0.5],
-                "lengthkm": [5.0, 3.0, 2.0],
-                "totdasqkm": [3.5, 1.5, 0.5],
-                "streamorder": [2, 1, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 2],
-                "flowpath_toid": [0, 1, 2],
-                "mainstemlp": [100.0, 100.0, 100.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2"], "2": ["3"], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids: set = set()  # No divides anywhere
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # All should be marked as virtual
-        assert not result.virtual_flowpaths
-        assert not result.virtual_flowpaths
-        assert not result.virtual_flowpaths
-
-
-class TestTraceStackRule3CaseA:
-    """Tests for Rule 3 Case A: Multiple upstream WITH divide."""
-
-    def test_two_upstreams_both_higher_order(self, sample_config: HFConfig) -> None:
-        """Test 2 higher-order upstreams creates connector."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [10.0, 5.0, 5.0],
-                "lengthkm": [10.0, 8.0, 8.0],
-                "totdasqkm": [20.0, 5.0, 5.0],
-                "streamorder": [3, 2, 2],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 1],
-                "flowpath_toid": [0, 1, 1],
-                "mainstemlp": [100.0, 100.0, 80.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2", "3"], "2": [], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "2", "3"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Should be connector
-        assert "1" in result.connector_segments
-
-    def test_three_plus_upstreams_connector(self, sample_config: HFConfig) -> None:
-        """Test 3+ upstreams always creates connector."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4"],
-                "areasqkm": [15.0, 5.0, 5.0, 5.0],
-                "lengthkm": [10.0, 5.0, 5.0, 5.0],
-                "totdasqkm": [30.0, 5.0, 5.0, 5.0],
-                "streamorder": [3, 2, 2, 1],
-                "hydroseq": [1, 2, 3, 4],
-                "dnhydroseq": [0, 1, 1, 1],
-                "flowpath_toid": [0, 1, 1, 1],
-                "mainstemlp": [100.0, 100.0, 80.0, 50.0],
-                "VPUID": ["01", "01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2", "3", "4"], "2": [], "3": [], "4": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "2", "3", "4"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        assert "1" in result.connector_segments
-
-
-class TestTraceStackRule3CaseB:
-    """Tests for Rule 3 Case B: Multiple upstream WITHOUT divide."""
-
-    def test_can_aggregate_downstream_no_competition(self, sample_config: HFConfig) -> None:
-        """Test aggregating downstream when no competition."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4"],
-                "areasqkm": [5.0, 2.0, 2.0, 1.0],
-                "lengthkm": [10.0, 5.0, 5.0, 3.0],
-                "totdasqkm": [10.0, 3.0, 3.0, 1.0],
-                "streamorder": [3, 2, 2, 1],
-                "hydroseq": [1, 2, 3, 4],
-                "dnhydroseq": [0, 1, 2, 2],
-                "flowpath_toid": [0, 1, 2, 2],
-                "mainstemlp": [100.0, 100.0, 80.0, 50.0],
-                "VPUID": ["01", "01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2"], "2": ["3", "4"], "3": [], "4": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1", "3", "4"}  # 2 has no divide
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Should aggregate 2 downstream to 1
-        assert ("2", "1") in result.aggregation_pairs
-
-    def test_all_upstreams_lack_deep_divides(self, sample_config: HFConfig) -> None:
-        """Test when all upstreams lack divides for 3 layers."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4", "5", "6", "7"],
-                "areasqkm": [10.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0],
-                "lengthkm": [10.0, 5.0, 5.0, 3.0, 3.0, 3.0, 3.0],
-                "totdasqkm": [21.0, 5.0, 5.0, 2.0, 2.0, 1.0, 1.0],
-                "streamorder": [3, 2, 2, 1, 1, 1, 1],
-                "hydroseq": [1, 2, 3, 4, 5, 6, 7],
-                "dnhydroseq": [0, 1, 2, 2, 3, 4, 5],
-                "flowpath_toid": [0, 1, 2, 2, 3, 4, 5],
-                "mainstemlp": [100.0] * 7,
-                "VPUID": ["01"] * 7,
-            }
-        )
-
-        network_graph = {
-            "1": ["2"],
-            "2": ["3", "4"],
-            "3": ["5"],
-            "4": ["6"],
-            "5": ["7"],
-            "6": [],
-            "7": [],
+    df = pd.DataFrame(
+        {
+            "virtual_nex_id": pd.Series([2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dtype="Int64"),
+            "dn_virtual_fp_id": pd.Series([pd.NA, 2, 3, 4, 5, 6, 7, 8, 9, 11], dtype="Int64"),
         }
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
 
-        # Only 1 and 7 have divides (far apart)
-        div_ids = {"1", "7"}
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
 
-        # 2 aggregates to 1 (downstream) since it has no competition
-        # Upstreams 4 and 6 (without divides) are marked as virtual
-        assert ("2", "1") in result.aggregation_pairs
-        assert "4" in result.virtual_flowpaths or "6" in result.virtual_flowpaths
+def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_no_divide_coastal_outlet)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
 
-    def test_order_1_2_can_be_made_virtual(self, sample_config: HFConfig) -> None:
-        """Test making order 1/2 streams virtual."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4", "5"],
-                "areasqkm": [10.0, 5.0, 2.0, 2.0, 1.0],
-                "lengthkm": [10.0, 8.0, 5.0, 5.0, 3.0],
-                "totdasqkm": [20.0, 10.0, 3.0, 3.0, 1.0],
-                "streamorder": [4, 3, 2, 2, 1],
-                "hydroseq": [1, 2, 3, 4, 5],
-                "dnhydroseq": [0, 1, 2, 2, 3],
-                "flowpath_toid": [0, 1, 2, 2, 3],
-                "mainstemlp": [100.0, 100.0, 80.0, 70.0, 50.0],
-                "VPUID": ["01"] * 5,
-            }
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    outlet = outlets[0]
+    partition_data = outlet_subgraphs[outlet]
+    filtered_divides = partition_data["divides"]
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+    classifications = _trace_stack(
+        start_id=outlet,
+        div_ids=valid_divide_ids,
+        cfg=trace_case_no_divide_coastal_outlet,
+        partition_data=partition_data,
+    )
+
+    aggregate_data = _aggregate_geometries(
+        classifications=classifications,
+        partition_data=partition_data,
+    )
+
+    assert len(aggregate_data.aggregates) == 2, "Incorrect number of aggregates"
+    assert len(aggregate_data.independents) == 0, "Incorrect number of independents"
+    assert len(aggregate_data.connectors) == 0, "Incorrect number of connectors"
+    assert len(aggregate_data.non_nextgen_flowpaths) == 7, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 3, (
+        "Incorrect number of non nextgen virtual flowpaths"
+    )
+    assert len(aggregate_data.virtual_flowpaths) == 11, "Incorrect number of virtual flowpaths"
+
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
+
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert rx.is_weakly_connected(graph), "All flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    graph_outlets: list[int] = [node for node in graph.node_indices() if graph.out_degree(node) == 0]
+    assert len(graph_outlets) == 1, f"Should have exactly 1 outlet, found {len(graph_outlets)}"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
+
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
+    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
+
+    df = pd.DataFrame(
+        {
+            "nex_id": pd.Series([2, 3], dtype="int64"),
+            "dn_fp_id": pd.Series([pd.NA, 2], dtype="Int64"),
+        }
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), df)
+
+    df = pd.DataFrame(
+        {
+            "virtual_nex_id": pd.Series([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], dtype="Int64"),
+            "dn_virtual_fp_id": pd.Series([pd.NA, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dtype="Int64"),
+        }
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
+
+
+def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_bad_connector_no_divide_config)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
+
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    outlet = outlets[0]
+    partition_data = outlet_subgraphs[outlet]
+    filtered_divides = partition_data["divides"]
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+    classifications = _trace_stack(
+        start_id=outlet,
+        div_ids=valid_divide_ids,
+        cfg=trace_case_bad_connector_no_divide_config,
+        partition_data=partition_data,
+    )
+
+    aggregate_data = _aggregate_geometries(
+        classifications=classifications,
+        partition_data=partition_data,
+    )
+
+    assert len(aggregate_data.aggregates) == 2, "Incorrect number of aggregates"
+    assert len(aggregate_data.independents) == 0, "Incorrect number of independents"
+    assert len(aggregate_data.connectors) == 1, "Incorrect number of connectors"
+    assert len(aggregate_data.non_nextgen_flowpaths) == 7, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 3, (
+        "Incorrect number of non nextgen virtual flowpaths"
+    )
+    assert len(aggregate_data.virtual_flowpaths) == 6, "Incorrect number of virtual flowpaths"
+
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
+
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert rx.is_weakly_connected(graph), "All flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    graph_outlets: list[int] = [node for node in graph.node_indices() if graph.out_degree(node) == 0]
+    assert len(graph_outlets) == 1, f"Should have exactly 1 outlet, found {len(graph_outlets)}"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
+
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
+    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
+
+    df = pd.DataFrame(
+        {
+            "nex_id": pd.Series([2, 3], dtype="int64"),
+            "dn_fp_id": pd.Series([pd.NA, 2], dtype="Int64"),
+        }
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), df)
+
+    df = pd.DataFrame(
+        {
+            "virtual_nex_id": pd.Series([2, 3, 4, 5, 6, 7, 8], dtype="Int64"),
+            "dn_virtual_fp_id": pd.Series([pd.NA, 2, 4, 5, 6, 3, 3], dtype="Int64"),
+        }
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
+
+
+def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_hudson_river_large_scale)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
+
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    outlet = outlets[0]
+    partition_data = outlet_subgraphs[outlet]
+    filtered_divides = partition_data["divides"]
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+    classifications = _trace_stack(
+        start_id=outlet,
+        div_ids=valid_divide_ids,
+        cfg=trace_case_hudson_river_large_scale,
+        partition_data=partition_data,
+    )
+
+    aggregate_data = _aggregate_geometries(
+        classifications=classifications,
+        partition_data=partition_data,
+    )
+
+    assert len(aggregate_data.aggregates) == 2319, "Incorrect number of aggregates"
+    assert len(aggregate_data.independents) == 1277, "Incorrect number of independents"
+    assert len(aggregate_data.connectors) == 1001, "Incorrect number of connectors"
+    assert len(aggregate_data.non_nextgen_flowpaths) == 3431, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 1907, (
+        "Incorrect number of non nextgen virtual flowpaths"
+    )
+    assert len(aggregate_data.virtual_flowpaths) == 9355, "Incorrect number of virtual flowpaths"
+
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
+
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert rx.is_weakly_connected(graph), "All flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    graph_outlets: list[int] = [node for node in graph.node_indices() if graph.out_degree(node) == 0]
+    assert len(graph_outlets) == 1, f"Should have exactly 1 outlet, found {len(graph_outlets)}"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
+
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
+    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
+
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/hudson_river_nexus.csv",
+        dtype={"nex_id": "int64", "dn_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
+
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/hudson_river_virtual_nexus.csv",
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
+
+
+def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_sioux_falls)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
+
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    outlet = outlets[0]
+    partition_data = outlet_subgraphs[outlet]
+    filtered_divides = partition_data["divides"]
+    valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+    classifications = _trace_stack(
+        start_id=outlet,
+        div_ids=valid_divide_ids,
+        cfg=trace_case_sioux_falls,
+        partition_data=partition_data,
+    )
+
+    aggregate_data = _aggregate_geometries(
+        classifications=classifications,
+        partition_data=partition_data,
+    )
+
+    assert len(aggregate_data.aggregates) == 1771, "Incorrect number of aggregates"
+    assert len(aggregate_data.independents) == 1448, "Incorrect number of independents"
+    assert len(aggregate_data.connectors) == 1070, "Incorrect number of connectors"
+    assert len(aggregate_data.non_nextgen_flowpaths) == 7072, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2254, (
+        "Incorrect number of non nextgen virtual flowpaths"
+    )
+    assert len(aggregate_data.virtual_flowpaths) == 7420, "Incorrect number of virtual flowpaths"
+
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
+
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert rx.is_weakly_connected(graph), "All flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    graph_outlets: list[int] = [node for node in graph.node_indices() if graph.out_degree(node) == 0]
+    assert len(graph_outlets) == 1, f"Should have exactly 1 outlet, found {len(graph_outlets)}"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
+
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
+    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
+
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/10L_U_nexus.csv",
+        dtype={"nex_id": "int64", "dn_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
+
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/10L_U_virtual_nexus.csv",
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
+
+
+def test_braided_river(trace_case_braided: HFConfig) -> None:
+    """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
+    runner = LocalRunner(trace_case_braided)
+    runner.run_task("download", download_reference_data)
+    runner.run_task("build_graph", build_graph)
+
+    outlets: list[str] = runner.ti.xcom_pull(task_id="build_graph", key="outlets")
+    outlet_subgraphs: dict[str, dict[str, Any]] = runner.ti.xcom_pull(
+        task_id="build_graph", key="outlet_subgraphs"
+    )
+    correct_aggregates = [124, 6736]
+    correct_independents = [84, 3857]
+    correct_connectors = [65, 2930]
+    correct_non_nextgen_flowpaths = [204, 11037]
+    correct_non_nextgen_virtual_flowpaths = [174, 7705]
+    correct_virtual_flowpaths = [498, 27632]
+    for idx, outlet in enumerate(outlets):
+        partition_data = outlet_subgraphs[outlet]
+        filtered_divides = partition_data["divides"]
+        valid_divide_ids: set[str] = set(filtered_divides["divide_id"].to_list())
+        classifications = _trace_stack(
+            start_id=outlet,
+            div_ids=valid_divide_ids,
+            cfg=trace_case_braided,
+            partition_data=partition_data,
         )
 
-        network_graph = {"1": ["2"], "2": ["3", "4"], "3": ["5"], "4": [], "5": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
+        aggregate_data = _aggregate_geometries(
+            classifications=classifications,
+            partition_data=partition_data,
+        )
 
-        div_ids = {"1", "3", "4", "5"}  # 2 has no divide
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # 2 should aggregate downstream (no competition) or to best upstream
-        # Since 2 lacks divide and has no competition downstream, aggregates to 1
+        assert len(aggregate_data.aggregates) == correct_aggregates[idx], "Incorrect number of aggregates"
+        assert len(aggregate_data.independents) == correct_independents[idx], (
+            "Incorrect number of independents"
+        )
+        assert len(aggregate_data.connectors) == correct_connectors[idx], "Incorrect number of connectors"
+        assert len(aggregate_data.non_nextgen_flowpaths) == correct_non_nextgen_flowpaths[idx], (
+            "Incorrect number of non nextgen flowpaths"
+        )
         assert (
-            ("2", "1") in result.aggregation_pairs
-            or ("2", "3") in result.aggregation_pairs
-            or ("2", "4") in result.aggregation_pairs
+            len(aggregate_data.non_nextgen_virtual_flowpaths) == correct_non_nextgen_virtual_flowpaths[idx]
+        ), "Incorrect number of non nextgen virtual flowpaths"
+        assert len(aggregate_data.virtual_flowpaths) == correct_virtual_flowpaths[idx], (
+            "Incorrect number of virtual flowpaths"
         )
 
-    def test_awkward_connector_high_order_upstreams(self, sample_config: HFConfig) -> None:
-        """Test awkward connector with all high-order upstreams."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4"],
-                "areasqkm": [15.0, 5.0, 5.0, 5.0],
-                "lengthkm": [10.0, 8.0, 8.0, 8.0],
-                "totdasqkm": [30.0, 5.0, 5.0, 5.0],
-                "streamorder": [4, 3, 3, 3],
-                "hydroseq": [1, 2, 3, 4],
-                "dnhydroseq": [0, 1, 2, 2],
-                "flowpath_toid": [0, 1, 2, 2],
-                "mainstemlp": [100.0, 100.0, 80.0, 80.0],
-                "VPUID": ["01"] * 4,
-            }
-        )
+    runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+    runner.run_task(task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={})
+    runner.run_task(task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={})
+    runner.run_task(task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={})
+    final_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="flowpaths")
+    final_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="nexus")
+    final_virtual_flowpaths = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_flowpaths")
+    final_virtual_nexus = runner.ti.xcom_pull(task_id="reduce_base", key="virtual_nexus")
 
-        network_graph = {"1": ["2"], "2": ["3", "4"], "3": [], "4": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
+    fp_pl = pl.from_pandas(final_flowpaths.to_wkb())
+    upstream_dict = _build_upstream_dict_from_nexus(fp_pl)
+    graph, _ = _build_rustworkx_object(upstream_dict)
+    assert rx.is_directed_acyclic_graph(graph), "Graph must be acyclic"
+    assert not rx.is_strongly_connected(graph), "DAG cannot be strongly connected"
+    strong_components = rx.strongly_connected_components(graph)
+    assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
-        div_ids = {"1", "3", "4"}  # 2 has no divide, downstream has competition
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
+    virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
+    virtual_upstream_dict = _build_upstream_dict_from_nexus(
+        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
+    )
+    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
+    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
+    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
+    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
+    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
+        "Each virtual node should be its own SCC"
+    )
 
-        # Should aggregate downstream and mark as connector
-        assert ("2", "1") in result.aggregation_pairs
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/10L_braided_nexus.csv",
+        dtype={"nex_id": "int64", "dn_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
-
-class TestTraceSingleFlowpathAttributes:
-    """Tests for _trace_single_flowpath_attributes function."""
-
-    def test_simple_chain(self, sample_config: HFConfig) -> None:
-        """Test tracing simple chain."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [5.0, 3.0, 2.0],
-                "lengthkm": [10.0, 8.0, 6.0],
-                "hydroseq": [1, 2, 3],
-                "streamorder": [2, 1, 1],
-            }
-        )
-
-        network_graph = {"1": ["2"], "2": ["3"], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        result = _trace_single_flowpath_attributes("1", partition_data, id_offset=1)
-
-        assert "total_da_sqkm" in result.columns
-        assert "mainstem_lp" in result.columns
-        assert "path_length" in result.columns
-        assert "streamorder" in result.columns
-
-        # Check streamorder calculation
-        assert result.filter(pl.col("fp_id") == "3")["streamorder"][0] == 1  # Headwater
-        assert result.filter(pl.col("fp_id") == "1")["streamorder"][0] >= 1
-
-    def test_branching_network(self, sample_config: HFConfig) -> None:
-        """Test tracing branching network."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [5.0, 2.0, 2.0],
-                "lengthkm": [10.0, 8.0, 8.0],
-                "hydroseq": [1, 2, 3],
-                "streamorder": [2, 1, 1],
-            }
-        )
-
-        network_graph = {"1": ["2", "3"], "2": [], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        result = _trace_single_flowpath_attributes("1", partition_data, id_offset=1)
-
-        # Check mainstem assignment
-        assert result.filter(pl.col("fp_id") == "1")["mainstem_lp"][0] == 1
-
-        # Check drainage area accumulation
-        outlet_da = result.filter(pl.col("fp_id") == "1")["total_da_sqkm"][0]
-        assert outlet_da > 5.0  # Should include upstream areas
-
-    def test_streamorder_strahler(self, sample_config: HFConfig) -> None:
-        """Test Strahler stream order calculation."""
-        # Create Y-shaped network
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3", "4"],
-                "areasqkm": [5.0, 2.0, 2.0, 1.0],
-                "lengthkm": [10.0, 8.0, 8.0, 5.0],
-                "hydroseq": [1, 2, 3, 4],
-                "streamorder": [2, 1, 1, 1],
-            }
-        )
-
-        # 1 <- 2, 3  and 2 <- 4
-        network_graph = {"1": ["2", "3"], "2": ["4"], "3": [], "4": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        result = _trace_single_flowpath_attributes("1", partition_data, id_offset=1)
-
-        # Headwaters should be order 1
-        assert result.filter(pl.col("fp_id") == "4")["streamorder"][0] == 1
-        assert result.filter(pl.col("fp_id") == "3")["streamorder"][0] == 1
-
-        # When order 1 meets order 1, becomes order 2
-        fp2_order = result.filter(pl.col("fp_id") == "2")["streamorder"][0]
-        assert fp2_order == 1  # Only one upstream (4)
-
-        # Outlet with two order 1s
-        fp1_order = result.filter(pl.col("fp_id") == "1")["streamorder"][0]
-        assert fp1_order == 2  # Two order 1s meet
-
-
-class TestTraceStackEdgeCases:
-    """Tests for edge cases in trace stack."""
-
-    def test_force_queue_flowpaths(self, sample_config: HFConfig) -> None:
-        """Test that force_queue_flowpaths get added."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [5.0, 2.0, 1.0],
-                "lengthkm": [10.0, 5.0, 3.0],
-                "totdasqkm": [8.0, 3.0, 1.0],
-                "streamorder": [2, 1, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [0, 1, 2],
-                "flowpath_toid": [0, 1, 2],
-                "mainstemlp": [100.0, 100.0, 100.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        network_graph = {"1": ["2", "3"], "2": [], "3": []}
-        graph, node_indices = dict_to_graph(network_graph)
-        partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-
-        div_ids = {"1"}  # Only 1 has divide
-        result = _trace_stack("1", div_ids, sample_config, partition_data)
-
-        # Check that force_queue was populated for problematic branches
-        assert isinstance(result.force_queue_flowpaths, set)
-
-    def test_cycle_detection(self, sample_config: HFConfig) -> None:
-        """Test that cycles are caught in tracing."""
-        flowpath_data = pl.DataFrame(
-            {
-                "flowpath_id": ["1", "2", "3"],
-                "areasqkm": [5.0, 3.0, 2.0],
-                "lengthkm": [10.0, 8.0, 6.0],
-                "totdasqkm": [10.0, 5.0, 2.0],
-                "streamorder": [2, 1, 1],
-                "hydroseq": [1, 2, 3],
-                "dnhydroseq": [3, 1, 2],  # Cycle!
-                "flowpath_toid": [3, 1, 2],
-                "mainstemlp": [100.0, 100.0, 100.0],
-                "VPUID": ["01", "01", "01"],
-            }
-        )
-
-        # dict_to_graph creates directed edges, so cycle is: 1->2, 2->3, 3->1
-        network_graph = {"1": ["2"], "2": ["3"], "3": ["1"]}
-
-        # This will create a cycle, rustworkx should detect it
-        # The trace code wraps DAGHasCycle in AssertionError
-        with pytest.raises(AssertionError, match="Basin 1 contains cycles"):
-            graph, node_indices = dict_to_graph(network_graph)
-            partition_data = create_partition_data_from_dataframes(flowpath_data, None, graph, node_indices)
-            # The topological_sort in _trace_single_flowpath_attributes will raise AssertionError
-            _trace_single_flowpath_attributes("1", partition_data, id_offset=1)
+    expected_df = pd.read_csv(
+        here() / "tests/data/trace_cases/10L_braided_virtual_nexus.csv",
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64"},
+    )
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)

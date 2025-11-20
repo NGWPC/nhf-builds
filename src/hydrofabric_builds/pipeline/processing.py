@@ -124,6 +124,9 @@ def _build_single_hydrofabric(
         "divides": hydrofabric["divides"],
         "nexus": hydrofabric["nexus"],
         "reference_flowpaths": hydrofabric["reference_flowpaths"],
+        "virtual_flowpaths": hydrofabric["virtual_flowpaths"],
+        "virtual_nexus": hydrofabric["virtual_nexus"],
+        # "reference_virtual_flowpaths": hydrofabric["reference_virtual_flowpaths"],
         "id_range": (id_config["id_offset"], id_config["id_max"]),
     }
 

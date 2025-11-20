@@ -66,7 +66,8 @@ def _build_rustworkx_object(
     """
     graph = rx.PyDiGraph(check_cycle=True)
     node_indices: dict[Any, int] = {}
-    for to_edge, from_edges in upstream_network.items():
+    for to_edge in sorted(upstream_network.keys()):
+        from_edges = upstream_network[to_edge]  # type: ignore
         if to_edge not in node_indices:
             node_indices[to_edge] = graph.add_node(to_edge)
         for from_edge in from_edges:
@@ -138,7 +139,7 @@ def _find_outlets_by_hydroseq(reference_flowpaths: pl.DataFrame) -> list[str]:
 
     outlets_df = df_with_str_id.filter(
         (pl.col("dnhydroseq") == 0) | ~pl.col("dnhydroseq").is_in(hydroseq_set)
-    )  # dnhydroseq is 0, or doesn't exist in hydroseq
+    ).sort("flowpath_id_str")  # dnhydroseq is 0, or doesn't exist in hydroseq
 
     # outlets_sorted = outlets_df.sort("totdasqkm", descending=True) # Commenting out until production
     outlets: list[str] = outlets_df["flowpath_id_str"].to_list()
@@ -146,7 +147,9 @@ def _find_outlets_by_hydroseq(reference_flowpaths: pl.DataFrame) -> list[str]:
     return outlets
 
 
-def _build_upstream_dict_from_nexus(flowpaths_pl: pl.DataFrame) -> dict[int, list[int]]:
+def _build_upstream_dict_from_nexus(
+    flowpaths_pl: pl.DataFrame, edge_id: str = "fp_id", node_id: str = "nex_id"
+) -> dict[int, list[int]]:
     """Build upstream connectivity dictionary from flowpath nexus connections.
 
     Uses nexus IDs as the connection points between flowpaths.
@@ -163,44 +166,44 @@ def _build_upstream_dict_from_nexus(flowpaths_pl: pl.DataFrame) -> dict[int, lis
     """
     fp_pl = flowpaths_pl.with_columns(
         [
-            pl.col("fp_id").cast(pl.Int32),
-            pl.col("up_nex_id").cast(pl.Int32),
-            pl.col("dn_nex_id").cast(pl.Int32),
+            pl.col(edge_id).cast(pl.Int32),
+            pl.col(f"up_{node_id}").cast(pl.Int32),
+            pl.col(f"dn_{node_id}").cast(pl.Int32),
         ]
     )
     # Create mapping: nex_id -> downstream fp_id (where this nexus is the upstream nexus)
     nexus_to_downstream = fp_pl.select(
         [
-            pl.col("up_nex_id").alias("nex_id"),
-            pl.col("fp_id").alias("downstream_fp_id"),
+            pl.col(f"up_{node_id}").alias(node_id),
+            pl.col(edge_id).alias(f"dn_{edge_id}"),
         ]
-    ).filter(pl.col("nex_id").is_not_null())
+    ).filter(pl.col(node_id).is_not_null())
 
     # Create mapping: nex_id -> upstream fp_id (where this nexus is the downstream nexus)
     nexus_to_upstream = fp_pl.select(
         [
-            pl.col("dn_nex_id").alias("nex_id"),
-            pl.col("fp_id").alias("upstream_fp_id"),
+            pl.col(f"dn_{node_id}").alias(node_id),
+            pl.col(edge_id).alias(f"up_{edge_id}"),
         ]
-    ).filter(pl.col("nex_id").is_not_null())
+    ).filter(pl.col(node_id).is_not_null())
 
     # Join to find connections: upstream fp -> nexus -> downstream fp
-    connections = nexus_to_upstream.join(nexus_to_downstream, on="nex_id", how="inner").select(
+    connections = nexus_to_upstream.join(nexus_to_downstream, on=node_id, how="inner").select(
         [
-            pl.col("downstream_fp_id"),
-            pl.col("upstream_fp_id"),
+            pl.col(f"dn_{edge_id}"),
+            pl.col(f"up_{edge_id}"),
         ]
     )
 
     # Group by downstream to get list of upstreams
-    upstream_dict_df = connections.group_by("downstream_fp_id").agg(
-        pl.col("upstream_fp_id").alias("upstream_list")
+    upstream_dict_df = connections.group_by(f"dn_{edge_id}").agg(
+        pl.col(f"up_{edge_id}").sort().alias("upstream_list")
     )
 
     # Convert to dictionary
     upstream_dict: dict[int, list[int]] = dict(
         zip(
-            upstream_dict_df["downstream_fp_id"].to_list(),
+            upstream_dict_df[f"dn_{edge_id}"].to_list(),
             upstream_dict_df["upstream_list"].to_list(),
             strict=False,
         )
