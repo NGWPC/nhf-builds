@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any, Final
@@ -9,6 +10,9 @@ import geopandas as gpd
 import httpx
 from shapely.errors import GEOSException
 from shapely.ops import unary_union
+
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # ---- NLDI endpoints (single source of truth) ----
 NLDI_API_BASE: Final[str] = os.getenv(
@@ -100,12 +104,20 @@ def _nldi_get(
                 time.sleep(backoff * attempt)
                 continue
 
+            # Handle 404 quietly (no retries)
+            if r.status_code == 404:
+                return None
+
             # Basic status checks
-            if r.status_code != 200:
-                # Retry a bit on transient server/client-throttle statuses
-                if attempt < retries and r.status_code in (429, 500, 502, 503, 504):
+            # Retry a bit on transient server/client-throttle statuses
+            if r.status_code in (429, 500, 502, 503, 504):
+                if attempt < retries:
                     time.sleep(backoff * attempt)
                     continue
+                return None
+
+            # Any other non-200 -> fail without retry
+            if r.status_code != 200:
                 return None
 
             # Content-type sanity check

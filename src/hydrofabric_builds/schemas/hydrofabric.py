@@ -566,8 +566,112 @@ class FlowpathAttributesConfig(BaseModel):
         return self
 
 
+class GageInput(BaseModel):
+    """gages: gageinput class"""
+
+    dir: Path | None = None
+    path: Path | None = None
+    gage_source_crs: str = "EPSG:4326"
+    id_col_name: str = "site_no"
+    x_col_name: str | None = None
+    y_col_name: str | None = None
+
+
+class GagesInputs(BaseModel):
+    """gages: configs collection for all inputs"""
+
+    usgs_discontinued: GageInput = Field(
+        default_factory=lambda: GageInput(dir=Path("usgs_gages_discontinued"))
+    )
+    usgs_active: GageInput = Field(default_factory=lambda: GageInput(dir=Path("usgs_active_gages")))
+    txdot_gages: GageInput = Field(
+        default_factory=lambda: GageInput(path=Path("TXDOT_gages/TXDOT_gages.txt"))
+    )
+    CADWR_ENVCA: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("CADWR_ENVCA/gage_xy.csv"), x_col_name="lon", y_col_name="lat"
+        )
+    )
+    nwm_calib_gages: GageInput = Field(
+        default_factory=lambda: GageInput(path=Path("nwm_calib/nwm_calib_gages_07112025.csv"))
+    )
+
+
+class GagesTarget(BaseModel):
+    """gages: target/output configs"""
+
+    crs: str = "EPSG:5070"
+    snap_tolerance_m: float = 100.0
+    update_existing: bool = True
+    exclude_ids: list[str | int] = Field(default_factory=lambda: ["15056210", "15493000"])
+    out_gpkg: Path = Path("gages.gpkg")
+    gpkg_layer_name: str = "gages"
+
+
+class GagesBlock(BaseModel):
+    """aggregating all inputs gages classes configs here"""
+
+    input_dir: Path = Path("data/gages")
+    inputs: GagesInputs = Field(default_factory=GagesInputs)
+    target: GagesTarget = Field(default_factory=GagesTarget)
+
+
+class NLDIUpstreamBasins(BaseModel):
+    """gages: for getting the upstream basins from NLDI USGS API"""
+
+    run_NLDI_upstream_basins: bool = False
+    path: Path = Path("nldi_upstream_basins.gpkg")
+    layer_polys: str = "NLDI_upstream_basins"
+    layer_points: str = "sites"
+
+
+class AssignFPConfig(BaseModel):
+    """gages: a class for assigning flowpaths to gages"""
+
+    rel_err: float = 0.25
+    buffer_m: float = 500.0
+    parallel: bool = False
+    max_workers: int | None = None
+    USGS_NLDI_crs: str = "EPSG:4326"
+    work_crs: str = "EPSG:5070"
+
+
+# --- your top-level gages config now has defaults ---
 class GagesConfig(BaseModel):
-    """TBD"""
+    """Gages config class"""
+
+    gages: GagesBlock = Field(default_factory=GagesBlock)
+    NLDI_upstream_basins: NLDIUpstreamBasins = Field(default_factory=NLDIUpstreamBasins)
+    assign_fp_to_gages: AssignFPConfig = Field(default_factory=AssignFPConfig)
+
+    model_config = ConfigDict(extra="ignore")
+
+    def resolve_paths(self, base: Path | None = None) -> "GagesConfig":
+        """Resolves paths"""
+        base = base or Path.cwd()
+
+        def _resolve(p: Path | None, root: Path) -> Path | None:
+            """Resolve paths by getting absolutes"""
+            if p is None:
+                return None
+            return p if p.is_absolute() else (root / p)
+
+        input_root = self.gages.input_dir or base
+        for inp in [
+            self.gages.inputs.usgs_discontinued,
+            self.gages.inputs.usgs_active,
+            self.gages.inputs.txdot_gages,
+            self.gages.inputs.CADWR_ENVCA,
+            self.gages.inputs.nwm_calib_gages,
+        ]:
+            if inp.dir is not None:
+                inp.dir = _resolve(inp.dir, input_root)
+            if inp.path is not None:
+                inp.path = _resolve(inp.path, input_root)
+
+        self.gages.target.out_gpkg = _resolve(self.gages.target.out_gpkg, base)  # type: ignore
+        self.NLDI_upstream_basins.path = _resolve(self.NLDI_upstream_basins.path, base)  # type: ignore
+        return self
 
 
 # RFC-DA Configs

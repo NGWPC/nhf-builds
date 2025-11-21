@@ -69,7 +69,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+#docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -193,6 +193,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Data
+data/*
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

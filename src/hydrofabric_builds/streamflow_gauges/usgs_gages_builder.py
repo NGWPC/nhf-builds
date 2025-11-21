@@ -77,7 +77,9 @@ def read_kmz_points(kmz_file: str | Path, layer: str | None = None) -> gpd.GeoDa
 
 
 # --- main: scan directory, read all streamgages_*.kmz, merge ---
-def build_usgs_gages_from_kmz(folder: str | Path, state_col: str = "state") -> gpd.GeoDataFrame:
+def build_usgs_gages_from_kmz(
+    folder: str | Path, state_col: str = "state", src_crs: str = "EPSG:4326"
+) -> gpd.GeoDataFrame:
     """
     Reads all gages from all regions and merges them
 
@@ -105,17 +107,19 @@ def build_usgs_gages_from_kmz(folder: str | Path, state_col: str = "state") -> g
 
         keep = ["geometry", state_col, "site_no", "name_plain", "Name", "Description"]
         gdf = gdf[keep].rename(columns={"Name": "name_raw", "Description": "description"})
+        ## adding a column to show the status
+        gdf["status"] = "USGS-discontinued"
         frames.append(gdf)
 
     if not frames:
         return gpd.GeoDataFrame(
-            columns=["geometry", state_col, "site_no", "name_plain", "name_raw", "description"],
+            columns=["geometry", state_col, "site_no", "name_plain", "name_raw", "description", "status"],
             geometry="geometry",
-            crs="EPSG:4326",
+            crs=src_crs,
         )
 
     all_gdf = pd.concat(frames, ignore_index=True)
-    return gpd.GeoDataFrame(all_gdf, geometry="geometry", crs="EPSG:4326")
+    return gpd.GeoDataFrame(all_gdf, geometry="geometry", crs=src_crs)
 
 
 def merge_minimal_gages(
@@ -147,7 +151,7 @@ def merge_minimal_gages(
     GeoDataFrame
         Updated `gages`.
     """
-    required_in_gages = {"geometry", "site_no", "name_plain"}
+    required_in_gages = {"geometry", "site_no", "name_plain", "status"}
     missing = required_in_gages - set(gages.columns)
     if missing:
         raise ValueError(f"`gages` missing required columns: {sorted(missing)}")
@@ -174,6 +178,7 @@ def merge_minimal_gages(
             "geometry": src["geometry"],
             "site_no": src["site_no"],
             "name_plain": src["station_nm"].fillna(fill_value).astype(str),
+            "status": "TXDOT",
         },
         geometry="geometry",
         crs=out.crs or src.crs,
@@ -209,6 +214,7 @@ def merge_minimal_gages(
 
         # Overwrite geometry and name_plain where present in `to_upd`
         out_idx.loc[upd.index, "name_plain"] = upd["name_plain"]
+        out_idx.loc[upd.index, "status"] = upd["status"]
         out_idx.loc[upd.index, "geometry"] = upd["geometry"]
 
         out = out_idx.reset_index()
@@ -220,9 +226,9 @@ def merge_minimal_gages(
 def merge_gage_xy_into_gages(
     gages: gpd.GeoDataFrame,
     gage_xy_csv: str | Path,
-    *,
+    src_crs: str = "EPSG:4326",
     update_existing: bool = True,
-    exclude_ids: None | tuple[str, ...] = ("15056210", "15493000"),
+    exclude_ids: list[str | int] | tuple[str, ...] | None = None,
     fill_value: str = "-",
 ) -> gpd.GeoDataFrame:
     """
@@ -269,9 +275,10 @@ def merge_gage_xy_into_gages(
         {
             "site_no": df["gageid"].astype(str),
             "geometry": gpd.points_from_xy(df["lon"], df["lat"]),
+            "status": "CADWR_ENVCA",
         },
         geometry="geometry",
-        crs="EPSG:4326",
+        crs=src_crs,
     )
 
     # Reproject to match gages CRS if defined
@@ -293,11 +300,11 @@ def merge_gage_xy_into_gages(
         # start with all columns gages has
         add = gpd.GeoDataFrame(columns=out.columns, crs=out.crs)
         # put mapped fields in place
-        add = pd.concat([add, to_add.reindex(columns=["geometry", "site_no"])], ignore_index=True)
+        add = pd.concat([add, to_add.reindex(columns=["geometry", "site_no", "status"])], ignore_index=True)
 
         # fill every other column with '-'
         for col in add.columns:
-            if col not in {"geometry", "site_no"}:
+            if col not in {"geometry", "site_no", "status"}:
                 add[col] = add[col].fillna(fill_value)
 
         add = gpd.GeoDataFrame(add, geometry="geometry", crs=out.crs)
@@ -307,6 +314,9 @@ def merge_gage_xy_into_gages(
     if update_existing and not to_upd.empty:
         out_idx = out.set_index("site_no")
         upd_idx = to_upd.set_index("site_no")
+        # Note: I don't update the status here for the existing ones as the list is a mix of OCONUS gages.
+        # therefore it doesn't make sense to have them under "CADWR_ENVCA"
+        # out_idx.loc[upd_idx.index, "status"] = upd_idx["status"]
         out_idx.loc[upd_idx.index, "geometry"] = upd_idx["geometry"]
         out = out_idx.reset_index()
         out = gpd.GeoDataFrame(out, geometry="geometry", crs=gages.crs)
@@ -315,8 +325,7 @@ def merge_gage_xy_into_gages(
 
 
 def add_missing_usgs_sites(
-    gages: gpd.GeoDataFrame,
-    missed_ids: Iterable[str],
+    gages: gpd.GeoDataFrame, missed_ids: Iterable[str], src_crs: str = "EPSG:4326"
 ) -> tuple[gpd.GeoDataFrame, list[str], list[str], pd.DataFrame]:
     """
     - Split missed_ids into USGS-style (digits only) and non-USGS (contain letters)
@@ -366,12 +375,12 @@ def add_missing_usgs_sites(
 
     # 5) Drop rows without valid coordinates
     df = df.dropna(subset=["dec_lat_va", "dec_long_va"]).copy()
-
+    df["status"] = "USGS-active"
     # 6) Build GeoDataFrame (WGS84 lon/lat)
     gdf = gpd.GeoDataFrame(
         df,
         geometry=gpd.points_from_xy(df["dec_long_va"], df["dec_lat_va"]),
-        crs="EPSG:4326",
+        crs=src_crs,
     )
 
     # Append only missing site_no rows; fill other gages columns with '-'
@@ -442,6 +451,7 @@ def merge_usgs_shapefile_into_gages(
             "name_plain": src["STANAME"].fillna(fill_value).astype(str),
             "state": src["ST"].fillna(fill_value).astype(str),
             "name_raw": src["URL"].fillna(fill_value).astype(str),
+            "status": "USGS-active",
             "geometry": src["geometry"],
         },
         geometry="geometry",
@@ -465,7 +475,7 @@ def merge_usgs_shapefile_into_gages(
     # Prepare NEW rows with full gages schema; fill others with '-'
     if not to_add.empty:
         # Start with all columns from gages
-        add = gpd.GeoDataFrame(columns=out.columns, crs=out.crs)
+        add = gpd.GeoDataFrame(columns=incoming.columns, crs=out.crs)
 
         # Place mapped fields (use intersection to avoid KeyErrors if gages lacks some)
         for col, mapped in {
@@ -474,19 +484,20 @@ def merge_usgs_shapefile_into_gages(
             "name_plain": "name_plain",
             "name_raw": "name_raw",
             "state": "state",
+            "status": "status",
         }.items():
             if col in add.columns:
                 add[col] = to_add[mapped].values
 
         # Fill every other column with fill_value
         for col in add.columns:
-            if col not in {"geometry", "site_no", "name_plain", "name_raw", "state"}:
+            if col not in {"geometry", "site_no", "name_plain", "name_raw", "state", "status"}:
                 add[col] = add[col].fillna(fill_value)
 
         add = gpd.GeoDataFrame(add, geometry="geometry", crs=out.crs)
         out = pd.concat([out, add], ignore_index=True)
 
-    # Optionally UPDATE existing rows (geometry/name/state)
+    # UPDATE existing rows (geometry/name/state)
     if update_existing and not to_upd.empty:
         out_idx = out.set_index("site_no")
         upd_idx = to_upd.set_index("site_no")
@@ -500,6 +511,7 @@ def merge_usgs_shapefile_into_gages(
         _maybe_set("name_plain", "name_plain")
         _maybe_set("name_raw", "name_raw")
         _maybe_set("state", "state")
+        _maybe_set("status", "status")
 
         out = out_idx.reset_index()
         out = gpd.GeoDataFrame(out, geometry="geometry", crs=gages.crs)

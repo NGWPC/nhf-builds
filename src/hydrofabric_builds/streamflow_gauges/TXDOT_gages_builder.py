@@ -4,7 +4,7 @@ import geopandas as gpd
 import pandas as pd
 
 
-def txdot_read_file(path: Path | str) -> gpd.GeoDataFrame:
+def txdot_read_file(path: Path | str, src_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
     """
     Reading  TXDOT txt file
 
@@ -45,6 +45,6 @@ def txdot_read_file(path: Path | str) -> gpd.GeoDataFrame:
     gdf = gpd.GeoDataFrame(
         df,
         geometry=gpd.points_from_xy(df["dec_long_va"], df["dec_lat_va"]),
-        crs="EPSG:4326",
+        crs=src_crs,
     )
     return gdf

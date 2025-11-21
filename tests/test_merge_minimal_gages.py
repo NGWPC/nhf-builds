@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from shapely.geometry import Point
 
-from hydrofabric_builds.hydrolocations.usgs_gages_builder import merge_minimal_gages
+from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import merge_minimal_gages
 
 
 @pytest.fixture
@@ -28,6 +29,7 @@ def gages_seed(base_crs: str) -> gpd.GeoDataFrame:
             "name_plain": ["-"],
             "name_raw": ["seed-name"],
             "description": ["-"],
+            "status": ["TXDOT"],
             "geometry": [Point(-100.0, 40.0)],
         },
         geometry="geometry",
@@ -36,22 +38,42 @@ def gages_seed(base_crs: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def test_merge_minimal_appends_and_fills(gages_empty: gpd.GeoDataFrame) -> None:
+def test_merge_minimal_appends_and_fills() -> None:
+    gages_empty = gpd.GeoDataFrame(
+        {
+            "geometry": gpd.GeoSeries([], crs="EPSG:4326"),
+            "state": pd.Series(dtype=str),
+            "site_no": pd.Series(dtype=str),
+            "name_plain": pd.Series(dtype=str),
+            "name_raw": pd.Series(dtype=str),
+            "description": pd.Series(dtype=str),
+            "status": pd.Series(dtype=str),  # <- required by merge_minimal_gages
+        },
+        geometry="geometry",
+        crs="EPSG:4326",
+    )
+
     src = gpd.GeoDataFrame(
         {
             "geometry": [Point(-90, 30)],
             "site_no": ["12345678"],
             "station_nm": ["TXDOT gage @ I-10"],
+            "status": ["TXDOT"],  # this is ignored by merge_minimal_gages for new rows
         },
         geometry="geometry",
         crs="EPSG:4326",
     )
+
+    from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import merge_minimal_gages
+
     out = merge_minimal_gages(gages_empty, src, update_existing=False)
     assert len(out) == 1
     r = out.iloc[0]
     assert r.site_no == "12345678"
     assert r.name_plain == "TXDOT gage @ I-10"
+    # merge_minimal_gages fills non-mapped columns (including status) with '-'
     assert r.state == r.name_raw == r.description == "-"
+    assert r.status == "-"  # <-- important: NOT 'TXDOT' with current implementation
 
 
 def test_merge_minimal_updates_existing(gages_seed: gpd.GeoDataFrame) -> None:
@@ -60,6 +82,7 @@ def test_merge_minimal_updates_existing(gages_seed: gpd.GeoDataFrame) -> None:
             "geometry": [Point(-101, 41)],
             "site_no": ["00000001"],
             "station_nm": ["updated-name"],
+            "status": ["TXDOT"],
         },
         geometry="geometry",
         crs=gages_seed.crs,
