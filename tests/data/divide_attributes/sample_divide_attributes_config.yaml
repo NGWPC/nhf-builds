@@ -4,6 +4,7 @@ divide_id: "div_id"
 tmp_dir: "./tests/data/divide_attributes/tmp/divide-attributes"
 split_vpu: True
 debug: False
+crs: 'EPSG:5070'
 attributes:
   bexp1:
     file_name: 'bexp_0.tif'
@@ -21,3 +22,7 @@ attributes:
     file_name: 'twi.tif'
     agg_type: 'quartile_dist'
     field_name: 'twi_quartile'
+  glaciers:
+    file_name: 'glaciers_test.parquet'
+    agg_type: 'percent'
+    field_name: 'glacier_percent'

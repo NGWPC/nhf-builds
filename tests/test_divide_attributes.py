@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -7,12 +8,15 @@ import pandas as pd
 import pytest
 import yaml
 from astropy.stats.circstats import circmean
+from geopandas.testing import assert_geodataframe_equal
 from pandas.testing import assert_frame_equal
 from pyprojroot import here
+from shapely.geometry import box
 
 from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
 from hydrofabric_builds.hydrofabric.divide_attributes import (
     _calculate_attribute,
+    _calculate_glaciers,
     _prep_multiprocessing_configs,
     _prep_multiprocessing_rasters,
     _vpu_splitter,
@@ -122,7 +126,7 @@ def divide_attributes_aspect_lake() -> dict[str, Any]:
     vpu_path = here() / "tests/data/divide_attributes/lake_16_111425.gpkg"
     results = pd.DataFrame(
         data={
-            "aspect_circmean": [pd.NA],
+            "aspect_circmean": [None],
         }
     )
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
@@ -198,8 +202,55 @@ def pipeline_results() -> dict[str, Any]:
                 -2.211277378349467,
                 0.6647588929701888,
             ],
+            "glacier_percent": [0.0, 0.0, 0.0, 0.0, 0.0],
         }
     )
+
+
+@pytest.fixture
+def glacier_hf() -> Path:
+    """Divides for glaciers"""
+    divides_path = here() / "tests/data/glacier_hf.gpkg"
+    divides = gpd.GeoDataFrame(geometry=[box(0, 0, 2, 2), box(2, 2, 4, 4)], data={"div_id": [1, 2]}, crs=4326)
+    divides.to_file(divides_path, layer="divides", driver="GPKG")
+    return divides_path
+
+
+@pytest.fixture
+def glacier_parquet() -> Path:
+    """ "Glaciers parquet"""
+    glaciers_path = here() / "tests/data/glaciers.parquet"
+    glaciers = gpd.GeoDataFrame(
+        geometry=[box(0, 0, 1, 1), box(2, 2, 2.5, 2.5)], data={"glacier_id": [3, 4]}, crs=4326
+    )
+    glaciers.to_parquet(glaciers_path)
+    return glaciers_path
+
+
+@pytest.fixture
+def glacier_model_cfg(glacier_hf: Path, glacier_parquet: Path) -> DivideAttributesModelConfig:
+    """Config for glaciers"""
+    glacier_model = {
+        "hf_path": glacier_hf,
+        "processes": 1,
+        "data_dir": here() / "tests/data/divide_attributes",
+        "divide_id": "div_id",
+        "attributes": [
+            DivideAttributeConfig(agg_type="percent", field_name="glacier_percent", file_name=glacier_parquet)
+        ],
+        "crs": "EPSG:4326",
+    }
+
+    cfg = DivideAttributesModelConfig.model_validate(glacier_model)
+    return cfg
+
+
+@pytest.fixture
+def expected_glacier(glacier_hf: Path) -> gpd.GeoDataFrame:
+    """Expected glaciers geodataframe"""
+    gdf = gpd.read_file(glacier_hf, layer="divides")
+    gdf.insert(1, "glacier_percent", [25, 6.25])
+    return gdf
 
 
 class TestDivideAttributesSchemas:
@@ -570,6 +621,7 @@ class TestDivideAttributes:
                         "twi_q75",
                         "twi_q100",
                         "aspect_circmean",
+                        "glacier_percent",
                     ]
                 ],
                 pipeline_results,
@@ -590,7 +642,9 @@ class TestDivideAttributes:
     ) -> None:
         try:
             cfg = divide_attributes_model_config
-            divide_attributes_pipeline_parallel(cfg, processes=2)
+            with warnings.catch_warnings():
+                warnings.simplefilter(action="ignore", category=DeprecationWarning)
+                divide_attributes_pipeline_parallel(cfg, processes=2)
             gdf = gpd.read_file(tmp_divides)
             assert_frame_equal(
                 gdf[
@@ -602,6 +656,7 @@ class TestDivideAttributes:
                         "twi_q75",
                         "twi_q100",
                         "aspect_circmean",
+                        "glacier_percent",
                     ]
                 ],
                 pipeline_results,
@@ -614,8 +669,35 @@ class TestDivideAttributes:
                 f.unlink(missing_ok=True)
             tmp_divides.unlink(missing_ok=True)
 
+    def test_glaciers(
+        self,
+        glacier_hf: Path,
+        glacier_parquet: Path,
+        glacier_model_cfg: DivideAttributesModelConfig,
+        expected_glacier: gpd.GeoDataFrame,
+    ) -> None:
+        """Tests glaciers against a test case in 4326"""
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter(
+                    action="ignore", category=UserWarning
+                )  # UserWarning for area calculation in 4326
+                glaciers_attribute = [
+                    cfg
+                    for cfg in glacier_model_cfg.attributes
+                    if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
+                ][0]
+                _calculate_glaciers(glacier_model_cfg, glaciers_attribute)
 
-class TestDivideAttributesStates:
+            output = gpd.read_file(glacier_hf, layer="divides")
+
+            assert_geodataframe_equal(output, expected_glacier)
+        finally:
+            glacier_hf.unlink(missing_ok=True)
+            glacier_parquet.unlink(missing_ok=True)
+
+
+class TestDivideAttributesStats:
     def test_weighted_circular_mean(self) -> None:
         """astropy is the reference for our function. astropy is test-only dependency.
         astropy input is in radians, our implementation is in degrees

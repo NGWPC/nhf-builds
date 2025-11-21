@@ -313,6 +313,7 @@ class AggTypeEnum(StrEnum):
     circular_mean = "weighted_circular_mean"
     quartile_dist = "quartile_dist"
     geom_mean = "weighted_geometric_mean"
+    percent = "percent"
 
 
 def get_operation(op: str) -> Any:
@@ -374,6 +375,7 @@ class DivideAttributesModelConfig(BaseModel):
     """Pydantic model for divide attributes model configuration"""
 
     hf_path: Path = Field(None, description="Path to input and output hydrofabric")
+    crs: str = Field(description="Domain CRS", default="EPSG:5070")
     processes: int = Field(
         description="Number of processes to use for multiprocessing", default=os.cpu_count()
     )

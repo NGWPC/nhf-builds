@@ -97,6 +97,7 @@ def _calculate_attribute(
         )
     else:
         df = df.rename(columns={attribute_cfg.agg_type.value: attribute_cfg.field_name})
+
     df.to_parquet(
         attribute_cfg.tmp,
         compression="snappy",
@@ -115,7 +116,8 @@ def _concatenate_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     """
     t0 = perf_counter()
     gdf = gpd.read_file(model_cfg.hf_path, layer="divides")
-    for cfg in model_cfg.attributes:
+    tif_attributes = [cfg for cfg in model_cfg.attributes if ".tif" in cfg.file_name.name]
+    for cfg in tif_attributes:
         df_temp = pd.read_parquet(cfg.tmp)
         gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
         del df_temp
@@ -136,7 +138,8 @@ def _merge_divide_attributes_parallel(model_cfg: DivideAttributesModelConfig) ->
 
     # looks like: [[tmp_slope_1.parquet, tmp_slope_2.parquet], [tmp_soil_1.parquet, tmp_soil_2.parquet]]
     list_files = []
-    for attr in model_cfg.attributes:
+    tif_attrs = [attr for attr in model_cfg.attributes if "tif" in attr.file_name.name]
+    for attr in tif_attrs:
         list_files.append(
             [model_cfg.tmp_dir / f"tmp_{attr.field_name}_{i}.parquet" for i in range(n_divides)]
         )
@@ -240,6 +243,51 @@ def _prep_multiprocessing_configs(
     return c_divides
 
 
+def _calculate_glaciers(
+    model_cfg: DivideAttributesModelConfig, glaciers_attribute: DivideAttributeConfig
+) -> None:
+    """Calculate the percent glacier in each divide
+
+    Overwrites HF divides on output.
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributesModelConfig
+        Pydantic model for full model config
+    """
+    gdf_gl = gpd.read_parquet(glaciers_attribute.file_name)
+    gdf_gl["geometry"] = gdf_gl["geometry"].to_crs(model_cfg.crs)
+
+    gdf_div = gpd.read_file(model_cfg.hf_path, layer="divides")
+    gdf_div["area_hf"] = gdf_div.area
+
+    # intersect divides and glacier polygons
+    gdf_int = gdf_div.overlay(gdf_gl, how="intersection")
+
+    # dissolve intersection by div_id so there is one glacier polygon per divide
+    # reset index to keep `div_id` column
+    gdf_int_dissolve = gdf_int.dissolve(model_cfg.divide_id)
+    gdf_int_dissolve = gdf_int_dissolve.reset_index(drop=False)
+
+    # drop all columns except geometry and divide_id
+    # rename secondary geom column
+    gdf_int_dissolve = gdf_int_dissolve[["geometry", model_cfg.divide_id]]
+    gdf_int_dissolve["area_gl"] = gdf_int_dissolve.area
+    gdf_int_dissolve = gdf_int_dissolve.rename(columns={"geometry": "geom_int"})
+    logger.debug("Finished dissolving glaciers and divides")
+
+    # merge divides with dissolved
+    gdf_div = gdf_div.merge(gdf_int_dissolve, on=model_cfg.divide_id, how="left")
+
+    # calculate % glacier
+    gdf_div[glaciers_attribute.field_name] = (gdf_div["area_gl"] / gdf_div["area_hf"] * 100).round(2)
+    gdf_div.loc[gdf_div[glaciers_attribute.field_name].isnull(), glaciers_attribute.field_name] = 0
+    gdf_div = gdf_div.drop(columns=["area_hf", "area_gl", "geom_int"])
+
+    # write out
+    gdf_div.to_file(model_cfg.hf_path, layer="divides", driver="GPKG", overwrite=True)
+
+
 def _teardown(tmpdir: Path) -> None:
     """Delete tmp paths from tmp directory
 
@@ -263,10 +311,24 @@ def divide_attributes_pipeline_single(model_cfg: DivideAttributesModelConfig) ->
     """
     t0 = perf_counter()
 
-    for cfg in model_cfg.attributes:
+    tif_attributes = [cfg for cfg in model_cfg.attributes if ".tif" in cfg.file_name.name]
+    for cfg in tif_attributes:
         _calculate_attribute(model_cfg, cfg)
 
     _concatenate_attributes(model_cfg)
+
+    # calculate glaciers and write final file
+    try:
+        glaciers_attribute = [
+            cfg
+            for cfg in model_cfg.attributes
+            if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
+        ][0]
+        logger.info("Calculating glaciers")
+        _calculate_glaciers(model_cfg, glaciers_attribute)
+        logger.info("Glaciers complete")
+    except IndexError:
+        logger.info("Glaciers not found in attributes - skipping.")
 
     _teardown(model_cfg.tmp_dir)
     logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
@@ -312,7 +374,8 @@ def divide_attributes_pipeline_parallel(model_cfg: DivideAttributesModelConfig, 
             model_cfg.divides_path_list = _vpu_splitter(model_cfg)
 
         # processing loop: 1 attribute for multiple divides layers at a time
-        for cfg in model_cfg.attributes:
+        tif_attributes = [cfg for cfg in model_cfg.attributes if ".tif" in cfg.file_name.name]
+        for cfg in tif_attributes:
             n_divides = len(model_cfg.divides_path_list)  # type: ignore[arg-type]
 
             # prep rasters and config files
@@ -342,9 +405,22 @@ def divide_attributes_pipeline_parallel(model_cfg: DivideAttributesModelConfig, 
         t2 = perf_counter()
         logger.info(f"merge attributes for each divide: {round((t2 - t1) / 60, 2)} min")
 
-        # concatenate the final output file
+        # concatenate and output file
         _concatenate_divides_parallel(model_cfg)
         logger.info(f"concatenate divides: {round((perf_counter() - t2) / 60, 2)} min")
+
+        # calculate glaciers
+        try:
+            glaciers_attribute = [
+                cfg
+                for cfg in model_cfg.attributes
+                if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
+            ][0]
+            logger.info("Calculating glaciers")
+            _calculate_glaciers(model_cfg, glaciers_attribute)
+            logger.info("Glaciers complete")
+        except IndexError:
+            logger.info("Glaciers not found in attributes - skipping.")
 
         # delete all tmp files
         _teardown(tmp_dir)

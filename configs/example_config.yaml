@@ -106,6 +106,10 @@ divide_attributes:
       file_name: 'usgs/usgs_250m_aspect_5070.tif'
       agg_type: 'weighted_circular_mean'
       field_name: 'aspect_circmean'
+    glaciers:
+      file_name: 'glims_20250624.parquet' # must include 'glacier' or 'glims' to be used
+      agg_type: 'percent'
+      field_name: 'glacier_percent'
 
 
 # waterbodies - all values have defaults

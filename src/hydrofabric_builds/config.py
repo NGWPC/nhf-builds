@@ -122,4 +122,5 @@ class HFConfig(BaseModel):
         """Inject the hydrofabric path into divide and flowpath attributes"""
         self.divide_attributes.hf_path = self.output_file_path
         self.flowpath_attributes.hf_path = self.output_file_path
+        self.divide_attributes.crs = self.crs
         return self
