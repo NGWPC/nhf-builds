@@ -13,6 +13,7 @@ from hydrofabric_builds.pipeline.build_divide_attributes import build_divide_att
 from hydrofabric_builds.pipeline.build_flowpath_attributes import build_flowpath_attributes
 from hydrofabric_builds.pipeline.build_gages import build_gages
 from hydrofabric_builds.pipeline.build_graph import build_graph
+from hydrofabric_builds.pipeline.build_hydrolocations import build_hydrolocations
 from hydrofabric_builds.pipeline.build_waterbodies import build_waterbodies
 from hydrofabric_builds.pipeline.download import download_reference_data
 from hydrofabric_builds.pipeline.processing import (
@@ -196,6 +197,9 @@ def main() -> int:
 
         if config.tasks.waterbodies:
             runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
+
+        if config.tasks.hydrolocations:
+            runner.run_task("hydrolocations", python_callable=build_hydrolocations, op_kwargs={})
 
         if config.tasks.divide_attributes:
             runner.run_task(

@@ -17,8 +17,8 @@ tasks:
   divide_attributes: True
   flowpath_attributes: True
   waterbodies: True
-  hydrolocations: False
-  gages: False
+  hydrolocations: True
+  gages: True
 
 
 # flowpaths

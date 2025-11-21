@@ -36,6 +36,8 @@ class TaskSelection(BaseModel):
 
     gages: bool = Field(default=True, description="Decides if we want to run the gages task")
 
+    hydrolocations: bool = Field(default=True, description="Decides if we want to run the hydrolocations task")
+
 
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""

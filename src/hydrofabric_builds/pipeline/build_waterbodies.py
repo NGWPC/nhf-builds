@@ -1,4 +1,4 @@
-"""Contains all code for building divide attributes in task"""
+"""Contains all code for building waterbodies in task"""
 
 import logging
 from typing import Any, cast

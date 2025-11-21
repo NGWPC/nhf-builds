@@ -206,6 +206,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     gages = gages[keep_cols]
     # removing the gages that don't have flowpaths
     gages = gages.loc[gages["fp_id"] == gages["fp_id"]].reset_index(drop=True)
+    gages["fp_id"] = pd.to_numeric(gages["fp_id"])
 
     # ---------------------------------------------------------------------
     # 10) Write final output and return
