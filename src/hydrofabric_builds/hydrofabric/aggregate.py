@@ -79,7 +79,7 @@ def _process_aggregation_pairs(
     Returns
     -------
     list[dict[str, Any]]
-        Processed aggregation data
+        Processed aggregation data with percentage_area_contribution for each ref_id
     """
     groups = _merge_tuples_with_common_values(classifications.aggregation_pairs)
 
@@ -97,7 +97,6 @@ def _process_aggregation_pairs(
         try:
             # Get flowpath data from lookup dict
             fp_data = [fp_lookup[fp_id] for fp_id in fp_ids if fp_id in fp_lookup]
-            div_data = [div_lookup[fp_id] for fp_id in fp_ids if fp_id in div_lookup]
 
             if not fp_data:
                 logger.debug(f"Cannot find flowpaths for {group_ids}")
@@ -113,10 +112,26 @@ def _process_aggregation_pairs(
 
             # Compute aggregates
             length_km = sum(float(fp["lengthkm"]) for fp in fp_data)
-            area_sqkm = sum(float(fp["areasqkm"]) for fp in fp_data)
             hydroseq = max(int(fp["hydroseq"]) for fp in fp_data)
-            div_area_sqkm = sum(float(div["areasqkm"]) for div in div_data)
             vpu_id = fp_data[0]["VPUID"]
+
+            # Calculate percentage area contribution for each ref_id
+            # This is the area of each flowpath divided by the total divide area
+            ref_data = [fp_lookup[_fp_id] for _fp_id in group_ids]
+            area_sqkm = sum(float(fp["areasqkm"]) for fp in ref_data)
+            div_area_sqkm = sum(float(div["areasqkm"]) for div in ref_data)
+            ref_id_to_percentage: dict[str, float] = {}
+            if div_area_sqkm > 0:
+                for fp in ref_data:
+                    fp_id = str(fp["flowpath_id"])
+                    fp_area = float(fp["areasqkm"])
+                    ref_id_to_percentage[fp_id] = fp_area / div_area_sqkm
+
+                # Normalize to ensure they sum to exactly 1.0
+                total_percentage = sum(ref_id_to_percentage.values())
+                if total_percentage > 0:
+                    for fp_id in ref_id_to_percentage:
+                        ref_id_to_percentage[fp_id] /= total_percentage
 
             # Get geometries from lookup dicts
             line_geoms: list[BaseGeometry] = [
@@ -136,6 +151,7 @@ def _process_aggregation_pairs(
                     "length_km": length_km,
                     "area_sqkm": area_sqkm,
                     "div_area_sqkm": div_area_sqkm,
+                    "ref_id_to_percentage": ref_id_to_percentage,
                     "line_geometry": unary_union(line_geoms),
                     "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
                 }
@@ -166,7 +182,7 @@ def _process_independent_flowpaths(
     Returns
     -------
     list[dict[str, Any]]
-        Independent flowpath data
+        Independent flowpath data with percentage_area_contribution
     """
     results: list[dict[str, Any]] = []
     for fp in classifications.independent_flowpaths:
@@ -179,6 +195,10 @@ def _process_independent_flowpaths(
             hydroseq = int(fp_data["hydroseq"])
             div_area_sqkm = float(div_data["areasqkm"])
             vpu_id = fp_data["VPUID"]
+
+            # For independents, the single flowpath represents 100% of the divide
+            ref_id_to_percentage = {fp: 1.0}
+
             results.append(
                 {
                     "ref_ids": fp,
@@ -187,6 +207,7 @@ def _process_independent_flowpaths(
                     "length_km": length_km,
                     "area_sqkm": area_sqkm,
                     "div_area_sqkm": div_area_sqkm,
+                    "ref_id_to_percentage": ref_id_to_percentage,
                     "line_geometry": fp_lookup[fp]["shapely_geometry"],
                     "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
                 }
@@ -195,6 +216,61 @@ def _process_independent_flowpaths(
             logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
             continue
 
+    return results
+
+
+def _process_connectors(
+    classifications: Classifications,
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process connectors using dictionary lookups.
+
+    Parameters
+    ----------
+    classifications : Classifications
+        Classification results
+    fp_lookup : dict[str, dict[str, Any]]
+        Flowpath lookup dict with shapely_geometry
+    div_lookup : dict[str, dict[str, Any]]
+        Divide lookup dict with shapely_geometry
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Connector data with percentage_area_contribution
+    """
+    results: list[dict[str, Any]] = []
+    for fp in classifications.connector_segments:
+        try:
+            fp_data = fp_lookup[fp]
+            div_data = div_lookup[fp]
+
+            length_km = float(fp_data["lengthkm"])
+            area_sqkm = float(fp_data["areasqkm"])
+            hydroseq = int(fp_data["hydroseq"])
+            div_area_sqkm = float(div_data["areasqkm"])
+            vpu_id = fp_data["VPUID"]
+
+            # For connectors, the single flowpath represents 100% of the divide
+            ref_id_to_percentage = {fp: 1.0}
+
+            results.append(
+                {
+                    "ref_ids": fp,
+                    "vpu_id": vpu_id,
+                    "hydroseq": hydroseq,
+                    "length_km": length_km,
+                    "area_sqkm": area_sqkm,
+                    "div_area_sqkm": div_area_sqkm,
+                    "ref_id_to_percentage": ref_id_to_percentage,
+                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
+                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
+                }
+            )
+        except KeyError:
+            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
+            continue
     return results
 
 
@@ -381,56 +457,6 @@ def _process_non_nextgen_virtual_flowpaths(
             }
         )
 
-    return results
-
-
-def _process_connectors(
-    classifications: Classifications,
-    fp_lookup: dict[str, dict[str, Any]],
-    div_lookup: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Process connectors using dictionary lookups.
-
-    Parameters
-    ----------
-    classifications : Classifications
-        Classification results
-    fp_lookup : dict[str, dict[str, Any]]
-        Flowpath lookup dict with shapely_geometry
-    div_lookup : dict[str, dict[str, Any]]
-        Divide lookup dict with shapely_geometry
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Connector data
-    """
-    results: list[dict[str, Any]] = []
-    for fp in classifications.connector_segments:
-        try:
-            fp_data = fp_lookup[fp]
-            div_data = div_lookup[fp]
-
-            length_km = float(fp_data["lengthkm"])
-            area_sqkm = float(fp_data["areasqkm"])
-            hydroseq = int(fp_data["hydroseq"])
-            div_area_sqkm = float(div_data["areasqkm"])
-            vpu_id = fp_data["VPUID"]
-            results.append(
-                {
-                    "ref_ids": fp,
-                    "vpu_id": vpu_id,
-                    "hydroseq": hydroseq,
-                    "length_km": length_km,
-                    "area_sqkm": area_sqkm,
-                    "div_area_sqkm": div_area_sqkm,
-                    "line_geometry": fp_lookup[fp]["shapely_geometry"],
-                    "polygon_geometry": div_lookup[fp]["shapely_geometry"] if fp in div_lookup else None,
-                }
-            )
-        except KeyError:
-            logger.debug(f"Missing flowpath / divide path data for fp_id {fp}")
-            continue
     return results
 
 

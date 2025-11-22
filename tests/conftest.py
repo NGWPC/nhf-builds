@@ -202,8 +202,8 @@ def trace_case_sioux_falls(tmp_path: Path) -> HFConfig:
     """Fixture providing a sample HFConfig."""
     return HFConfig(
         build=BuildHydrofabricConfig(
-            reference_divides_path=str(here() / "tests/data/trace_cases/10L_U_div.parquet"),
-            reference_flowpaths_path=str(here() / "tests/data/trace_cases/10L_U_fp.parquet"),
+            reference_divides_path=str(here() / "tests/data/trace_cases/sioux_falls_div.parquet"),
+            reference_flowpaths_path=str(here() / "tests/data/trace_cases/sioux_falls_fp.parquet"),
         ),
         tasks=TaskSelection(
             build_hydrofabric=True,
@@ -217,12 +217,31 @@ def trace_case_sioux_falls(tmp_path: Path) -> HFConfig:
 
 
 @pytest.fixture
-def trace_case_braided(tmp_path: Path) -> HFConfig:
+def trace_case_large_braided(tmp_path: Path) -> HFConfig:
     """Fixture providing a sample HFConfig."""
     return HFConfig(
         build=BuildHydrofabricConfig(
-            reference_divides_path=str(here() / "tests/data/trace_cases/10L_braided_div.parquet"),
-            reference_flowpaths_path=str(here() / "tests/data/trace_cases/10L_braided_fp.parquet"),
+            reference_divides_path=str(here() / "tests/data/trace_cases/large_braided_div.parquet"),
+            reference_flowpaths_path=str(here() / "tests/data/trace_cases/large_braided_fp.parquet"),
+        ),
+        tasks=TaskSelection(
+            build_hydrofabric=True,
+            divide_attributes=False,
+            flowpath_attributes=False,
+            waterbodies=False,
+            gages=False,
+        ),
+        output_dir=tmp_path,
+    )
+
+
+@pytest.fixture
+def trace_case_small_braided(tmp_path: Path) -> HFConfig:
+    """Fixture providing a sample HFConfig."""
+    return HFConfig(
+        build=BuildHydrofabricConfig(
+            reference_divides_path=str(here() / "tests/data/trace_cases/small_braided_div.parquet"),
+            reference_flowpaths_path=str(here() / "tests/data/trace_cases/small_braided_fp.parquet"),
         ),
         tasks=TaskSelection(
             build_hydrofabric=True,

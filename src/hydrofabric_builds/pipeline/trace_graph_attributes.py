@@ -12,7 +12,6 @@ from hydrofabric_builds.hydrofabric.graph import (
     _partition_all_outlet_subgraphs,
 )
 from hydrofabric_builds.hydrofabric.trace import _trace_single_flowpath_attributes
-from hydrofabric_builds.hydrofabric.utils import _calculate_id_ranges_pure
 from hydrofabric_builds.task_instance import TaskInstance
 
 logger = logging.getLogger(__name__)
@@ -66,27 +65,20 @@ def trace_hydrofabric_attributes(**context: dict[str, Any]) -> dict:
         _id="fp_id",
     )
 
-    # Calculate ID ranges for mainstems across all outlets
-    outlet_aggregations = {
-        outlet_fp_id: {
-            "num_features": len(partition_data["subgraph"]),
-            "nodes": set(range(len(partition_data["subgraph"]))),
-        }
-        for outlet_fp_id, partition_data in outlet_subgraphs.items()
-    }
-    id_ranges = _calculate_id_ranges_pure(outlet_aggregations)
-
     # Process each outlet basin
     logger.info(f"trace_attributes task: Building attributes for {len(outlet_subgraphs)} drainage basins")
     results = []
+    global_mainstem = 1
+    global_hydroseq = 0
     for outlet_fp_id, partition_data in tqdm(outlet_subgraphs.items(), desc="Building Graph Attributes"):
-        id_offset = id_ranges["outlet_id_ranges"][outlet_fp_id]["id_offset"]
-
-        traced_basin = _trace_single_flowpath_attributes(
+        traced_basin, next_id, next_hydroseq = _trace_single_flowpath_attributes(
             outlet_fp_id=outlet_fp_id,
             partition_data=partition_data,
-            id_offset=id_offset,
+            id_offset=global_mainstem,
+            hydroseq_offset=global_hydroseq,
         )
+        global_mainstem = next_id
+        global_hydroseq = next_hydroseq
 
         results.append(traced_basin)
 

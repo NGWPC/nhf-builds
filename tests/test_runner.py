@@ -12,9 +12,8 @@ from hydrofabric_builds import (
     build_graph,
     build_nhf_graph,
     download_reference_data,
-    map_build_base_hydrofabric,
+    map_build_hydrofabric,
     map_trace_and_aggregate,
-    reduce_calculate_id_ranges,
     reduce_combine_base_hydrofabric,
     trace_hydrofabric_attributes,
     write_base_hydrofabric,
@@ -194,12 +193,7 @@ class TestIntegration:
             runner.run_task("download", download_reference_data)
             runner.run_task("build_graph", build_graph)
             runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
-            runner.run_task(
-                task_id="reduce_flowpaths", python_callable=reduce_calculate_id_ranges, op_kwargs={}
-            )
-            runner.run_task(
-                task_id="map_build_base", python_callable=map_build_base_hydrofabric, op_kwargs={}
-            )
+            runner.run_task(task_id="map_build_base", python_callable=map_build_hydrofabric, op_kwargs={})
             runner.run_task(
                 task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
             )

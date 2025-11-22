@@ -136,23 +136,23 @@ class TestTraceFlowpathAttributes:
         """Test that total drainage area accumulates correctly upstream to downstream."""
         outlet_fp_id = simple_linear_network["outlet_fp_id"]
         partition_data = simple_linear_network["partition_data"]
-        flowpaths = simple_linear_network["flowpaths"]
 
-        result = _trace_single_flowpath_attributes(
-            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
         )
 
-        # Convert result to pandas and merge with original flowpaths to get hydroseq
+        # Verify next values are correct
+        assert next_mainstem_id > 0, "next_mainstem_id should be incremented"
+        assert next_hydroseq == 4, f"next_hydroseq should be 4 (1 + 3 flowpaths), got {next_hydroseq}"
+
+        # Convert result to pandas
         result_pd = result.to_pandas()
         result_pd["fp_id"] = result_pd["fp_id"].astype("Int64")
 
-        # Merge with original flowpaths to get hydroseq
-        result_pd = result_pd.merge(flowpaths[["fp_id", "hydroseq"]], on="fp_id", how="left")
-
         # Expected cumulative drainage areas:
-        # fp_id 1 (hydroseq=30, most upstream): 5.0 (only its own)
-        # fp_id 2 (hydroseq=20): 5.0 + 3.0 = 8.0
-        # fp_id 3 (hydroseq=10, outlet): 8.0 + 2.0 = 10.0
+        # fp_id 1 (most upstream): 5.0 (only its own)
+        # fp_id 2: 5.0 + 3.0 = 8.0
+        # fp_id 3 (outlet): 8.0 + 2.0 = 10.0
         fp1_da = result_pd[result_pd["fp_id"] == 1]["total_da_sqkm"].iloc[0]
         fp2_da = result_pd[result_pd["fp_id"] == 2]["total_da_sqkm"].iloc[0]
         fp3_da = result_pd[result_pd["fp_id"] == 3]["total_da_sqkm"].iloc[0]
@@ -161,14 +161,15 @@ class TestTraceFlowpathAttributes:
         assert fp2_da == 8.0, f"Middle (fp2) should have 5+3=8: expected 8.0, got {fp2_da}"
         assert fp3_da == 10.0, f"Outlet (fp3) should have total 10: expected 10.0, got {fp3_da}"
 
-        # Verify values increase monotonically downstream (when sorted by hydroseq)
-        result_sorted = result_pd.sort_values("hydroseq", ascending=False)  # Most upstream first
+        # Verify values increase monotonically downstream (when sorted by hydroseq from result)
+        result_sorted = result_pd.sort_values("hydroseq", ascending=True)  # Lowest (outlet) first
         drainage_areas = result_sorted["total_da_sqkm"].values
 
         # Each downstream segment should have >= drainage area than upstream
+        # Since we sorted by hydroseq ascending (outlet first), drainage should decrease
         for i in range(len(drainage_areas) - 1):
-            assert drainage_areas[i] <= drainage_areas[i + 1], (
-                f"Drainage area should increase downstream: "
+            assert drainage_areas[i] >= drainage_areas[i + 1], (
+                f"Drainage area should decrease going upstream (sorted by hydroseq asc): "
                 f"position {i} has {drainage_areas[i]}, position {i + 1} has {drainage_areas[i + 1]}"
             )
 
@@ -177,8 +178,8 @@ class TestTraceFlowpathAttributes:
         outlet_fp_id = simple_linear_network["outlet_fp_id"]
         partition_data = simple_linear_network["partition_data"]
 
-        result = _trace_single_flowpath_attributes(
-            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
         )
 
         # Convert result to pandas for easier testing
@@ -201,32 +202,66 @@ class TestTraceFlowpathAttributes:
         outlet_fp_id = simple_linear_network["outlet_fp_id"]
         partition_data = simple_linear_network["partition_data"]
 
-        result = _trace_single_flowpath_attributes(
-            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
         )
 
         # Convert result to pandas for easier testing
         result_pd = result.to_pandas()
         result_pd["fp_id"] = result_pd["fp_id"].astype("Int64")
+
+        # Get the new hydroseq values assigned by the function
+        # Outlet (fp_id 3) should have hydroseq=1 (first assigned)
+        # Middle (fp_id 2) should have hydroseq=2
+        # Headwater (fp_id 1) should have hydroseq=3
+        fp3_hydroseq = result_pd[result_pd["fp_id"] == 3]["hydroseq"].iloc[0]
+        fp2_hydroseq = result_pd[result_pd["fp_id"] == 2]["hydroseq"].iloc[0]
+
         # Expected dn_hydroseq:
-        # fp_id 1 (hydroseq=30) -> fp_id 2 (hydroseq=20)
-        # fp_id 2 (hydroseq=20) -> fp_id 3 (hydroseq=10)
-        # fp_id 3 (hydroseq=10) -> outlet (dn_hydroseq=0)
+        # fp_id 1 -> fp_id 2
+        # fp_id 2 -> fp_id 3
+        # fp_id 3 -> outlet (dn_hydroseq=0)
         fp1_dn = result_pd[result_pd["fp_id"] == 1]["dn_hydroseq"].iloc[0]
         fp2_dn = result_pd[result_pd["fp_id"] == 2]["dn_hydroseq"].iloc[0]
         fp3_dn = result_pd[result_pd["fp_id"] == 3]["dn_hydroseq"].iloc[0]
 
-        assert fp1_dn == 20, f"fp1 should point to fp2's hydroseq (20): {fp1_dn}"
-        assert fp2_dn == 10, f"fp2 should point to fp3's hydroseq (10): {fp2_dn}"
+        assert fp1_dn == fp2_hydroseq, f"fp1 should point to fp2's hydroseq ({fp2_hydroseq}): {fp1_dn}"
+        assert fp2_dn == fp3_hydroseq, f"fp2 should point to fp3's hydroseq ({fp3_hydroseq}): {fp2_dn}"
         assert fp3_dn == 0, f"Outlet dn_hydroseq should be 0: {fp3_dn}"
+
+    def test_hydroseq_decreases_downstream(self, simple_linear_network: dict) -> None:
+        """Test that hydroseq values increase from outlet to headwater."""
+        outlet_fp_id = simple_linear_network["outlet_fp_id"]
+        partition_data = simple_linear_network["partition_data"]
+
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
+        )
+
+        result_pd = result.to_pandas()
+        result_pd["fp_id"] = result_pd["fp_id"].astype("Int64")
+
+        # Get hydroseq values for each flowpath
+        fp1_hydroseq = result_pd[result_pd["fp_id"] == 1]["hydroseq"].iloc[0]
+        fp2_hydroseq = result_pd[result_pd["fp_id"] == 2]["hydroseq"].iloc[0]
+        fp3_hydroseq = result_pd[result_pd["fp_id"] == 3]["hydroseq"].iloc[0]
+
+        # Hydroseq should increase going upstream
+        assert fp3_hydroseq < fp2_hydroseq < fp1_hydroseq, (
+            f"Hydroseq should increase upstream: outlet={fp3_hydroseq}, "
+            f"middle={fp2_hydroseq}, headwater={fp1_hydroseq}"
+        )
+
+        # Outlet should have hydroseq=1 (since we started with offset=1)
+        assert fp3_hydroseq == 1, f"Outlet should have hydroseq=1, got {fp3_hydroseq}"
 
     def test_mainstem_identification(self, branching_network: dict) -> None:
         """Test that mainstems are correctly identified based on longest path."""
         outlet_fp_id = branching_network["outlet_fp_id"]
         partition_data = branching_network["partition_data"]
 
-        result = _trace_single_flowpath_attributes(
-            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
         )
 
         # Convert result to pandas for easier testing
@@ -250,8 +285,8 @@ class TestTraceFlowpathAttributes:
         outlet_fp_id = branching_network["outlet_fp_id"]
         partition_data = branching_network["partition_data"]
 
-        result = _trace_single_flowpath_attributes(
-            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=1
         )
 
         # Convert result to pandas for easier testing
@@ -269,3 +304,25 @@ class TestTraceFlowpathAttributes:
         # Verify it goes through fp4 (the confluence point) and fp5 (outlet)
         assert 4 in main_fps["fp_id"].values, "Mainstem should go through confluence (fp4)"
         assert 5 in main_fps["fp_id"].values, "Mainstem should include outlet (fp5)"
+
+    def test_hydroseq_offset_increments(self, branching_network: dict) -> None:
+        """Test that hydroseq_offset is properly incremented and returned."""
+        outlet_fp_id = branching_network["outlet_fp_id"]
+        partition_data = branching_network["partition_data"]
+
+        # Start with offset of 100
+        result, next_mainstem_id, next_hydroseq = _trace_single_flowpath_attributes(
+            outlet_fp_id=outlet_fp_id, partition_data=partition_data, id_offset=0, hydroseq_offset=100
+        )
+
+        result_pd = result.to_pandas()
+
+        # Should have 5 flowpaths, so next_hydroseq should be 105
+        assert next_hydroseq == 105, f"Expected next_hydroseq=105, got {next_hydroseq}"
+
+        # All hydroseq values should be >= 100
+        min_hydroseq = result_pd["hydroseq"].min()
+        max_hydroseq = result_pd["hydroseq"].max()
+
+        assert min_hydroseq >= 100, f"Minimum hydroseq should be >= 100, got {min_hydroseq}"
+        assert max_hydroseq < 105, f"Maximum hydroseq should be < 105, got {max_hydroseq}"

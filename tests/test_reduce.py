@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import LineString, Point, Polygon
 
-from hydrofabric_builds.pipeline.processing import _calculate_id_ranges_pure, _combine_hydrofabrics
+from hydrofabric_builds.pipeline.processing import _combine_hydrofabrics
 
 
 @pytest.fixture
@@ -344,90 +344,3 @@ class TestCombineHydrofabricsPure:
 
         with pytest.raises(ValueError):
             _ = _combine_hydrofabrics(empty_outlet, crs)
-
-
-class TestCalculateIdRangesPure:
-    """Tests for pure _calculate_id_ranges_pure function"""
-
-    @pytest.fixture
-    def mock_outlet_aggregations(self) -> dict:
-        return {
-            "6720797": {"outlet": "6720797", "num_features": 2},
-            "6720703": {"outlet": "6720703", "num_features": 3},
-        }
-
-    def test_calculates_non_overlapping_ranges(self, mock_outlet_aggregations: dict) -> None:
-        result = _calculate_id_ranges_pure(mock_outlet_aggregations)
-        ranges = result["outlet_id_ranges"]
-
-        range1 = ranges["6720797"]
-        range2 = ranges["6720703"]
-        assert range1["id_max"] < range2["id_offset"]
-
-    def test_calculates_correct_offsets(self, mock_outlet_aggregations: dict) -> None:
-        result = _calculate_id_ranges_pure(mock_outlet_aggregations)
-        ranges = result["outlet_id_ranges"]
-
-        assert ranges["6720797"]["id_offset"] == 1
-        assert ranges["6720797"]["id_max"] == 2
-        assert ranges["6720703"]["id_offset"] == 3
-        assert ranges["6720703"]["id_max"] == 5
-
-    def test_calculates_total_ids(self, mock_outlet_aggregations: dict) -> None:
-        result = _calculate_id_ranges_pure(mock_outlet_aggregations)
-        assert result["total_ids_allocated"] == 5
-
-    def test_raises_when_empty_dict(self) -> None:
-        with pytest.raises(ValueError):
-            _calculate_id_ranges_pure({})
-
-    def test_handles_single_outlet(self, sample_hydrofabric_outlet1: dict) -> None:
-        """Test combination with single outlet."""
-        single_outlet = {"outlet1": sample_hydrofabric_outlet1}
-
-        result = _combine_hydrofabrics(single_outlet, "EPSG:5070")
-
-        assert len(result["flowpaths"]) == 2
-        assert len(result["divides"]) == 2
-        assert len(result["nexus"]) == 2
-        assert len(result["reference_flowpaths"]) == 2
-
-    def test_combines_reference_flowpaths(self, built_hydrofabrics: dict) -> None:
-        """Test that reference_flowpaths are combined correctly."""
-        result = _combine_hydrofabrics(built_hydrofabrics, "EPSG:5070")
-
-        assert "reference_flowpaths" in result
-        assert isinstance(result["reference_flowpaths"], pd.DataFrame)
-
-        # Should have 5 total reference flowpaths (2 from outlet1 + 3 from outlet2)
-        assert len(result["reference_flowpaths"]) == 5
-
-        assert "ref_fp_id" in result["reference_flowpaths"].columns
-        assert "fp_id" in result["reference_flowpaths"].columns
-
-        expected_ref_ids = [1, 2, 3, 4, 5]
-        assert sorted(result["reference_flowpaths"]["ref_fp_id"].tolist()) == expected_ref_ids
-
-        expected_fp_ids = [1, 2, 3, 4, 5]
-        assert sorted(result["reference_flowpaths"]["fp_id"].tolist()) == expected_fp_ids
-
-    def test_raises_when_missing_reference_flowpaths_key(self, sample_hydrofabric_outlet1: dict) -> None:
-        """Test error when reference_flowpaths key missing from hydrofabric."""
-        bad_hydrofabric = {
-            "outlet1": {
-                "flowpaths": sample_hydrofabric_outlet1["flowpaths"],
-                "divides": sample_hydrofabric_outlet1["divides"],
-                "nexus": sample_hydrofabric_outlet1["nexus"],
-                # Missing "reference_flowpaths"
-            }
-        }
-
-        with pytest.raises(KeyError, match="Missing 'reference_flowpaths' for outlet outlet1"):
-            _combine_hydrofabrics(bad_hydrofabric, "EPSG:5070")
-
-    def test_handles_many_outlets(self) -> None:
-        many = {f"outlet{i}": {"outlet": f"outlet{i}", "num_features": i} for i in range(1, 11)}
-        result = _calculate_id_ranges_pure(many)
-
-        assert result["total_ids_allocated"] == sum(range(1, 11))  # 55
-        assert len(result["outlet_id_ranges"]) == 10

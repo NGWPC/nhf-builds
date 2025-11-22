@@ -39,46 +39,6 @@ def _get_upstream_ids_for_outlet(
     return upstream_ids
 
 
-def _calculate_id_ranges_pure(outlet_aggregations: dict) -> dict[str, Any]:
-    """Pure function to calculate ID ranges (easily testable).
-
-    Parameters
-    ----------
-    outlet_aggregations : dict
-        Dictionary mapping outlet_id -> outlet data with num_features
-
-    Returns
-    -------
-    dict[str, Any]
-        Dictionary with outlet_id_ranges and total_ids_allocated
-
-    Raises
-    ------
-    ValueError
-        If outlet_aggregations is empty or None
-    """
-    if not outlet_aggregations:
-        raise ValueError("No outlet aggregations provided")
-
-    current_id = 1
-    outlet_id_ranges = {}
-
-    for outlet, outlet_data in outlet_aggregations.items():
-        num_features = outlet_data["num_features"]
-        outlet_id_ranges[outlet] = {
-            "id_offset": current_id,
-            "id_max": current_id + num_features - 1,
-            "num_features": num_features,
-        }
-        current_id += num_features
-
-    total_ids = current_id - 1
-    return {
-        "outlet_id_ranges": outlet_id_ranges,
-        "total_ids_allocated": total_ids,
-    }
-
-
 def _combine_hydrofabrics(
     built_hydrofabrics: dict[str, dict[str, Any]], crs: str
 ) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
@@ -244,8 +204,5 @@ def _combine_hydrofabrics(
 
     if final_virtual_nexus is not None:
         result["virtual_nexus"] = final_virtual_nexus
-
-    # if final_reference_virtual_flowpaths is not None:
-    #     result["reference_virtual_flowpaths"] = final_reference_virtual_flowpaths
 
     return result

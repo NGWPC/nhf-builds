@@ -7,10 +7,9 @@ from tqdm import tqdm
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
-from hydrofabric_builds.hydrofabric.build import _build_base_hydrofabric, _order_aggregates_base
+from hydrofabric_builds.hydrofabric.build import _build_hydrofabric
 from hydrofabric_builds.hydrofabric.trace import _trace_stack
 from hydrofabric_builds.hydrofabric.utils import (
-    _calculate_id_ranges_pure,
     _combine_hydrofabrics,
 )
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
@@ -63,20 +62,18 @@ def _process_single_outlet(
         partition_data=partition_data,
     )
 
-    ordered_aggregates = _order_aggregates_base(aggregate_data)
-
     return {
         "outlet": outlet,
         "classifications": classifications.model_dump(),
         "aggregate_data": aggregate_data.model_dump(),
-        "num_features": len(ordered_aggregates),
+        "num_features": len(partition_data["subgraph"].nodes()),
     }
 
 
 def _build_single_hydrofabric(
     outlet: str,
     outlet_data: dict[str, Any],
-    id_config: dict[str, Any],
+    id_offset: int,
     partition_data: dict[str, Any],
     cfg: HFConfig,
 ) -> dict[str, Any]:
@@ -88,8 +85,8 @@ def _build_single_hydrofabric(
         Outlet ID
     outlet_data : dict[str, Any]
         Outlet aggregation data from map phase
-    id_config : dict[str, Any]
-        ID range configuration for this outlet
+    id_offset : int
+        Starting ID for this outlet
     partition_data : dict[str, Any]
         Contains:
         - "subgraph": rx.PyDiGraph (minimal, only this outlet)
@@ -109,13 +106,13 @@ def _build_single_hydrofabric(
     classifications = Classifications(**outlet_data["classifications"])
     aggregate_data = Aggregations(**outlet_data["aggregate_data"])
 
-    hydrofabric = _build_base_hydrofabric(
+    hydrofabric = _build_hydrofabric(
         start_id=outlet,
         aggregate_data=aggregate_data,
         classifications=classifications,
         partition_data=partition_data,
         cfg=cfg,
-        id_offset=id_config["id_offset"],
+        id_offset=id_offset,
     )
 
     return {
@@ -127,7 +124,7 @@ def _build_single_hydrofabric(
         "virtual_flowpaths": hydrofabric["virtual_flowpaths"],
         "virtual_nexus": hydrofabric["virtual_nexus"],
         # "reference_virtual_flowpaths": hydrofabric["reference_virtual_flowpaths"],
-        "id_range": (id_config["id_offset"], id_config["id_max"]),
+        "next_available_id": hydrofabric["next_available_id"],
     }
 
 
@@ -185,41 +182,7 @@ def map_trace_and_aggregate(**context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def reduce_calculate_id_ranges(**context: dict[str, Any]) -> dict[str, Any]:
-    """Execute REDUCE PHASE: Calculate ID ranges based on feature counts.
-
-    Combines the results from all outlets to calculate non-overlapping
-    ID ranges for each outlet's hydrofabric.
-
-    Parameters
-    ----------
-    **context : dict[str, Any]
-        Airflow context
-
-    Returns
-    -------
-    dict[str, Any]
-        Dictionary with keys:
-        - "outlet_id_ranges": dict mapping outlet_id -> {id_offset, id_max, num_features}
-        - "total_ids_allocated": int total number of IDs allocated
-
-    Raises
-    ------
-    ValueError
-        If no outlet aggregations found from map phase
-    """
-    ti = cast(TaskInstance, context["ti"])
-    outlet_aggregations: dict[str, dict[str, Any]] = ti.xcom_pull(
-        task_id="map_flowpaths", key="outlet_aggregations"
-    )
-
-    if not outlet_aggregations:
-        raise ValueError("No outlet aggregations found from map phase")
-
-    return _calculate_id_ranges_pure(outlet_aggregations)
-
-
-def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
+def map_build_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     """Execute MAP PHASE: Build base hydrofabric layers with assigned ID ranges.
 
     Each outlet's classifications and aggregations are converted into
@@ -249,27 +212,24 @@ def map_build_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     outlet_aggregations: dict[str, dict[str, Any]] = ti.xcom_pull(
         task_id="map_flowpaths", key="outlet_aggregations"
     )
-    outlet_id_ranges: dict[str, dict[str, Any]] = ti.xcom_pull(
-        task_id="reduce_flowpaths", key="outlet_id_ranges"
-    )
     results: list[dict[str, Any]] = []
 
     if not outlet_aggregations:
         raise ValueError("Missing outlet aggregations")
-    if not outlet_id_ranges:
-        raise ValueError("Missing ID ranges for outlets")
 
     logger.info(f"map_build_base task: Building {len(outlet_aggregations)} hydrofabrics sequentially")
+    global_nhf_id = 0
     results = []
     for outlet, outlet_data in tqdm(outlet_aggregations.items(), desc="Building hydrofabrics"):
         result = _build_single_hydrofabric(
             outlet,
             outlet_data,
-            outlet_id_ranges[outlet],
+            global_nhf_id,
             outlet_subgraphs[outlet],
             cfg,
         )
         results.append(result)
+        global_nhf_id = result["next_available_id"]
 
     built_hydrofabrics: dict[str, dict[str, Any]] = {result["outlet"]: result for result in results}
 

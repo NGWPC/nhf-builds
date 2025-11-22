@@ -16,11 +16,10 @@ from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 logger = logging.getLogger(__name__)
 
 
-def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, Any]]:
+def _order_aggregates_base(
+    aggregate_data: Aggregations,
+) -> tuple[dict[str, dict[str, Any]], dict[str, float]]:
     """Take multiple aggregations and order them to build a base hydrofabric for NGEN.
-
-    NOTE: the aggregations used are only aggregates, independents, and connectors as virtual
-    flowpaths and subdivide-connectors are for routing
 
     Parameters
     ----------
@@ -29,10 +28,12 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
 
     Returns
     -------
-    dict[str, dict[str, Any]]
-        All required aggregations for the base hydrofabric schema, mapping ref_id to unit info
+    tuple[dict[str, dict[str, Any]], dict[str, float]]
+        All required aggregations for the base hydrofabric schema, mapping ref_id to unit info, and a dictionary mapping the reference id to it's weighted area percentage
     """
     ref_id_to_unit: dict[str, dict[str, Any]] = {}
+    ref_fp_id_to_percentage: dict[str, float] = {}
+
     for unit in aggregate_data.aggregates:
         unit_info: dict[str, Any] = {
             "unit": unit,
@@ -49,6 +50,10 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
         for ref_id in unit["ref_ids"]:
             ref_id_to_unit[str(ref_id)] = unit_info
 
+        ref_id_to_percentage = unit.get("ref_id_to_percentage", {})
+        for ref_id, percentage in ref_id_to_percentage.items():
+            ref_fp_id_to_percentage[ref_id] = percentage
+
     for unit in aggregate_data.independents:
         ref_id = unit["ref_ids"]
         ref_id_to_unit[ref_id] = {
@@ -62,6 +67,10 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
             "all_ref_ids": [ref_id],
         }
 
+        ref_id_to_percentage = unit.get("ref_id_to_percentage", {})
+        for ref_id_str, percentage in ref_id_to_percentage.items():
+            ref_fp_id_to_percentage[ref_id_str] = percentage
+
     for unit in aggregate_data.connectors:
         ref_id = unit["ref_ids"]
         ref_id_to_unit[ref_id] = {
@@ -74,7 +83,11 @@ def _order_aggregates_base(aggregate_data: Aggregations) -> dict[str, dict[str, 
             "div_area_sqkm": unit["div_area_sqkm"],
             "all_ref_ids": [ref_id],
         }
-    return ref_id_to_unit
+        ref_id_to_percentage = unit.get("ref_id_to_percentage", {})
+        for ref_id_str, percentage in ref_id_to_percentage.items():
+            ref_fp_id_to_percentage[ref_id_str] = percentage
+
+    return ref_id_to_unit, ref_fp_id_to_percentage
 
 
 def _queue_all_unit_upstreams(
@@ -125,35 +138,35 @@ def _queue_all_unit_upstreams(
             to_process.extend(upstream_ids)
 
 
-def _build_base_hydrofabric(
+def _build_hydrofabric(
     start_id: str,
     aggregate_data: Aggregations,
     classifications: Classifications,
     partition_data: dict[str, Any],
     cfg: HFConfig,
     id_offset: int = 0,
-) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame) | list[dict[str, Any]] | None]:
-    """Build the base hydrofabric layers.
+) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame) | list[dict[str, Any]] | int | None]:
+    """Builds the hydrofabric connectivity
 
     Parameters
     ----------
-    start_id : str
-        The outlet flowpath ID
-    aggregate_data : Aggregations
-        Aggregation data
-    classifications : Classifications
-        Classification data
-    partition_data : dict[str, Any]
-        Contains fp_lookup, subgraph, node_indices
-    cfg : HFConfig
-        Hydrofabric build config
-    id_offset : int, optional
-        Starting ID offset for this outlet, by default 0
+    start_id: str
+        The starting ID from the reference fabric for the outlet
+    aggregate_data: Aggregations
+        The Aggregations dataclass
+    classifications: Classifications
+        The Classifications dataclass
+    partition_data: dict[str, Any]
+        The partition data for the outlet
+    cfg: HFConfig
+        The config
+    id_offset: int = 0
+        The starting ID
 
     Returns
     -------
-    dict[str, (gpd.GeoDataFrame | pd.DataFrame) | list[dict[str, Any]] | None]
-        Built hydrofabric data with keys: flowpaths, divides, nexus, reference_flowpaths
+    result
+        All hf layers + the ending outlet
     """
     fp_lookup: dict[str, dict[str, Any]] = partition_data["fp_lookup"]
     graph = partition_data["subgraph"]
@@ -163,7 +176,7 @@ def _build_base_hydrofabric(
     fp_by_hydroseq: dict[Any, dict[str, Any]] = {row["hydroseq"]: row for row in fp_lookup.values()}
 
     # Build ref_id -> unit lookup
-    ref_id_to_unit: dict[str, dict[str, Any]] = _order_aggregates_base(aggregate_data)
+    ref_id_to_unit, ref_fp_id_to_percentage = _order_aggregates_base(aggregate_data)
 
     # Initialize processing
     to_process: deque[str] = deque([start_id])
@@ -174,12 +187,14 @@ def _build_base_hydrofabric(
     div_data: list[dict[str, Any]] = []
     nexus_data: list[dict[str, Any]] = []
     reference_flowpaths_data: list[dict[str, Any]] = []
+    ref_fp_id_to_index: dict[str, int] = {}
 
     ref_id_to_new_id: dict[str, int] = {}
     downstream_fp_to_nexus: dict[int, int] = {}
 
-    new_id = 1 + id_offset
-    nexus_counter = 1 + id_offset
+    # Single ID counter for flowpaths, divides, and virtual flowpaths
+    # Nexuses reuse these IDs since they're in a different table
+    nhf_id = 1 + id_offset
 
     to_process.extend(list(classifications.force_queue_flowpaths))
 
@@ -212,9 +227,13 @@ def _build_base_hydrofabric(
             continue
         processed_units.add(unit_ref_ids)
 
+        # Assign ID for this unit (fp_id and div_id will be the same)
+        unit_id = nhf_id
+        nhf_id += 1
+
         # Assign new ID to all refs in this unit
         for ref_id in unit_ref_ids:
-            ref_id_to_new_id[ref_id] = new_id
+            ref_id_to_new_id[ref_id] = unit_id
 
         # Get unit data
         unit: dict[str, Any] = unit_info["unit"]
@@ -258,12 +277,12 @@ def _build_base_hydrofabric(
             logger.error(f"Unit {ref_ids} has no divide polygon. Will not be able to run NGEN using it")
             raise ValueError(f"Unit {ref_ids} has no divide polygon. Will not be able to run NGEN using it")
 
-        # Get or create nexus
+        # Get or create nexus - nexus reuses the unit_id (doesn't increment nhf_id)
         if downstream_unit_id is not None and downstream_unit_id in downstream_fp_to_nexus:
             nexus_id = downstream_fp_to_nexus[downstream_unit_id]
         else:
-            nexus_id = nexus_counter
-            nexus_counter += 1
+            # Nexus reuses the current unit_id (no new ID allocation)
+            nexus_id = unit_id
 
             # Create nexus at downstream end of flowpath
             line_geom = unit["line_geometry"]
@@ -274,8 +293,9 @@ def _build_base_hydrofabric(
 
             nexus_data.append(
                 {
-                    "nex_id": nexus_id,
+                    "nex_id": int(nexus_id),
                     "dn_fp_id": downstream_unit_id,
+                    "vpu_id": unit["vpu_id"],
                     "geometry": Point(end_coord),
                 }
             )
@@ -283,25 +303,24 @@ def _build_base_hydrofabric(
             if downstream_unit_id is not None:
                 downstream_fp_to_nexus[downstream_unit_id] = nexus_id
 
-        # Create flowpath
+        # Create flowpath with unit_id
         fp_data.append(
             {
-                "fp_id": new_id,
-                "dn_nex_id": nexus_id,
+                "fp_id": int(unit_id),
+                "dn_nex_id": int(nexus_id),
                 "up_nex_id": None,  # Will fix later
-                "div_id": new_id,
+                "div_id": int(unit_id),
                 "vpu_id": unit["vpu_id"],
-                "hydroseq": unit["hydroseq"],
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "geometry": unit["line_geometry"],
             }
         )
 
-        # Create divide
+        # Create divide with unit_id
         div_data.append(
             {
-                "div_id": new_id,
+                "div_id": int(unit_id),
                 "vpu_id": unit["vpu_id"],
                 "type": unit_type,
                 "area_sqkm": unit["div_area_sqkm"],
@@ -311,14 +330,17 @@ def _build_base_hydrofabric(
 
         # Create reference entries
         for ref_id in ref_ids:
+            idx = len(reference_flowpaths_data)
+
             reference_flowpaths_data.append(
                 {
                     "ref_fp_id": int(ref_id),
-                    "fp_id": new_id,
+                    "fp_id": int(unit_id),
+                    "virtual_fp_id": None,
+                    "div_id": int(unit_id),
                 }
             )
-
-        new_id += 1
+            ref_fp_id_to_index[ref_id] = idx
 
         _queue_all_unit_upstreams(unit_info, ref_ids, current_ref_id, graph, node_indices, to_process)
 
@@ -332,120 +354,152 @@ def _build_base_hydrofabric(
             fp_entry["up_nex_id"] = nexus_by_downstream_fp[fp_id]
 
     virtual_fp_data: list[dict[str, Any]] = []
-    virtual_nexus_data_dict: dict[int, dict[str, Any]] = {}  # Store nexus by ID
-    ref_id_to_virtual_fp_id: dict[str, int] = {}  # Map ref_id to virtual_fp_id
-
-    # Track nexus by the reference ID it connects to
-    # Key: ref_id (the downstream reference flowpath) -> virtual_nexus_id
+    virtual_nexus_data_dict: dict[int, dict[str, Any]] = {}
+    ref_id_to_virtual_fp_id: dict[str, int] = {}
     ref_id_to_nexus: dict[str, int] = {}
 
-    virtual_fp_id_counter = 1 + id_offset
-    virtual_nexus_counter = 1 + id_offset
+    # Continue using the same nhf_id counter for virtual flowpaths
+    # Virtual nexuses will also reuse virtual flowpath IDs
 
-    # FIRST: Process virtual_flowpaths (routing_segment = True)
-    # These create all the nexus points
-    for unit in aggregate_data.virtual_flowpaths:
-        ref_ids = unit["ref_ids"]  # List with single flowpath ID
-        dn_ref_id = unit.get("dn_id")  # Downstream target reference ID
+    # Process virtual_flowpaths (routing_segment = True)
+    sorted_virtual_flowpaths = sorted(aggregate_data.virtual_flowpaths, key=lambda unit: unit["hydroseq"])
+    for unit in sorted_virtual_flowpaths:
+        ref_ids = unit["ref_ids"]
+        dn_ref_id = unit.get("dn_id")
 
-        # Assign virtual flowpath ID
-        virtual_fp_id = virtual_fp_id_counter
-        virtual_fp_id_counter += 1
+        # Assign virtual flowpath ID from nhf_id
+        virtual_fp_id = nhf_id
+        nhf_id += 1
 
-        # Map this ref_id to virtual_fp_id for nexus lookup
-        for ref_id in ref_ids:
-            ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
+        ref_id = ref_ids[0] if ref_ids else None
+        if not ref_id:
+            raise ValueError(f"no reference ID found for {unit}")
 
-        # Find the downstream virtual flowpath ID
+        ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
+        if ref_id in ref_fp_id_to_index:
+            idx = ref_fp_id_to_index[ref_id]
+            reference_flowpaths_data[idx]["virtual_fp_id"] = virtual_fp_id
+        else:
+            raise ValueError(f"Cannot find reference fp_id for: {ref_id}")
+            # idx = len(reference_flowpaths_data)
+            # reference_flowpaths_data.append(
+            #     {
+            #         "ref_fp_id": int(ref_id),
+            #         "fp_id": None,
+            #         "virtual_fp_id": virtual_fp_id,
+            #     }
+            # )
+            # ref_fp_id_to_index[ref_id] = idx
+
+        try:
+            percentage = ref_fp_id_to_percentage[ref_id]
+        except KeyError as e:
+            raise KeyError(f"Cannot find ref ID: {ref_id} in ref_fp_id_to_percentage") from e
+
         downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(dn_ref_id) if dn_ref_id else None
 
-        # Get downstream endpoint
         line_geom = unit["line_geometry"]
         if line_geom.geom_type == "MultiLineString":
             endpoint = Point(list(line_geom.geoms)[-1].coords[-1])
         else:
             endpoint = Point(line_geom.coords[-1])
 
-        # Check if nexus already exists for this downstream reference ID
         if dn_ref_id and dn_ref_id in ref_id_to_nexus:
-            # Reuse existing nexus
             virtual_nexus_id = ref_id_to_nexus[dn_ref_id]
         else:
-            # Create new nexus
-            virtual_nexus_id = virtual_nexus_counter
-            virtual_nexus_counter += 1
+            # Virtual nexus reuses the virtual_fp_id (no new ID allocation)
+            virtual_nexus_id = virtual_fp_id
 
             virtual_nexus_data_dict[virtual_nexus_id] = {
                 "virtual_nex_id": virtual_nexus_id,
                 "dn_virtual_fp_id": downstream_virtual_fp_id,
+                "vpu_id": unit["vpu_id"],
                 "geometry": endpoint,
             }
 
-            # Track this nexus by the reference ID it connects to
             if dn_ref_id:
                 ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
 
-        # Create virtual flowpath
         virtual_fp_data.append(
             {
-                "virtual_fp_id": virtual_fp_id,
-                "dn_virtual_nex_id": virtual_nexus_id,
-                "up_virtual_nex_id": None,  # Will be set below
+                "virtual_fp_id": int(virtual_fp_id),
+                "dn_virtual_nex_id": int(virtual_nexus_id),
+                "up_virtual_nex_id": None,
                 "routing_segment": True,
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
-                "hydroseq": unit["hydroseq"],
+                "percentage_area_contribution": percentage,
                 "vpu_id": unit["vpu_id"],
                 "geometry": line_geom,
             }
         )
 
-    # SECOND: Process non_nextgen_virtual_flowpaths (routing_segment = False)
-    # These MUST connect to existing virtual flowpaths via existing nexuses
-    for unit in aggregate_data.non_nextgen_virtual_flowpaths:
-        ref_ids = unit["ref_ids"]  # List with all connected ref_ids in the chain
+    # Process non_nextgen_virtual_flowpaths
+    sorted_non_nextgen_virtual = sorted(
+        aggregate_data.non_nextgen_virtual_flowpaths, key=lambda unit: unit["hydroseq"]
+    )
+    for unit in sorted_non_nextgen_virtual:
+        ref_ids = unit["ref_ids"]
         line_geom = unit["line_geometry"]
-        dn_ref_id = str(unit["dn_id"])  # This should point to a virtual flowpath
+        dn_ref_id = str(unit["dn_id"])
         ds_id: str = str(int(fp_lookup[dn_ref_id]["flowpath_toid"]))
 
-        virtual_fp_id = virtual_fp_id_counter
-        virtual_fp_id_counter += 1
+        # Assign virtual flowpath ID from nhf_id
+        virtual_fp_id = nhf_id
+        nhf_id += 1
 
-        # Map all ref_ids to this virtual_fp_id
-        for ref_id in ref_ids:
-            ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
+        ref_id_to_virtual_fp_id[dn_ref_id] = virtual_fp_id
+
+        if dn_ref_id in ref_fp_id_to_index:
+            idx = ref_fp_id_to_index[dn_ref_id]
+            reference_flowpaths_data[idx]["virtual_fp_id"] = virtual_fp_id
+        else:
+            idx = len(reference_flowpaths_data)
+            reference_flowpaths_data.append(
+                {
+                    "ref_fp_id": int(dn_ref_id),
+                    "fp_id": None,
+                    "virtual_fp_id": int(virtual_fp_id),
+                    "div_id": int(ref_id_to_new_id[ds_id]),
+                }
+            )
+            ref_fp_id_to_index[dn_ref_id] = idx
+
+        # default area contribution from is 0% as flowpaths with no divide have 0km2 of drainage area
+        percentage = sum(ref_fp_id_to_percentage.get(_ref_id, 0.0) for _ref_id in ref_ids)
 
         if ds_id and ds_id in ref_id_to_nexus:
             virtual_nexus_id = ref_id_to_nexus[ds_id]
         else:
-            line_geom = unit["line_geometry"]
             if line_geom.geom_type == "MultiLineString":
                 endpoint = Point(list(line_geom.geoms)[-1].coords[-1])
             else:
                 endpoint = Point(line_geom.coords[-1])
-            virtual_nexus_id = virtual_nexus_counter
-            virtual_nexus_counter += 1
+
+            # Virtual nexus reuses the virtual_fp_id (no new ID allocation)
+            virtual_nexus_id = virtual_fp_id
+
             downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
 
             virtual_nexus_data_dict[virtual_nexus_id] = {
                 "virtual_nex_id": virtual_nexus_id,
                 "dn_virtual_fp_id": downstream_virtual_fp_id,
+                "vpu_id": unit["vpu_id"],
                 "geometry": endpoint,
             }
 
-            # Track this nexus by the reference ID it connects to
             if dn_ref_id:
                 ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
 
         virtual_fp_data.append(
             {
-                "virtual_fp_id": virtual_fp_id,
-                "dn_virtual_nex_id": virtual_nexus_id,
+                "virtual_fp_id": int(virtual_fp_id),
+                "dn_virtual_nex_id": int(virtual_nexus_id),
                 "up_virtual_nex_id": None,
                 "routing_segment": False,
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
-                "hydroseq": unit["hydroseq"],
+                "percentage_area_contribution": percentage,
                 "vpu_id": unit["vpu_id"],
                 "geometry": line_geom,
             }
@@ -453,23 +507,19 @@ def _build_base_hydrofabric(
 
     # Convert nexus dict to list
     virtual_nexus_data = list(virtual_nexus_data_dict.values())
-
-    # Fix up_virtual_nex_id references
-    # For each virtual flowpath, find the nexus where this flowpath is the downstream target
-    nexus_pointing_to_virtual_fp: dict[int, int] = {}  # Maps virtual_fp_id -> nexus_id that points to it
+    nexus_pointing_to_virtual_fp: dict[int, int] = {}
 
     for nexus_entry in virtual_nexus_data:
         dn_virtual_fp_id = nexus_entry.get("dn_virtual_fp_id")
         if dn_virtual_fp_id is not None:
             nexus_pointing_to_virtual_fp[dn_virtual_fp_id] = nexus_entry["virtual_nex_id"]
 
-    # Now assign up_virtual_nex_id to each virtual flowpath
     for vfp_entry in virtual_fp_data:
         virtual_fp_id = vfp_entry["virtual_fp_id"]
-        # The upstream nexus is the one that points TO this flowpath
         if virtual_fp_id in nexus_pointing_to_virtual_fp:
             vfp_entry["up_virtual_nex_id"] = nexus_pointing_to_virtual_fp[virtual_fp_id]
 
+    logger.debug(f"Built hydrofabric using ID range: {1 + id_offset} to {nhf_id - 1}")
     # Create GeoDataFrames
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
@@ -481,6 +531,8 @@ def _build_base_hydrofabric(
         nexus_gdf = gpd.GeoDataFrame(nexus_data, crs=cfg.crs)
         nexus_gdf["dn_fp_id"] = nexus_gdf["dn_fp_id"].astype("Int64")
         reference_flowpaths_df = pd.DataFrame(reference_flowpaths_data)
+        reference_flowpaths_df["fp_id"] = reference_flowpaths_df["fp_id"].astype("Int64")
+        reference_flowpaths_df["virtual_fp_id"] = reference_flowpaths_df["virtual_fp_id"].astype("Int64")
 
         # Virtual layers
         if virtual_fp_data:
@@ -517,4 +569,5 @@ def _build_base_hydrofabric(
         "reference_flowpaths": reference_flowpaths_df,
         "virtual_flowpaths": virtual_flowpaths_gdf,
         "virtual_nexus": virtual_nexus_gdf,
+        "next_available_id": nhf_id,
     }

@@ -189,7 +189,6 @@ def _traverse_and_aggregate(
         all_non_nextgen = True
 
     _ref_fp_stack: deque[str] = deque([start_id])
-    # virtual_nexus = ds_id = str(int(fp_lookup[start_id]["flowpath_toid"]))
 
     # tracing through all segments
     while _ref_fp_stack:
@@ -203,10 +202,6 @@ def _traverse_and_aggregate(
         if current_id not in longest_path_ids or all_non_nextgen:
             result.non_nextgen_flowpaths.add(current_id)
             result.non_nextgen_virtual_flowpath_pairs.append((current_id, ds_id))
-            # if ds_id not in result.non_nextgen_flowpaths:
-            #     # if the ds_id isn't a non_nextgen_flowpath, then we need to change the virtual nexus reference
-            #     virtual_nexus = ds_id
-            # result.non_nextgen_virtual_flowpath_pairs.append((current_id, ds_id))
         else:
             result.virtual_flowpath_pairs.append((current_id, ds_id))
 
@@ -216,16 +211,6 @@ def _traverse_and_aggregate(
         if upstream_ids:
             for uid in upstream_ids:
                 _ref_fp_stack.append(uid)
-
-    # for _id in ancestor_ids:
-    #     # Mark as virtual if NOT in longest path, or if different stream order, or if all_virtual
-    #     if _id not in longest_path_ids or all_non_nextgen:
-    #         result.non_nextgen_flowpaths.add(_id)
-    #         result.non_nextgen_virtual_flowpath_pairs[ds_id]
-
-    #     result.aggregation_pairs.append((_id, start_id))
-    #     result.aggregation_set.add(_id)
-    #     result.processed_flowpaths.add(_id)
 
 
 def _fix_no_divide_anomalies(
@@ -262,6 +247,7 @@ def _fix_no_divide_anomalies(
         if there was a fix applied
     """
     ds_id = str(int(fp_lookup[current_id]["flowpath_toid"]))
+
     if current_id in ["9272756"]:
         # Flowpath in VPU 8 upstream of 9272686 that is a no-divide connector and does not create a divide
         result.virtual_flowpath_pairs.append((current_id, ds_id))
@@ -299,6 +285,7 @@ def _fix_no_divide_anomalies(
         # Flowpath in 10L with too large of an upstream area within an irigated field
         _traverse_and_aggregate("7262465", result, digraph, node_indices, fp_lookup, div_ids)
         result.independent_flowpaths.add(current_id)
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["7262413"],
             to_process,
@@ -309,14 +296,15 @@ def _fix_no_divide_anomalies(
 
     elif current_id in ["7262801"]:
         # Upstream Flowpaths in 10L with many no divides
-        result.connector_segments.append(current_id)
-
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
+        result.aggregation_pairs.append(("7262727", current_id))
+        result.virtual_flowpath_pairs.append(("7262727", current_id))
         result.non_nextgen_flowpaths.add("7262683")
+        result.non_nextgen_virtual_flowpath_pairs.append(("7262683", "7262727"))
         result.aggregation_pairs.append(("7262727", "7262683"))
         result.aggregation_set.add("7262683")
         result.aggregation_set.add("7262727")
-        result.non_nextgen_virtual_flowpath_pairs.append(("7262683", current_id))
-        result.virtual_flowpath_pairs.append(("7262727", current_id))
+        result.aggregation_set.add(current_id)
 
         result.non_nextgen_flowpaths.add("7262819")
         result.aggregation_pairs.append(("7262819", "7262727"))
@@ -347,6 +335,32 @@ def _fix_no_divide_anomalies(
         )
         return True
 
+    elif current_id in ["7261789"]:
+        # 7261789: upstream Flowpaths in 10L with bad flowpath delination and many non-divide flowpaths
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
+        _traverse_and_mark_as_non_nextgen("7261795", current_id, result, digraph, node_indices)
+        result.aggregation_pairs.append((current_id, "7262239"))
+        result.virtual_flowpath_pairs.append(("7262239", current_id))
+        result.aggregation_pairs.append(("7262239", "7262253"))
+        result.virtual_flowpath_pairs.append(("7262253", "7262239"))
+        result.aggregation_set.add("7262239")
+        result.aggregation_set.add(current_id)
+        result.aggregation_set.add(ds_id)
+        result.aggregation_set.add("7262253")
+
+        _traverse_and_mark_as_non_nextgen("7262255", "7262253", result, digraph, node_indices)
+        result.aggregation_pairs.append(("7262253", "7262291"))
+        result.virtual_flowpath_pairs.append(("7262291", "7262253"))
+        result.aggregation_set.add("7262291")
+
+        _queue_upstream(
+            ["7262417"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
     elif current_id in ["7264167"]:
         # Flowpath in 10L with many flowpaths connected that have no divides. Stream order 3
         result.aggregation_pairs.append((current_id, "7260693"))
@@ -370,6 +384,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_set.add("7264103")
         result.non_nextgen_virtual_flowpath_pairs.append(("7264103", "7260373"))
 
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["7264107"],
             to_process,
@@ -392,6 +407,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_set.add(current_id)
         result.aggregation_set.add("22769244")
         result.virtual_flowpath_pairs.append(("22769244", current_id))
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["22769244"],
             to_process,
@@ -410,6 +426,7 @@ def _fix_no_divide_anomalies(
         # Chain: 7257829 → 7258923 → current_id
         result.virtual_flowpath_pairs.append(("7258923", current_id))
         result.virtual_flowpath_pairs.append(("7257829", "7258923"))
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["7257829"],
             to_process,
@@ -441,6 +458,7 @@ def _fix_no_divide_anomalies(
         _traverse_and_aggregate("19058240", result, digraph, node_indices, fp_lookup, div_ids)
 
         _traverse_and_aggregate("940180111", result, digraph, node_indices, fp_lookup, div_ids)
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         return True
 
     elif current_id in ["21532894"]:
@@ -475,6 +493,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_set.add("21534452")
         result.virtual_flowpath_pairs.append(("21534452", "21532956"))
         result.connector_segments.append("21534452")
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["21534456", "21534462", "21534454"],
             to_process,
@@ -497,8 +516,32 @@ def _fix_no_divide_anomalies(
         result.aggregation_pairs.append((current_id, "12745039"))
         result.aggregation_set.add("12745039")
         result.virtual_flowpath_pairs.append(("12745039", current_id))
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["12745041"],
+            to_process,
+            result.processed_flowpaths,
+            unprocessed_only=True,
+        )
+        return True
+
+    elif current_id in ["3254269"]:
+        # 3254269: VPU 14 flowpath that has multiple no divides associated with a catchment
+        result.aggregation_pairs.append((current_id, ds_id))
+        result.aggregation_set.add(current_id)
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
+        result.aggregation_set.add(ds_id)
+        result.independent_flowpaths.discard(ds_id)
+
+        # _traverse_and_aggregate("3254159", result, digraph, node_indices, fp_lookup, div_ids)
+
+        result.aggregation_pairs.append(("3254167", "3258317"))
+        result.aggregation_set.add("3254167")
+        result.aggregation_set.add("3258317")
+        result.virtual_flowpath_pairs.append(("3254167", "3258317"))
+
+        _queue_upstream(
+            ["3258317", "3254159"],
             to_process,
             result.processed_flowpaths,
             unprocessed_only=True,
@@ -512,6 +555,7 @@ def _fix_no_divide_anomalies(
         result.virtual_flowpath_pairs.append((current_id, "7259909"))
         _traverse_and_mark_as_non_nextgen("7259793", current_id, result, digraph, node_indices)
         _traverse_and_aggregate("7259795", result, digraph, node_indices, fp_lookup, div_ids)
+        # Note: current_id already has virtual_flowpath_pair to "7259909", not ds_id
         return True
 
     elif current_id in ["17493533"]:
@@ -575,6 +619,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_set.add("3022998")
         result.virtual_flowpath_pairs.append(("3022994", "3023012"))
         result.virtual_flowpath_pairs.append(("3022998", "3023012"))
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["3022996", "3022994"],
             to_process,
@@ -590,6 +635,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_pairs.append((current_id, "5353281"))
         result.aggregation_set.add("5353281")
         result.virtual_flowpath_pairs.append(("5353281", current_id))
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _queue_upstream(
             ["5352717"],
             to_process,
@@ -791,7 +837,6 @@ def _trace_stack(
                     else:
                         if current_id not in result.aggregation_set:
                             result.independent_flowpaths.add(current_id)
-                            result.virtual_flowpath_pairs.append((current_id, ds_id))
                 # If no divide and big, still aggregate to avoid orphans
                 else:
                     result.aggregation_pairs.append((current_id, upstream_id))
@@ -823,6 +868,8 @@ def _trace_stack(
                             result.aggregation_set.add(best_upstream["flowpath_id"])
                             result.independent_flowpaths.discard(best_upstream["flowpath_id"])
                         else:
+                            if ds_id in result.connector_segments:
+                                result.connector_segments.remove(ds_id)
                             result.aggregation_pairs.append((current_id, ds_id))
                             result.aggregation_set.add(ds_id)
                             result.independent_flowpaths.discard(ds_id)
@@ -883,6 +930,8 @@ def _trace_stack(
                             cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
                             # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
                             if current_area < 0.005:
+                                if ds_id in result.connector_segments:
+                                    result.connector_segments.remove(ds_id)
                                 result.aggregation_pairs.append((current_id, ds_id))
                                 result.aggregation_set.add(ds_id)
                                 result.independent_flowpaths.discard(ds_id)
@@ -933,6 +982,8 @@ def _trace_stack(
                         # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
                         current_area = fp_info["areasqkm"]
                         if current_area < 0.005:
+                            if ds_id in result.connector_segments:
+                                result.connector_segments.remove(ds_id)
                             result.aggregation_pairs.append((current_id, ds_id))
                             result.aggregation_set.add(current_id)
                             result.aggregation_set.add(ds_id)
@@ -991,6 +1042,8 @@ def _trace_stack(
                 lateral_ids = _get_upstream_ids(ds_id, digraph, node_indices)
                 other_laterals = [lid for lid in lateral_ids if lid != current_id]
                 if len(other_laterals) == 0:
+                    if ds_id in result.connector_segments:
+                        result.connector_segments.remove(ds_id)
                     result.aggregation_pairs.append((current_id, ds_id))
                     result.aggregation_set.add(current_id)
                     result.aggregation_set.add(ds_id)
@@ -1157,6 +1210,8 @@ def _trace_stack(
                         continue
                 else:
                     # This is an awkward connector. Two divides upstream, two downstream, no divide in the flowpath, all upstream are high order
+                    if ds_id in result.connector_segments:
+                        result.connector_segments.remove(ds_id)
                     result.aggregation_pairs.append((current_id, ds_id))
                     result.aggregation_set.add(current_id)
                     result.aggregation_set.add(ds_id)
@@ -1174,10 +1229,8 @@ def _trace_stack(
 
 
 def _trace_single_flowpath_attributes(
-    outlet_fp_id: str,
-    partition_data: dict[str, Any],
-    id_offset: int,
-) -> pl.DataFrame:
+    outlet_fp_id: str, partition_data: dict[str, Any], id_offset: int, hydroseq_offset: int
+) -> tuple[pl.DataFrame, int, int]:
     """Trace flowpath attributes for a single outlet's drainage basin.
 
     Parameters
@@ -1196,7 +1249,7 @@ def _trace_single_flowpath_attributes(
     Returns
     -------
     pl.DataFrame
-        Updated flowpaths with total_da_sqkm, mainstem_lp, path_length, and dn_hydroseq columns
+        Updated flowpaths with total_da_sqkm, mainstem_lp, path_length, dn_hydroseq, hydroseq, and streamorder columns
     """
     basin_graph = partition_data["subgraph"]
     basin_node_indices = partition_data["node_indices"]
@@ -1210,11 +1263,12 @@ def _trace_single_flowpath_attributes(
             "fp_id": fp_id,
             "area_sqkm": fp_lookup[fp_id]["area_sqkm"],
             "length_km": fp_lookup[fp_id]["length_km"],
-            "hydroseq": fp_lookup[fp_id]["hydroseq"],
             "total_da_sqkm": 0.0,
             "mainstem_lp": None,
             "path_length": 0.0,
             "dn_hydroseq": None,
+            "hydroseq": None,
+            "streamorder": None,
         }
 
     outlet_idx = basin_node_indices[outlet_fp_id]
@@ -1227,15 +1281,22 @@ def _trace_single_flowpath_attributes(
 
     # PASS 1: Traverse from OUTLET to ANCESTORS (reverse topo order)
     current_mainstem_id = id_offset
+    current_hydroseq = hydroseq_offset
 
     # Initialize outlet
     basin_graph[outlet_idx]["path_length"] = 0.0
     basin_graph[outlet_idx]["dn_hydroseq"] = 0
+    basin_graph[outlet_idx]["hydroseq"] = current_hydroseq
+    current_hydroseq += 1
 
-    # Calculate path lengths (reverse topo order)
+    # Calculate path lengths and hydroseq (reverse topo order)
     for node_idx in reversed(topo_order):
         if node_idx == outlet_idx:
             continue
+
+        # Assign hydroseq (increases going upstream)
+        basin_graph[node_idx]["hydroseq"] = current_hydroseq
+        current_hydroseq += 1
 
         out_edges = basin_graph.out_edges(node_idx)
 
@@ -1297,7 +1358,7 @@ def _trace_single_flowpath_attributes(
                     key=lambda idx: (basin_graph[idx]["path_length"], basin_graph[idx]["total_da_sqkm"]),
                 )
 
-    # Assign dn_hydroseq based on graph edges
+    # Assign dn_hydroseq based on graph edges (now that hydroseq is calculated)
     for node_idx in basin_graph.node_indices():
         if node_idx == outlet_idx:
             continue
@@ -1340,6 +1401,7 @@ def _trace_single_flowpath_attributes(
     mainstems = []
     path_lengths = []
     dn_hydroseqs = []
+    hydroseqs = []
     streamorders = []
 
     for node_idx in basin_graph.node_indices():
@@ -1349,6 +1411,7 @@ def _trace_single_flowpath_attributes(
         mainstems.append(node_data["mainstem_lp"])
         path_lengths.append(node_data["path_length"])
         dn_hydroseqs.append(node_data["dn_hydroseq"])
+        hydroseqs.append(node_data["hydroseq"])
         streamorders.append(node_data["streamorder"])
 
     traced_df = pl.DataFrame(
@@ -1358,8 +1421,9 @@ def _trace_single_flowpath_attributes(
             "mainstem_lp": mainstems,
             "path_length": path_lengths,
             "dn_hydroseq": dn_hydroseqs,
+            "hydroseq": hydroseqs,
             "streamorder": streamorders,
         }
     )
 
-    return traced_df
+    return traced_df, tributary_offset + 1, current_hydroseq
