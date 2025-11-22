@@ -600,8 +600,8 @@ def _fix_no_divide_anomalies(
 
     elif current_id in ["3023064"]:
         # 10U flowpath that is incorrectly delineated
+        result.virtual_flowpath_pairs.append((current_id, ds_id))
         _traverse_and_mark_as_non_nextgen("3023066", current_id, result, digraph, node_indices)
-        result.virtual_flowpath_pairs.append(("3023066", ds_id))
 
         # Chain: 3023012 → 3023062 → current_id
         result.virtual_flowpath_pairs.append(("3023062", current_id))
@@ -619,7 +619,7 @@ def _fix_no_divide_anomalies(
         result.aggregation_set.add("3022998")
         result.virtual_flowpath_pairs.append(("3022994", "3023012"))
         result.virtual_flowpath_pairs.append(("3022998", "3023012"))
-        result.virtual_flowpath_pairs.append((current_id, ds_id))
+
         _queue_upstream(
             ["3022996", "3022994"],
             to_process,
@@ -926,23 +926,42 @@ def _trace_stack(
                             continue
                         else:  # one higher order, one order 1 stream. 2 total upstream
                             higher_order_ids = [info["flowpath_id"] for info in higher_order_upstreams]
+                            higher_order_id = higher_order_upstreams[0]["flowpath_id"]
+                            order_1_id = order_1_upstreams[0]["flowpath_id"]
                             current_area = fp_info["areasqkm"]
                             cumulative = updated_cumulative_areas.get(current_id, 0.0) + current_area
                             # If the drainage area is nothing, we have a BAD reference line. This should be aggregated downstream
                             if current_area < 0.005:
-                                if ds_id in result.connector_segments:
-                                    result.connector_segments.remove(ds_id)
-                                result.aggregation_pairs.append((current_id, ds_id))
-                                result.aggregation_set.add(ds_id)
-                                result.independent_flowpaths.discard(ds_id)
-                                result.aggregation_set.add(current_id)
-                                result.virtual_flowpath_pairs.append((current_id, ds_id))
-                                _queue_upstream(
-                                    upstream_ids,
-                                    to_process,
-                                    result.processed_flowpaths,
-                                    unprocessed_only=True,
-                                )
+                                if ds_id == "0":
+                                    result.aggregation_pairs.append((current_id, higher_order_id))
+                                    result.aggregation_set.add(higher_order_id)
+                                    result.independent_flowpaths.discard(higher_order_id)
+                                    result.aggregation_set.add(current_id)
+                                    result.virtual_flowpath_pairs.append((current_id, higher_order_id))
+                                    _traverse_and_mark_as_non_nextgen(
+                                        order_1_id, current_id, result, digraph, node_indices
+                                    )
+                                    _queue_upstream(
+                                        [higher_order_id],
+                                        to_process,
+                                        result.processed_flowpaths,
+                                        unprocessed_only=True,
+                                    )
+                                    continue
+                                else:
+                                    if ds_id in result.connector_segments:
+                                        result.connector_segments.remove(ds_id)
+                                    result.aggregation_pairs.append((current_id, ds_id))
+                                    result.aggregation_set.add(ds_id)
+                                    result.independent_flowpaths.discard(ds_id)
+                                    result.aggregation_set.add(current_id)
+                                    result.virtual_flowpath_pairs.append((current_id, ds_id))
+                                    _queue_upstream(
+                                        upstream_ids,
+                                        to_process,
+                                        result.processed_flowpaths,
+                                        unprocessed_only=True,
+                                    )
                                 continue
                             elif cumulative < cfg.build.divide_aggregation_threshold:
                                 result.aggregation_pairs.append(

@@ -1,6 +1,6 @@
 # main
 
-output_name: "hydrofabric_test.gpkg" # If not specified, will default to version
+# output_name: "hydrofabric.gpkg" # If not specified, will default to version
 output_dir: "data/"
 crs: "EPSG:5070"
 
@@ -8,7 +8,7 @@ crs: "EPSG:5070"
 build:
   reference_divides_path: data/reference_divides.parquet
   reference_flowpaths_path: data/reference_flowpaths.parquet
-  debug_outlet_count: 2000
+  # debug_outlet_count: 2000 # If specified, only the total amount of rivers here will be built
   divide_aggregation_threshold: 3.0
 
 # choose tasks to run
