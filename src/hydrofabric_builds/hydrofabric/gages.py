@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig
-from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import run_assignment
+from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import _crosswalk_fp_id, run_assignment
 from hydrofabric_builds.streamflow_gauges.NLDI_upstream_area_builder import (
     attach_nldi_cache,
     build_nldi_cache,
@@ -185,14 +186,14 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     # 8) Assign flowpath to gages
     # ---------------------------------------------------------------------
-    hf_path = cfg.output_dir / cfg.output_name
     buffer_gage = gage_cfg.assign_fp_to_gages.buffer_m
     parallel = gage_cfg.assign_fp_to_gages.parallel
     max_workers = gage_cfg.assign_fp_to_gages.max_workers
     gages = run_assignment(
         gages=gages,
-        flowpaths_path=hf_path,
-        flowpaths_layer="flowpaths",
+        flowpaths_path=Path(cfg.build.reference_flowpaths_path),
+        flowpaths_layer="reference_flowpaths",
+        flow_id_col="flowpath_id",
         buffer_m=buffer_gage,
         work_crs=gage_cfg.assign_fp_to_gages.work_crs,
         parallel=parallel,  ### serial or parallel
@@ -202,14 +203,19 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     # 9) drop the columns we don't need
     # ---------------------------------------------------------------------
-    keep_cols = ["site_no", "geometry", "status", "USGS_basin_km2", "fp_id", "method_fp_to_gage"]
+    keep_cols = ["site_no", "geometry", "status", "USGS_basin_km2", "ref_fp_id", "method_fp_to_gage"]
     gages = gages[keep_cols]
     # removing the gages that don't have flowpaths
-    gages = gages.loc[gages["fp_id"] == gages["fp_id"]].reset_index(drop=True)
-    gages["fp_id"] = pd.to_numeric(gages["fp_id"])
+    gages = gages.loc[gages["ref_fp_id"] == gages["ref_fp_id"]].reset_index(drop=True)
+    gages["ref_fp_id"] = pd.to_numeric(gages["ref_fp_id"])
 
     # ---------------------------------------------------------------------
-    # 10) Write final output and return
+    # 10) Crosswalk ref_fp_id to fp_id
+    # ---------------------------------------------------------------------
+    gages = _crosswalk_fp_id(gages, cfg.output_file_path)
+
+    # ---------------------------------------------------------------------
+    # 11) Write final output and return
     # ---------------------------------------------------------------------
     output = cfg.output_dir / gage_cfg.gages.target.out_gpkg
     gpkg_layer_name = gage_cfg.gages.target.gpkg_layer_name

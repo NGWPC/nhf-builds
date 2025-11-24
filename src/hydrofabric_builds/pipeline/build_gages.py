@@ -27,13 +27,8 @@ def build_gages(**context: dict[str, Any]) -> dict[str, Any]:
 
     gage_file = cfg.output_dir / cfg.gages.gages.target.out_gpkg
 
-    if not gage_file.exists():
-        logger.info(f"gages file not found at {gage_file}. Running gage pipeline.")
-        gage_pipeline(cfg)
+    gage_pipeline(cfg)
 
-        assert gage_file.exists(), "gage pipeline was run, but output file not found"
-
-        logger.info(f"gage file created: {gage_file}.")
     gdf = gpd.read_file(gage_file)
     gdf.to_file(cfg.output_file_path, layer="gages", driver="GPKG", overwrite=True)
     logger.info("Saved gages layer.")

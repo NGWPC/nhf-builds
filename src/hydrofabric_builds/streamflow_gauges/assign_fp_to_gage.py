@@ -21,6 +21,7 @@ def _prepare_tasks(
     gages: gpd.GeoDataFrame,
     flowpaths_path: Path,
     flowpaths_layer: str,
+    flow_id_col: str,
     buffer_m: float | int,
     work_crs: str,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, pd.DataFrame]:
@@ -44,7 +45,11 @@ def _prepare_tasks(
             hits: flowpath intersections
     """
     # Flowpaths → WORK_CRS
-    flowpaths = gpd.read_file(flowpaths_path, layer=flowpaths_layer)
+    flowpaths = (
+        gpd.read_parquet(flowpaths_path)
+        if "parquet" in flowpaths_path.name
+        else gpd.read_file(flowpaths_path, layer=flowpaths_layer)
+    )
     if not flowpaths.crs:
         raise ValueError("flowpaths GeoDataFrame must have a valid CRS.")
     to_work = work_crs if flowpaths.crs.to_string().upper() != work_crs else flowpaths.crs
@@ -69,13 +74,16 @@ def _prepare_tasks(
 
     # slim hits
     if "total_da_sqkm" not in hits_gdf.columns:
-        raise ValueError("'total_da_sqkm' missing from flowpaths; adjust code/column.")
+        try:
+            hits_gdf = hits_gdf.rename(columns={"totdasqkm": "total_da_sqkm"})
+        except Exception as e:
+            raise ValueError("'total_da_sqkm' missing from flowpaths; adjust code/column.") from e
     hits = hits_gdf[["__gage_row__", "__fp_row__", "total_da_sqkm"]].copy()
 
     # Output frame gets result columns (do NOT overwrite pre-attached USGS_basin_km2)
     out = g4326.copy()
-    if "fp_id" not in out.columns:
-        out["fp_id"] = None
+    if flow_id_col not in out.columns:
+        out[flow_id_col] = None
     if "method_fp_to_gage" not in out.columns:
         out["method_fp_to_gage"] = None
 
@@ -127,7 +135,7 @@ def _vectorized_nearest_fallback(
     fwd: gpd.GeoDataFrame,  # flowpaths in WORK_CRS, has geometry + fp_id
     gages_w: gpd.GeoDataFrame,  # gages in WORK_CRS, has geometry
     hits: pd.DataFrame,  # __gage_row__, __fp_row__
-    flow_id_col: str = "fp_id",
+    flow_id_col: str,
 ) -> pd.Series:
     """
     For each unresolved gage row, pick fp with smallest distance to the gage point.
@@ -170,6 +178,7 @@ def _assign_batch_vectorized(
     fwd: gpd.GeoDataFrame,
     gages_w: gpd.GeoDataFrame,
     hits: pd.DataFrame,
+    flow_id_col: str,
     tol: float = 0.15,
 ) -> gpd.GeoDataFrame:
     """
@@ -192,20 +201,43 @@ def _assign_batch_vectorized(
     mask_have = best_fp_row.notna()
     if mask_have.any():
         chosen_rows = best_fp_row[mask_have].astype(int).values
-        chosen_ids = fwd.iloc[chosen_rows]["fp_id"].astype(str).values
-        out.loc[mask_have, "fp_id"] = chosen_ids
+        chosen_ids = fwd.iloc[chosen_rows][flow_id_col].astype(str).values
+        out.loc[mask_have, flow_id_col] = chosen_ids
         out.loc[mask_have, "method_fp_to_gage"] = "nldi_area"
 
     # Nearest fallback for unresolved gages
-    unresolved = out.index[out["fp_id"].isna()].to_numpy()
+    unresolved = out.index[out[flow_id_col].isna()].to_numpy()
     if unresolved.size:
-        nearest_ids = _vectorized_nearest_fallback(unresolved, fwd, gages_w, hits, flow_id_col="fp_id")
+        nearest_ids = _vectorized_nearest_fallback(unresolved, fwd, gages_w, hits, flow_id_col=flow_id_col)
         mask_near = nearest_ids.notna()
         if mask_near.any():
-            out.loc[nearest_ids.index[mask_near], "fp_id"] = nearest_ids[mask_near].astype(str).values
+            out.loc[nearest_ids.index[mask_near], flow_id_col] = nearest_ids[mask_near].astype(str).values
             out.loc[nearest_ids.index[mask_near], "method_fp_to_gage"] = "nearest_fp"
 
+    out = out.rename(columns={flow_id_col: "ref_fp_id"})
     return out
+
+
+def _crosswalk_fp_id(gdf_gages: gpd.GeoDataFrame, hf_path: Path) -> gpd.GeoDataFrame:
+    """Cross walk gages from ref flowpaths to NHF flowpaths
+
+    Parameters
+    ----------
+    gdf_gages : gpd.GeoDataFrame
+        gages
+    hf_path : Path
+        hydrofabric
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        gages with fp_id and virtual_fp_id
+    """
+    hf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
+    gdf_gages = gdf_gages.merge(hf_ref[["ref_fp_id", "fp_id", "virtual_fp_id"]], on="ref_fp_id", how="left")
+    gdf_gages = gdf_gages.loc[(~gdf_gages["fp_id"].isnull() | ~gdf_gages["virtual_fp_id"].isnull()), :].copy()
+    del hf_ref
+    return gdf_gages
 
 
 # ---------------------------
@@ -215,6 +247,7 @@ def run_assignment(
     gages: gpd.GeoDataFrame,
     flowpaths_path: Path,
     flowpaths_layer: str = "reference_flowpaths",
+    flow_id_col: str = "flowpath_id",
     buffer_m: float | int = 500.0,
     work_crs: str = "EPSG:5070",
     parallel: bool = False,
@@ -240,10 +273,12 @@ def run_assignment(
     :param tol: tolerance for comparing USGS API area and total_da_sqkm
     :return: gages geoFataFrame
     """
-    out, fwd, gages_w, hits = _prepare_tasks(gages, flowpaths_path, flowpaths_layer, buffer_m, work_crs)
+    out, fwd, gages_w, hits = _prepare_tasks(
+        gages, flowpaths_path, flowpaths_layer, flow_id_col, buffer_m, work_crs
+    )
 
     if not parallel:
-        return _assign_batch_vectorized(out, fwd, gages_w, hits, tol=tol)
+        return _assign_batch_vectorized(out, fwd, gages_w, hits, flow_id_col, tol=tol)
 
     # parallel: chunk gages, shared hits accordingly
     nproc = max_workers or max(1, os.cpu_count() or 1)
@@ -260,7 +295,7 @@ def run_assignment(
         gages_w_sub.index = out_sub.index
         hits_sub["__gage_row__"] = hits_sub["__gage_row__"].map(remap)
 
-        res = _assign_batch_vectorized(out_sub, fwd, gages_w_sub, hits_sub, tol=tol)
+        res = _assign_batch_vectorized(out_sub, fwd, gages_w_sub, hits_sub, flow_id_col, tol=tol)
         # map back
         res.index = np.array(list(remap.keys()))
         return res
