@@ -74,7 +74,7 @@ def flowpath_attributes_dummy_gpkg(flowpath_attributes_model_cfg: FlowpathAttrib
     g3 = LineString([(1, 1), (-2, 1)])
     g4 = MultiLineString([[(0, -3.5), (0, -1)], [(0, -1.5), (-1, -1)]])
 
-    data = {"fp_id": [1, 2, 3, 4], "streamorder": [1, 2, 3, 3]}
+    data = {"fp_id": [1, 2, 3, 4], "stream_order": [1, 2, 3, 3]}
     geometry = [g1, g2, g3, g4]
     gdf = gpd.GeoDataFrame(data=data, geometry=geometry, crs=4326)
 
@@ -124,7 +124,7 @@ def flowpath_attributes_base_polars_df(flowpath_attributes_dummy_gpkg: Path) -> 
     """Base polars df created in flowpath attributes"""
     gdf = gpd.read_file(flowpath_attributes_dummy_gpkg, layer="flowpaths")
 
-    df = pl.from_pandas(gdf[["fp_id", "streamorder"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
         pl.lit(None).alias("ncc"),
@@ -145,7 +145,7 @@ def flowpath_attributes_riverml_values(
     """Results from riverml join"""
     gdf = gpd.read_file(flowpath_attributes_model_cfg.hf_path, layer="flowpaths")
 
-    df = pl.from_pandas(gdf[["fp_id", "streamorder"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
         pl.lit(None).alias("ncc"),
@@ -184,7 +184,7 @@ def flowpath_attributes_output() -> gpd.GeoDataFrame:
     """Full flowpath attributes output geometry"""
     data = {
         "fp_id": [1, 2, 3, 4],
-        "streamorder": [1, 2, 3, 3],
+        "stream_order": [1, 2, 3, 3],
         "mean_elevation": [(2 + 3) / 2, (1 + 3) / 2, (1 + 1) / 2, (2 + 2 + 2 + 3) / 4],
         "slope": [abs((3 - 2) / 3), abs((1 - 3) / 6.082763), 1e-4, abs((3 - 2) / 2.5)],
         "n": [0.096, 0.076, 0.060, 0.060],
@@ -238,8 +238,8 @@ class TestFlowpathAttributesSchemas:
 
     def test_flowpath_attributes_config__stream_order(self) -> None:
         """Flowpath Attributes Config using stream order derived variables"""
-        cfg = FlowpathAttributesConfig(use_stream_order=True, streamorder=1)
-        assert cfg.streamorder == 1
+        cfg = FlowpathAttributesConfig(use_stream_order=True, stream_order=1)
+        assert cfg.stream_order == 1
         assert cfg.n == 0.096
         assert cfg.chslp == 0.03
         assert cfg.btmwdth == 1.6
@@ -255,7 +255,7 @@ class TestFlowpathAttributesSchemas:
     def test_flowpath_attributes_config__defaults(self) -> None:
         """Flowpath Attributes Config not using stream order derived variables (defaults)"""
         cfg = FlowpathAttributesConfig(use_stream_order=False)
-        assert cfg.streamorder is None
+        assert cfg.stream_order is None
         assert cfg.n == 0.035
         assert cfg.chslp == 0.05
         assert cfg.btmwdth == 5
@@ -271,9 +271,9 @@ class TestFlowpathAttributesSchemas:
     def test_flowpath_attributes_config__complete(self) -> None:
         """Flowpath Attributes Config with all fields filled out"""
         cfg = FlowpathAttributesConfig(
-            use_stream_order=True, streamorder=1, y=1, topwdth=2, mean_elevation=3, slope=0.05
+            use_stream_order=True, stream_order=1, y=1, topwdth=2, mean_elevation=3, slope=0.05
         )
-        assert cfg.streamorder == 1
+        assert cfg.stream_order == 1
         assert cfg.n == 0.096
         assert cfg.chslp == 0.03
         assert cfg.btmwdth == 1.6

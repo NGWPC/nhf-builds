@@ -180,7 +180,7 @@ def _create_base_polars(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     pl.DataFrame
         Flowpaths polars dataframe
     """
-    df = pl.from_pandas(gdf[["fp_id", "streamorder"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
         pl.lit(None).alias("ncc"),
@@ -273,14 +273,14 @@ def _other_flowpath_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.
     for row in df.iter_rows(named=True):
         model = FlowpathAttributesConfig(
             use_stream_order=model_cfg.use_stream_order,
-            streamorder=row["streamorder"],
+            stream_order=row["stream_order"],
             topwdth=row["topwdth"],
             y=row["y"],
         )
         # exclude attributes already calculated
         models.append(
             model.model_dump(
-                exclude=["use_stream_order", "streamorder", "y", "topwdth", "mean_elevation", "slope"]
+                exclude=["use_stream_order", "stream_order", "y", "topwdth", "mean_elevation", "slope"]
             )
         )
 
@@ -305,7 +305,7 @@ def _write_output(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFram
         Polars dataframe populated with new variables
     """
     # drop stream order for single join field
-    df_pd = gpd.GeoDataFrame(df.drop("streamorder").to_pandas())
+    df_pd = gpd.GeoDataFrame(df.drop("stream_order").to_pandas())
     gdf = gdf.merge(df_pd, on="fp_id")
 
     gdf.to_file(model_cfg.hf_path, layer="flowpaths", driver="GPKG", overwrite=True)

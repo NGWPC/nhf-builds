@@ -485,7 +485,7 @@ class FlowpathAttributesConfig(BaseModel):
         description="Setting to use stream order to calculate Manning's n (n), Bottom Width (BtmWdth), and Channel side slope (ChSlp). When true, calculate these attributes from stream order. When false, use defaults.",
         default=True,
     )
-    streamorder: int | None = Field(
+    stream_order: int | None = Field(
         None, title="Strahler Stream Order", description="Strahler Stream Order 1-10"
     )
     y: float | None = Field(
@@ -548,14 +548,14 @@ class FlowpathAttributesConfig(BaseModel):
     @model_validator(mode="after")
     def stream_order_classify(self: Any) -> Any:
         """Model validator derive variables from stream order"""
-        if self.use_stream_order and self.streamorder:
+        if self.use_stream_order and self.stream_order:
             for field, func in zip(
                 ["n", "chslp", "btmwdth"],
                 [StreamOrder.n, StreamOrder.chsslp, StreamOrder.bw],
                 strict=False,
             ):
                 try:
-                    setattr(self, field, func()[self.streamorder])
+                    setattr(self, field, func()[self.stream_order])
                 except KeyError:
                     continue
 

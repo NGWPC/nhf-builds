@@ -1441,7 +1441,7 @@ def _trace_single_flowpath_attributes(
             "path_length": path_lengths,
             "dn_hydroseq": dn_hydroseqs,
             "hydroseq": hydroseqs,
-            "streamorder": streamorders,
+            "stream_order": streamorders,
         }
     )
 
