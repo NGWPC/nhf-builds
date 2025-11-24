@@ -57,7 +57,7 @@ divide_attributes:
     psisat:
       file_name: 'nwm/psisat_0.tif'
       agg_type: 'weighted_geometric_mean'
-      field_name: 'psisat_geommean'
+      field_name: 'psisat_geomean'
     cwpvt:
       file_name: 'nwm/cwpvt.tif'
       agg_type: 'mean'
