@@ -24,26 +24,31 @@ Docs will be spun up at localhost:8080/
 
 The following schema is the proposed data model for NGWPC hydrofabric datasets produced by this repo.
 
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/schema_v1.png" alt="schema_v1" width="75%" height="75%"/>
+<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/schema_v2.png" alt="schema_v2" width="100%" height="100%"/>
 
 ##### Flowpaths FACT Table
 
 The central table (or FACT Table) is `Flowpaths`. Each `flowpath` has a downstream, and upstream `nexus` point, allowing for traversal of a river network through a single table. Additionally, there is a 1:1 relationship between `flowpath` and `divide`.
 
-##### NGEN Schema
+##### NGEN Tables
 
 The tables highlighted in green are the infomation needed for lumped modeling to take place. Lumped models require attributes, the shape of the `divide` that is being modeled, and a `nexus` point for flow to be aggregated to.
 
-##### Routing Schema
+##### Routing Tables
 
-The tables highlighted in yellow are the information needed for routing at a high resolution. T-Route is expected to run at a fine-scale (~300m segments) with many `virtual_flowpaths`. There should be a many -> one relationship between `virtual_flowpaths` and `flowpaths`, with some `virtual flowpaths` not being represented in the `flowpaths` table. These non-represented `flowpaths` are not routed on, but used in post-processing.
+The tables highlighted in blue contain the information needed for routing at a high resolution. T-Route is expected to run at a fine-scale (~300m segments) with many `virtual_flowpaths`. Each virtual flowpath is delineated based on the reference fabric, and there should be a many -> one relationship between `virtual_flowpaths` and `flowpaths`, with some `virtual flowpaths` not being represented in the `flowpaths` table. These non-represented `flowpaths` have the parameter of `routing_segment` set to False, and will have flow estimated through flow-scaling.
 
 ##### Reference Crosswalks
 
 The NGWPC Hydrofabric is build using many reference materials:
 - Reference Flowpaths
 - Reference Reservoirs
-- Reference POIs
-- NHD+ COMIDs
+- USGS/ENVCA/CADWR/TXDOT Streamflow Gages
+- NHD+
 
-To ensure `flowpaths` can be mapped to back to the materials that created them, each of the reference materials is mapped to `flowpaths`, `hydrolocations`, and `virtual flowpaths`.
+To ensure `flowpaths` can be mapped to back to the materials that created them, each of the reference materials is mapped to `flowpaths`, `hydrolocations`, and `virtual flowpaths`. The following IDs pairings are used:
+
+- Reference Flowpaths -> `ref_fp_id`
+- Reference Reservoirs -> `dam_id`
+- USGS/ENVCA/CADWR/TXDOT Streamflow Gages -> `site_no`
+- NHD+ -> `COMID`
