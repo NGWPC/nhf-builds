@@ -213,6 +213,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     output = cfg.output_dir / gage_cfg.gages.target.out_gpkg
     gpkg_layer_name = gage_cfg.gages.target.gpkg_layer_name
+    gages = gages.to_crs(gage_cfg.gages.target.crs)
     gages.to_file(output, layer=gpkg_layer_name, driver="GPKG", overwrite=True)
     logger.info(f"Saved gages layer to {output}")
     return gages
