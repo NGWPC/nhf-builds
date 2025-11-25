@@ -42,7 +42,6 @@ def _order_aggregates_base(
             "hydroseq": unit["hydroseq"],
             "length_km": unit["length_km"],
             "area_sqkm": unit["area_sqkm"],
-            "div_area_sqkm": unit["div_area_sqkm"],
             "up_id": str(unit["up_id"]),
             "dn_id": str(unit["dn_id"]),
             "all_ref_ids": [str(rid) for rid in unit["ref_ids"]],  # Store all ref_ids
@@ -63,7 +62,6 @@ def _order_aggregates_base(
             "hydroseq": unit["hydroseq"],
             "length_km": unit["length_km"],
             "area_sqkm": unit["area_sqkm"],
-            "div_area_sqkm": unit["div_area_sqkm"],
             "all_ref_ids": [ref_id],
         }
 
@@ -80,7 +78,6 @@ def _order_aggregates_base(
             "hydroseq": unit["hydroseq"],
             "length_km": unit["length_km"],
             "area_sqkm": unit["area_sqkm"],
-            "div_area_sqkm": unit["div_area_sqkm"],
             "all_ref_ids": [ref_id],
         }
         ref_id_to_percentage = unit.get("ref_id_to_percentage", {})
@@ -323,7 +320,7 @@ def _build_hydrofabric(
                 "div_id": int(unit_id),
                 "vpu_id": unit["vpu_id"],
                 "type": unit_type,
-                "area_sqkm": unit["div_area_sqkm"],
+                "area_sqkm": unit["area_sqkm"],
                 "geometry": polygon_geom,
             }
         )
