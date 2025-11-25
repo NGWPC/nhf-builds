@@ -28,6 +28,7 @@ flowpath_attributes:
   dem_path: data/divide_attributes/usgs/usgs_250m_dem_5070.tif
   tw_path: data/TW_bf_predictions.parquet
   y_path: data/Y_bf_predictions.parquet
+  r_path: data/r_predictions.parquet
 
 # divide attributes
 divide_attributes:

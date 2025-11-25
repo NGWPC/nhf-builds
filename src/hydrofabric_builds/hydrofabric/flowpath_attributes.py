@@ -180,22 +180,26 @@ def _create_base_polars(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     pl.DataFrame
         Flowpaths polars dataframe
     """
-    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order", "total_da_sqkm"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
+        pl.lit(None).alias("r"),
+        pl.lit(None).alias("y"),
         pl.lit(None).alias("ncc"),
         pl.lit(None).alias("btmwdth"),
         pl.lit(None).alias("chslp"),
         pl.lit(None).alias("musx"),
         pl.lit(None).alias("musk"),
+        pl.lit(None).alias("topwdth"),
         pl.lit(None).alias("topwdthcc"),
+        pl.lit(None).alias("topwdthcc_ml"),
     )
 
     return df
 
 
 def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFrame) -> pl.DataFrame:
-    """Retrieve riverml attributes (y and topwidth) from prediction parquets and join to df
+    """Retrieve riverml attributes (y, r, topwidth) from prediction parquets and join to df
 
     Parameters
     ----------
@@ -217,21 +221,27 @@ def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFra
     df_refj = df.join(df_ref, on="fp_id", how="left")
 
     # tw and y
-    df_tw = pl.read_parquet(model_cfg.tw_path).rename({"FEATUREID": "ref_fp_id", "prediction": "topwdth"})
-    df_y = pl.read_parquet(model_cfg.y_path).rename({"FEATUREID": "ref_fp_id", "prediction": "y"})
+    df_tw = pl.read_parquet(model_cfg.tw_path).rename({"FEATUREID": "ref_fp_id", "prediction": "topwdth_ml"})
+    df_y = pl.read_parquet(model_cfg.y_path).rename({"FEATUREID": "ref_fp_id", "prediction": "y_ml"})
+    df_r = pl.read_parquet(model_cfg.r_path).rename({"FEATUREID": "ref_fp_id", "prediction": "r_ml"})
 
     # join predictions to fp with ref fp and calculate mean for fp_id (multiple ref_fp_id)
     df_tmp = df_refj.join(df_tw, on="ref_fp_id", how="full")
-    df_meantw = df_tmp[["fp_id", "topwdth"]].group_by("fp_id").mean()
+    df_meantw = df_tmp[["fp_id", "topwdth_ml"]].group_by("fp_id").mean()
     del df_tmp
 
     df_tmp = df_refj.join(df_y, on="ref_fp_id", how="full")
-    df_meany = df_tmp[["fp_id", "y"]].group_by("fp_id").mean()
+    df_meany = df_tmp[["fp_id", "y_ml"]].group_by("fp_id").mean()
+    del df_tmp
+
+    df_tmp = df_refj.join(df_r, on="ref_fp_id", how="full")
+    df_meanr = df_tmp[["fp_id", "r_ml"]].group_by("fp_id").mean()
     del df_tmp
 
     # join back to original fp_id df
     df = df.join(df_meantw, on="fp_id", how="left")
     df = df.join(df_meany, on="fp_id", how="left")
+    df = df.join(df_meanr, on="fp_id", how="left")
 
     del df_ref, df_refj
 
@@ -246,6 +256,7 @@ def _other_flowpath_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.
     - ncc
     - btmwdth
     - topwdthcc
+    - topwdth (non-ML)
     - chslp
     - musx
     - musk
@@ -274,13 +285,14 @@ def _other_flowpath_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.
         model = FlowpathAttributesConfig(
             use_stream_order=model_cfg.use_stream_order,
             stream_order=row["stream_order"],
-            topwdth=row["topwdth"],
+            topwdth_ml=row["topwdth_ml"],
             y=row["y"],
+            total_da_sqkm=row["total_da_sqkm"],
         )
         # exclude attributes already calculated
         models.append(
             model.model_dump(
-                exclude=["use_stream_order", "stream_order", "y", "topwdth", "mean_elevation", "slope"]
+                exclude=["use_stream_order", "stream_order", "mean_elevation", "slope", "total_da_sqkm"]
             )
         )
 
@@ -305,7 +317,7 @@ def _write_output(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFram
         Polars dataframe populated with new variables
     """
     # drop stream order for single join field
-    df_pd = gpd.GeoDataFrame(df.drop("stream_order").to_pandas())
+    df_pd = gpd.GeoDataFrame(df.drop(["stream_order", "total_da_sqkm"]).to_pandas())
     gdf = gdf.merge(df_pd, on="fp_id")
 
     gdf.to_file(model_cfg.hf_path, layer="flowpaths", driver="GPKG", overwrite=True)

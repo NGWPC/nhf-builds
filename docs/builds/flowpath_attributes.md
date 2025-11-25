@@ -8,6 +8,7 @@ The flowpath attributes task calculates metrics per flowpath linestring from mul
 - DEM 250 m: s3://edfs-data/attributes/5070/usgs/usgs_250m_dem_5070.tif * TBD: Change to higher resolution
 - RiverML Y: s3://edfs-data/reference/super_conus/Y_bf_predictions.parquet
 - RiverML TW: s3://edfs-data/reference/super_conus/TW_bf_predictions.parquet
+- RiverML r: s3://edfs-data/reference/super_conus/r_predictions.parquet
 
 Save to this `data` folder in this repo. `aws cp [file] [location]` can be used
 
@@ -20,6 +21,7 @@ Save to this `data` folder in this repo. `aws cp [file] [location]` can be used
      - `dem_path`: Path to DEM, defaut to `data/usgs_250m_dem_5070.tif`. * TBD: Change to higher resolution
      - `tw_path`: Path to topwdth parquet, default to `data/TW_bf_predictions.parquet`.
      - `y_path`: Path to y parquet, default to `data/Y_bf_predictions.parquet`.
+     - `r_path`: Path to r parquet, default to `data/r_predictions.parquet`.
 
 3. Run via HF pipeline
 

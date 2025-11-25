@@ -30,6 +30,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
 @pytest.fixture
 def flowpath_attributes_model_cfg() -> Path:
     data_dir = here() / "tests/data/flowpath_attributes"
+    data_dir.mkdir(exist_ok=True)
     return FlowpathAttributesModelConfig(
         hf_path=data_dir / "sample_fp_tmp.gpkg",
         flowpath_id="fp_id",
@@ -37,6 +38,7 @@ def flowpath_attributes_model_cfg() -> Path:
         dem_path=data_dir / "sample_dem.tif",
         tw_path=data_dir / "sample_tw.parquet",
         y_path=data_dir / "sample_y.parquet",
+        r_path=data_dir / "sample_r.parquet",
         output=data_dir / "output_test.gpkg",
     )
 
@@ -74,7 +76,7 @@ def flowpath_attributes_dummy_gpkg(flowpath_attributes_model_cfg: FlowpathAttrib
     g3 = LineString([(1, 1), (-2, 1)])
     g4 = MultiLineString([[(0, -3.5), (0, -1)], [(0, -1.5), (-1, -1)]])
 
-    data = {"fp_id": [1, 2, 3, 4], "stream_order": [1, 2, 3, 3]}
+    data = {"fp_id": [1, 2, 3, 4], "stream_order": [1, 2, 3, 3], "total_da_sqkm": [1, 2, 3, 4]}
     geometry = [g1, g2, g3, g4]
     gdf = gpd.GeoDataFrame(data=data, geometry=geometry, crs=4326)
 
@@ -107,6 +109,7 @@ def flowpath_attributes_riverml_parquets(
     """Sample parquets for riverml outputs"""
     y = flowpath_attributes_model_cfg.y_path
     tw = flowpath_attributes_model_cfg.tw_path
+    r = flowpath_attributes_model_cfg.r_path
 
     if not y.exists():
         df = pd.DataFrame(data={"FEATUREID": [600, 700, 800, 900], "prediction": [0.1, 0.4, 0.3, 0.5]})
@@ -116,7 +119,11 @@ def flowpath_attributes_riverml_parquets(
         df = pd.DataFrame(data={"FEATUREID": [600, 700, 800, 900], "prediction": [15.0, 14.0, 13.0, 11.0]})
         df.to_parquet(tw, index=False)
 
-    return {"y": y, "tw": tw}
+    if not r.exists():
+        df = pd.DataFrame(data={"FEATUREID": [600, 700, 800, 900], "prediction": [2.5, 1.5, 1.0, 2.0]})
+        df.to_parquet(r, index=False)
+
+    return {"y": y, "tw": tw, "r": r}
 
 
 @pytest.fixture
@@ -124,15 +131,19 @@ def flowpath_attributes_base_polars_df(flowpath_attributes_dummy_gpkg: Path) -> 
     """Base polars df created in flowpath attributes"""
     gdf = gpd.read_file(flowpath_attributes_dummy_gpkg, layer="flowpaths")
 
-    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order", "total_da_sqkm"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
+        pl.lit(None).alias("r"),
+        pl.lit(None).alias("y"),
         pl.lit(None).alias("ncc"),
         pl.lit(None).alias("btmwdth"),
         pl.lit(None).alias("chslp"),
         pl.lit(None).alias("musx"),
         pl.lit(None).alias("musk"),
+        pl.lit(None).alias("topwdth"),
         pl.lit(None).alias("topwdthcc"),
+        pl.lit(None).alias("topwdthcc_ml"),
     )
 
     return df
@@ -145,17 +156,22 @@ def flowpath_attributes_riverml_values(
     """Results from riverml join"""
     gdf = gpd.read_file(flowpath_attributes_model_cfg.hf_path, layer="flowpaths")
 
-    df = pl.from_pandas(gdf[["fp_id", "stream_order"]])
+    df = pl.from_pandas(gdf[["fp_id", "stream_order", "total_da_sqkm"]])
     df = df.with_columns(
         pl.lit(None).alias("n"),
+        pl.lit(None).alias("r"),
+        pl.lit(None).alias("y"),
         pl.lit(None).alias("ncc"),
         pl.lit(None).alias("btmwdth"),
         pl.lit(None).alias("chslp"),
         pl.lit(None).alias("musx"),
         pl.lit(None).alias("musk"),
+        pl.lit(None).alias("topwdth"),
         pl.lit(None).alias("topwdthcc"),
-        pl.Series([11.0, 13.0, 14.0, 15.0]).alias("topwdth"),
-        pl.Series([0.5, 0.3, 0.4, 0.1]).alias("y"),
+        pl.lit(None).alias("topwdthcc_ml"),
+        pl.Series([11.0, 13.0, 14.0, 15.0]).alias("topwdth_ml"),
+        pl.Series([0.5, 0.3, 0.4, 0.1]).alias("y_ml"),
+        pl.Series([2.0, 1.0, 1.5, 2.5]).alias("r_ml"),
     )
 
     return df
@@ -172,9 +188,20 @@ def flowpath_attributes_other_values(flowpath_attributes_base_polars_df: pl.Data
         pl.Series([0.03, 0.03, 0.03, 0.03]).alias("chslp"),
         pl.Series([0.2, 0.2, 0.2, 0.2]).alias("musx"),
         pl.Series([3600, 3600, 3600, 3600]).alias("musk"),
-        pl.Series([33.0, 39.0, 42.0, 45.0]).alias("topwdthcc"),
-        pl.Series([11.0, 13.0, 14.0, 15.0]).alias("topwdth"),
-        pl.Series([0.5, 0.3, 0.4, 0.1]).alias("y"),
+        pl.Series([33.0, 39.0, 42.0, 45.0]).alias("topwdthcc_ml"),
+        pl.Series([11.0, 13.0, 14.0, 15.0]).alias("topwdth_ml"),
+        pl.Series([0.5, 0.3, 0.4, 0.1]).alias("y_ml"),
+        pl.Series([7.32, 9.265338, 10.634873, 11.727663]).alias("topwdthcc"),
+        pl.Series([2.0, 1.0, 1.5, 2.5]).alias("r_ml"),
+        pl.Series(
+            [
+                2.44,
+                3.088446089287483,
+                3.544958,
+                3.9092210026373557,
+            ]
+        ).alias("topwdth"),
+        pl.lit(None).alias("y"),
     )
     return df
 
@@ -185,17 +212,28 @@ def flowpath_attributes_output() -> gpd.GeoDataFrame:
     data = {
         "fp_id": [1, 2, 3, 4],
         "stream_order": [1, 2, 3, 3],
+        "total_da_sqkm": [1, 2, 3, 4],
         "mean_elevation": [(2 + 3) / 2, (1 + 3) / 2, (1 + 1) / 2, (2 + 2 + 2 + 3) / 4],
         "slope": [abs((3 - 2) / 3), abs((1 - 3) / 6.082763), 1e-4, abs((3 - 2) / 2.5)],
         "n": [0.096, 0.076, 0.060, 0.060],
+        "r": [None, None, None, None],
+        "y": [None, None, None, None],
         "ncc": [0.192, 0.152, 0.12, 0.12],
         "btmwdth": [1.6, 2.4, 3.5, 3.5],
         "chslp": [0.03, 0.03, 0.03, 0.03],
         "musx": [0.2, 0.2, 0.2, 0.2],
         "musk": [3600, 3600, 3600, 3600],
-        "topwdthcc": [33.0, 39.0, 42.0, 45.0],
-        "topwdth": ([11.0, 13.0, 14.0, 15.0]),
-        "y": [0.5, 0.3, 0.4, 0.1],
+        "topwdth": [
+            2.44,
+            3.088446089287483,
+            3.544958,
+            3.9092210026373557,
+        ],
+        "topwdthcc": [7.32, 9.265338267862449, 10.634872991932461, 11.727663007912067],
+        "topwdthcc_ml": [33.0, 39.0, 42.0, 45.0],
+        "topwdth_ml": ([11.0, 13.0, 14.0, 15.0]),
+        "y_ml": [0.5, 0.3, 0.4, 0.1],
+        "r_ml": [2.0, 1.0, 1.5, 2.5],
     }
     geometry = [
         LineString([(-5, -1), (-5, -4)]),
@@ -238,15 +276,17 @@ class TestFlowpathAttributesSchemas:
 
     def test_flowpath_attributes_config__stream_order(self) -> None:
         """Flowpath Attributes Config using stream order derived variables"""
-        cfg = FlowpathAttributesConfig(use_stream_order=True, stream_order=1)
+        cfg = FlowpathAttributesConfig(use_stream_order=True, stream_order=1, total_da_sqkm=1)
         assert cfg.stream_order == 1
         assert cfg.n == 0.096
         assert cfg.chslp == 0.03
         assert cfg.btmwdth == 1.6
         assert cfg.ncc == 0.192  # n * 2
-        assert cfg.topwdthcc is None
-        assert cfg.y is None
-        assert cfg.topwdth is None
+        assert cfg.topwdthcc_ml is None
+        assert cfg.y_ml is None
+        assert cfg.r_ml is None
+        assert cfg.topwdth == 2.44
+        assert cfg.topwdthcc == 7.32
         assert cfg.mean_elevation is None
         assert cfg.slope is None
         assert cfg.musk == 3600
@@ -254,15 +294,18 @@ class TestFlowpathAttributesSchemas:
 
     def test_flowpath_attributes_config__defaults(self) -> None:
         """Flowpath Attributes Config not using stream order derived variables (defaults)"""
-        cfg = FlowpathAttributesConfig(use_stream_order=False)
+        cfg = FlowpathAttributesConfig(use_stream_order=False, total_da_sqkm=1)
         assert cfg.stream_order is None
         assert cfg.n == 0.035
         assert cfg.chslp == 0.05
         assert cfg.btmwdth == 5
         assert cfg.ncc == 0.07  # n * 2
-        assert cfg.topwdthcc is None
+        assert cfg.topwdthcc == 7.32  # 3 * topwdth
         assert cfg.y is None
-        assert cfg.topwdth is None
+        assert cfg.topwdth == 2.44
+        assert cfg.topwdthcc_ml is None
+        assert cfg.y_ml is None
+        assert cfg.topwdth_ml is None
         assert cfg.mean_elevation is None
         assert cfg.slope is None
         assert cfg.musk == 3600
@@ -271,16 +314,24 @@ class TestFlowpathAttributesSchemas:
     def test_flowpath_attributes_config__complete(self) -> None:
         """Flowpath Attributes Config with all fields filled out"""
         cfg = FlowpathAttributesConfig(
-            use_stream_order=True, stream_order=1, y=1, topwdth=2, mean_elevation=3, slope=0.05
+            use_stream_order=True,
+            stream_order=1,
+            y_ml=1,
+            topwdth_ml=2,
+            mean_elevation=3,
+            slope=0.05,
+            total_da_sqkm=1,
         )
         assert cfg.stream_order == 1
         assert cfg.n == 0.096
         assert cfg.chslp == 0.03
         assert cfg.btmwdth == 1.6
         assert cfg.ncc == 0.192  # n * 2
-        assert cfg.topwdth == 2
-        assert cfg.topwdthcc == 6  # topwdth * 3
-        assert cfg.y == 1
+        assert cfg.topwdth == 2.44
+        assert cfg.topwdthcc == 7.32  # 3 * topwdth
+        assert cfg.topwdth_ml == 2
+        assert cfg.topwdthcc_ml == 6  # topwdth * 3
+        assert cfg.y_ml == 1
         assert cfg.mean_elevation == 3
         assert cfg.slope == 0.05
         assert cfg.musk == 3600

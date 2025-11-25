@@ -436,6 +436,11 @@ class FlowpathAttributesModelConfig(BaseModel):
         title="Y Path",
         description="Path to RiverML Y predictions",
     )
+    r_path: Path = Field(
+        default=here() / Path("data/r_predictions.parquet"),
+        title="R Path",
+        description="Path to RiverML R predictions",
+    )
 
 
 class StreamOrder:
@@ -488,9 +493,13 @@ class FlowpathAttributesConfig(BaseModel):
     stream_order: int | None = Field(
         None, title="Strahler Stream Order", description="Strahler Stream Order 1-10"
     )
+    total_da_sqkm: float = Field(
+        title="Drainage Area (km2)", description="Drainage area (sqkm) from flowpaths"
+    )
     y: float | None = Field(
         None, title="Estimated Depth", description="Estimated depth associated with TopWdth (m)", alias="Y"
     )
+    r: float | None = Field(None, title="Dingman's r", description="Dingmans's r", alias="r")
     n: float = Field(
         title="Mannning's in channel roughness",
         description="Manning's in channel roughness / n. Can be derived from Strahler stream order. Defaults to 0.035 without stream order",
@@ -540,6 +549,24 @@ class FlowpathAttributesConfig(BaseModel):
         description="Muskingum routing time (seconds). Defaults to 3600",
         alias="MusK",
     )
+    y_ml: float | None = Field(
+        None,
+        title="Estimated Depth ML",
+        description="Estimated depth associated with TopWdth (m) calculated from RiverML",
+        alias="Y_ml",
+    )
+    r_ml: float | None = Field(
+        None, title="Dingman's r ML", description="Dingmans's r calculated from RiverML", alias="r_ml"
+    )
+    topwdth_ml: float | None = Field(
+        None, title="Top Width ML", description="Top Width (m) calculated from RiverML", alias="TopWdth_ml"
+    )
+    topwdthcc_ml: float | None = Field(
+        None,
+        title="Compound Channel Top Width ML",
+        description="Compound Channel Top Width (m) calculated from RiverML",
+        alias="TopWdthCC_ml",
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -562,8 +589,14 @@ class FlowpathAttributesConfig(BaseModel):
         # set compound channel - from WRF-Hydro
         self.ncc = 2 * self.n
 
+        # topwdth - from WRF-Hydro
+        self.topwdth = 2.44 * (self.total_da_sqkm**0.34)
+
         # set topwdthcc - from WRF-Hydro
         self.topwdthcc = (3 * self.topwdth) if self.topwdth else None
+
+        # set topwdthcc - from WRF-Hydro
+        self.topwdthcc_ml = (3 * self.topwdth_ml) if self.topwdth_ml else None
 
         return self
 
