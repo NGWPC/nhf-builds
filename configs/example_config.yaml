@@ -95,6 +95,10 @@ divide_attributes:
       file_name: 'twi/twi.tif'
       agg_type: 'quartile_dist'
       field_name: 'twi_quartile'
+    twi_2:                      # another twi option
+      file_name: 'twi/twi.tif'
+      agg_type: 'quantile_dist'
+      field_name: 'twi_quantile'
     elevation:
       file_name: 'usgs/usgs_250m_dem_5070.tif'
       agg_type: 'mean'

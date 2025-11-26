@@ -86,14 +86,19 @@ def _calculate_attribute(
         output="pandas",
     )
 
-    if attribute_cfg.agg_type.value == "quartile_dist":
+    if attribute_cfg.agg_type.value == "quantile_dist":
+        rng = range(10, 101, 10)
         df = df.rename(
-            columns={
-                "quantile_25": "twi_q25",
-                "quantile_50": "twi_q50",
-                "quantile_75": "twi_q75",
-                "quantile_100": "twi_q100",
-            }
+            columns=dict(
+                zip([f"quantile_{num}" for num in rng], [f"twi_q{num}" for num in rng], strict=False)
+            )
+        )
+    elif attribute_cfg.agg_type.value == "quartile_dist":
+        rng = range(25, 101, 25)
+        df = df.rename(
+            columns=dict(
+                zip([f"quantile_{num}" for num in rng], [f"twi_q{num}" for num in rng], strict=False)
+            )
         )
     else:
         df = df.rename(columns={attribute_cfg.agg_type.value: attribute_cfg.field_name})
@@ -117,10 +122,16 @@ def _concatenate_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     t0 = perf_counter()
     gdf = gpd.read_file(model_cfg.hf_path, layer="divides")
     tif_attributes = [cfg for cfg in model_cfg.attributes if ".tif" in cfg.file_name.name]
+
     for cfg in tif_attributes:
         df_temp = pd.read_parquet(cfg.tmp)
         gdf = gdf.merge(df_temp, on=model_cfg.divide_id, how="left")
         del df_temp
+
+    if "twi_q50_x" in gdf.columns:
+        gdf = gdf.drop(columns={"twi_q50_y", "twi_q100_y"})
+        gdf = gdf.rename(columns={"twi_q50_x": "twi_q50", "twi_q100_x": "twi_q100"})
+
     gdf.to_file(model_cfg.hf_path, layer="divides")
     del gdf
     logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
@@ -167,6 +178,9 @@ def _concatenate_divides_parallel(model_cfg: DivideAttributesModelConfig) -> Non
     file_list = [model_cfg.tmp_dir / f"tmp_{divides.name}" for divides in model_cfg.divides_path_list]  # type: ignore[union-attr]
     gdfs = [gpd.read_file(f, layer="divides") for f in file_list]
     gdf = pd.concat(gdfs, axis=0, ignore_index=True)
+    if "twi_q50_x" in gdf.columns:
+        gdf = gdf.drop(columns={"twi_q50_y", "twi_q100_y"})
+        gdf = gdf.rename(columns={"twi_q50_x": "twi_q50", "twi_q100_x": "twi_q100"})
     gdf.to_file(model_cfg.hf_path, layer="divides", overwrite=True)
     logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
 

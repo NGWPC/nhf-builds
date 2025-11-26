@@ -311,6 +311,7 @@ class AggTypeEnum(StrEnum):
     mode = "mode"
     max = "max"
     circular_mean = "weighted_circular_mean"
+    quantile_dist = "quantile_dist"
     quartile_dist = "quartile_dist"
     geom_mean = "weighted_geometric_mean"
     percent = "percent"
@@ -337,7 +338,19 @@ def get_operation(op: str) -> Any:
         {
             "weighted_circular_mean": weighted_circular_mean,  # type: ignore[dict-item]
             "weighted_geometric_mean": weighted_geometric_mean,  # type: ignore[dict-item]
-            "quartile_dist": ["quantile(q=0.25)", "quantile(q=0.5)", "quantile(q=0.75)", "quantile(q=1)"],  # type: ignore[dict-item]
+            "quartile_dist": ["quantile(q=0.25)", "quantile(q=0.5)", "quantile(q=0.75)", "quantile(q=1.0)"],  # type: ignore[dict-item]
+            "quantile_dist": [
+                "quantile(q=0.1)",
+                "quantile(q=0.2)",
+                "quantile(q=0.3)",
+                "quantile(q=0.4)",
+                "quantile(q=0.5)",
+                "quantile(q=0.6)",
+                "quantile(q=0.7)",
+                "quantile(q=0.8)",
+                "quantile(q=0.9)",
+                "quantile(q=1)",
+            ],  # type: ignore[dict-item]
         }
     )
 
