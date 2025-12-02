@@ -26,3 +26,7 @@ attributes:
     file_name: 'glaciers_test.parquet'
     agg_type: 'percent'
     field_name: 'glacier_percent'
+  groundwater:
+    file_name: 'gw.csv'
+    agg_type: 'groundwater'
+    field_name: 'groundwater'

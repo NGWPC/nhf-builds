@@ -260,15 +260,18 @@ def _prep_multiprocessing_configs(
 def _calculate_glaciers(
     model_cfg: DivideAttributesModelConfig, glaciers_attribute: DivideAttributeConfig
 ) -> None:
-    """Calculate the percent glacier in each divide
+    """Calculate glacier percent in each divide
 
     Overwrites HF divides on output.
 
     Parameters
     ----------
     model_cfg : DivideAttributesModelConfig
-        Pydantic model for full model config
+       Pydantic model for full model config
+    glaciers_attribute : DivideAttributeConfig
+        Pydantic model for glacier attribute
     """
+    logger.info("Calculating glaciers")
     gdf_gl = gpd.read_parquet(glaciers_attribute.file_name)
     gdf_gl["geometry"] = gdf_gl["geometry"].to_crs(model_cfg.crs)
 
@@ -300,6 +303,79 @@ def _calculate_glaciers(
 
     # write out
     gdf_div.to_file(model_cfg.hf_path, layer="divides", driver="GPKG", overwrite=True)
+    logger.info("Glaciers complete")
+
+
+def _glaciers(model_cfg: DivideAttributesModelConfig) -> None:
+    """Calculate the percent glacier in each divide
+
+    Overwrites HF divides on output.
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributesModelConfig
+        Pydantic model for full model config
+    """
+    try:
+        glaciers_attribute = [
+            cfg
+            for cfg in model_cfg.attributes
+            if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
+        ][0]
+
+        _calculate_glaciers(model_cfg, glaciers_attribute)
+
+    except IndexError:
+        logger.info("Glaciers not found in attributes - skipping.")
+        return
+
+
+def _calculate_groundwater(
+    model_cfg: DivideAttributesModelConfig, gw_attribute: DivideAttributeConfig
+) -> None:
+    """Reads and joins groundwater data
+
+    ***Note***
+    All fields in gw.csv will be joined. Does not honor field name in attribute config.
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributesModelConfig
+        Pydantic model for full model config
+    gw_attribute : DivideAttributeConfig
+        Pydantic model for groundwater attribute
+    """
+    gdf_div = gpd.read_file(model_cfg.hf_path, layer="divides")
+    df_gw = pd.read_csv(gw_attribute.file_name)
+    gdf_div = gdf_div.merge(df_gw, on=model_cfg.divide_id, how="left")
+    gdf_div.to_file(model_cfg.hf_path, layer="divides", driver="GPKG", overwrite=True)
+
+
+def _groundwater(model_cfg: DivideAttributesModelConfig) -> None:
+    """Test if groundwater is available and joins
+
+    Groundwater attribute should include 'gw' or 'groundwater' in file name
+
+    ***Note***
+    All fields in gw.csv will be joined. Does not honor field name in attribute config.
+
+    Parameters
+    ----------
+    model_cfg : DivideAttributesModelConfig
+        Pydantic model for full model config
+    """
+    try:
+        gw_attribute = [
+            cfg
+            for cfg in model_cfg.attributes
+            if ("gw" in cfg.file_name.name) or ("groundwater" in cfg.file_name.name)
+        ][0]
+        logger.info(f"Joining groundwater from {gw_attribute.file_name}")
+        _calculate_groundwater(model_cfg, gw_attribute)
+
+    except IndexError:
+        logger.info("Groundwater not found in attributes - skipping.")
+        return
 
 
 def _teardown(tmpdir: Path) -> None:
@@ -331,18 +407,9 @@ def divide_attributes_pipeline_single(model_cfg: DivideAttributesModelConfig) ->
 
     _concatenate_attributes(model_cfg)
 
-    # calculate glaciers and write final file
-    try:
-        glaciers_attribute = [
-            cfg
-            for cfg in model_cfg.attributes
-            if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
-        ][0]
-        logger.info("Calculating glaciers")
-        _calculate_glaciers(model_cfg, glaciers_attribute)
-        logger.info("Glaciers complete")
-    except IndexError:
-        logger.info("Glaciers not found in attributes - skipping.")
+    # optional glaciers and groundwater - overwrites file if calculated
+    _glaciers(model_cfg)
+    _groundwater(model_cfg)
 
     _teardown(model_cfg.tmp_dir)
     logger.info(f"divide attributes total time: {round(((perf_counter() - t0) / 60), 2)} min")
@@ -423,18 +490,9 @@ def divide_attributes_pipeline_parallel(model_cfg: DivideAttributesModelConfig, 
         _concatenate_divides_parallel(model_cfg)
         logger.info(f"concatenate divides: {round((perf_counter() - t2) / 60, 2)} min")
 
-        # calculate glaciers
-        try:
-            glaciers_attribute = [
-                cfg
-                for cfg in model_cfg.attributes
-                if ("glacier" in cfg.file_name.name) or ("glims" in cfg.file_name.name)
-            ][0]
-            logger.info("Calculating glaciers")
-            _calculate_glaciers(model_cfg, glaciers_attribute)
-            logger.info("Glaciers complete")
-        except IndexError:
-            logger.info("Glaciers not found in attributes - skipping.")
+        # optional glaciers and groundwater - overwrites file if calculated
+        _glaciers(model_cfg)
+        _groundwater(model_cfg)
 
         # delete all tmp files
         _teardown(tmp_dir)

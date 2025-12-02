@@ -315,6 +315,7 @@ class AggTypeEnum(StrEnum):
     quartile_dist = "quartile_dist"
     geom_mean = "weighted_geometric_mean"
     percent = "percent"
+    groundwater = "groundwater"
 
 
 def get_operation(op: str) -> Any:

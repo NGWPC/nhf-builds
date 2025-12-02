@@ -115,6 +115,10 @@ divide_attributes:
       file_name: 'glims_20250624.parquet' # must include 'glacier' or 'glims' to be used
       agg_type: 'percent'
       field_name: 'glacier_percent'
+    groundwater:
+      file_name: 'gw.csv' # must include 'gw' or 'groundwater' to be used
+      agg_type: 'groundwater'
+      field_name: 'groundwater' # field name not honored, all fields in csv will be joined
 
 
 # waterbodies - all values have defaults
