@@ -63,10 +63,18 @@ divide_attributes:
       file_name: 'nwm/cwpvt.tif'
       agg_type: 'mean'
       field_name: 'cwpvt_mean'
+    mp:
+      file_name: 'nwm/mp.tif'
+      agg_type: 'mean'
+      field_name: 'mp_mean'
     mfsno:
       file_name: 'nwm/mfsno.tif'
       agg_type: 'mean'
-      field_name: 'msfno_mean'
+      field_name: 'mfsno_mean'
+    quartz:
+      file_name: 'nwm/quartz_0.tif'
+      agg_type: 'mean'
+      field_name: 'quartz_mean'
     refkdt:
       file_name: 'nwm/refkdt.tif'
       agg_type: 'mean'

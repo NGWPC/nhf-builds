@@ -73,7 +73,7 @@ def _calculate_attribute(
         logger.info(f"Calculating {attribute_cfg.field_name} for {alt_divides_path}")
     else:
         divides = gpd.read_file(model_cfg.hf_path, layer="divides")
-        logger.info(f"Calculating for {model_cfg.hf_path}")
+        logger.info(f"Calculating for {attribute_cfg.file_name} for {model_cfg.hf_path}")
 
     ds = xr.open_dataarray(attribute_cfg.file_name)
 
@@ -132,6 +132,12 @@ def _concatenate_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         gdf = gdf.drop(columns={"twi_q50_y", "twi_q100_y"})
         gdf = gdf.rename(columns={"twi_q50_x": "twi_q50", "twi_q100_x": "twi_q100"})
 
+    gdf["centroid"] = gdf["geometry"].centroid
+    gdf["centroid"] = gdf["centroid"].to_crs(4326)
+    gdf["lat"] = gdf["centroid"].y
+    gdf["lon"] = gdf["centroid"].x
+    gdf = gdf.drop(columns=["centroid"])
+
     gdf.to_file(model_cfg.hf_path, layer="divides")
     del gdf
     logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
@@ -181,6 +187,13 @@ def _concatenate_divides_parallel(model_cfg: DivideAttributesModelConfig) -> Non
     if "twi_q50_x" in gdf.columns:
         gdf = gdf.drop(columns={"twi_q50_y", "twi_q100_y"})
         gdf = gdf.rename(columns={"twi_q50_x": "twi_q50", "twi_q100_x": "twi_q100"})
+
+    gdf["centroid"] = gdf["geometry"].centroid
+    gdf["centroid"] = gdf["centroid"].to_crs(4326)
+    gdf["lat"] = gdf["centroid"].y
+    gdf["lon"] = gdf["centroid"].x
+    gdf = gdf.drop(columns=["centroid"])
+
     gdf.to_file(model_cfg.hf_path, layer="divides", overwrite=True)
     logger.debug(f"{model_cfg.hf_path}: {round((perf_counter() - t0) / 60, 2)} min")
 
