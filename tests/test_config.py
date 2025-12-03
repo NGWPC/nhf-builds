@@ -21,11 +21,11 @@ def test_from_yaml_1(sample_config_yaml_1: Path) -> None:
     """Tests hydrofabric path generation and appending data dir to divide attribute"""
     cfg = HFConfig.from_yaml(sample_config_yaml_1)
 
-    assert cfg.output_file_path == Path(f"data/hydrofabric_{__version__}.gpkg")
+    assert cfg.output_file_path == Path(f"data/nhf_{__version__}.gpkg")
     assert cfg.divide_attributes.attributes[0].data_dir == Path("data/divide_attributes")
     assert cfg.divide_attributes.attributes[0].file_name == Path("data/divide_attributes/nwm/bexp_0.tif")
-    assert cfg.divide_attributes.hf_path == Path(f"data/hydrofabric_{__version__}.gpkg")
-    assert cfg.flowpath_attributes.hf_path == Path(f"data/hydrofabric_{__version__}.gpkg")
+    assert cfg.divide_attributes.hf_path == Path(f"data/nhf_{__version__}.gpkg")
+    assert cfg.flowpath_attributes.hf_path == Path(f"data/nhf_{__version__}.gpkg")
 
 
 def test_from_yaml_2(sample_config_yaml_2: Path) -> None:

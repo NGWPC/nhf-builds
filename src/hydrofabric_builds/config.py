@@ -36,7 +36,9 @@ class TaskSelection(BaseModel):
 
     gages: bool = Field(default=True, description="Decides if we want to run the gages task")
 
-    hydrolocations: bool = Field(default=True, description="Decides if we want to run the hydrolocations task")
+    hydrolocations: bool = Field(
+        default=True, description="Decides if we want to run the hydrolocations task"
+    )
 
 
 class HFConfig(BaseModel):
@@ -47,7 +49,7 @@ class HFConfig(BaseModel):
         description="The directory for output files to be saved from Hydrofabric builds",
     )
 
-    output_name: Path = Field(default=f"hydrofabric_{__version__}.gpkg", description="The output file name")
+    output_name: Path = Field(default=f"nhf_{__version__}.gpkg", description="The output file name")
 
     output_file_path: Path = Field(
         default_factory=lambda data: data["output_dir"] / data["output_name"],
@@ -82,12 +84,12 @@ class HFConfig(BaseModel):
     gages: GagesConfig = Field(default=GagesConfig(), description="Settings for building gages")
 
     @classmethod
-    def from_yaml(cls, path: str) -> Self:
+    def from_yaml(cls, path: str | Path) -> Self:
         """An internal method to read a config from a YAML file
 
         Parameters
         ----------
-        path : str
+        path : str | Path
             The path to the provided YAML file
 
         Returns

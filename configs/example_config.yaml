@@ -1,6 +1,6 @@
 # main
 
-# output_name: "hydrofabric.gpkg" # If not specified, will default to version
+# output_name: "nhf.gpkg" # If not specified, will default to version
 output_dir: "data/"
 crs: "EPSG:5070"
 
