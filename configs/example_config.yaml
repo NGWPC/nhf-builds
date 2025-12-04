@@ -179,7 +179,7 @@ divide_attributes:
       file_name: 'snow17/MFMAX.tif'
       agg_type: 'mean'
       field_name: 'mfmax_mean'
-    mfmax:
+    uadj:
       file_name: 'snow17/UADJ.tif'
       agg_type: 'mean'
       field_name: 'uadj_mean'
