@@ -6,11 +6,12 @@ To run:
 
 1. Download source rasters from AWS test account and maintain folder structure:
 ```
-aws s3 sync s3://edfs-data/attributes/5070/ ./data/divide_attributes
-aws s3 cp s3://edfs-data/glaciers/glims_20250624.parquet ./data/divide_attributes
+aws s3 sync s3://edfs-data/attributes/5070/ ./data/divide-attributes
+aws s3 cp s3://edfs-data/glaciers/glims_20250624.parquet ./data/divide-attributes
+aws s3 cp s3://edfs-data/attributes/gw/gw.csv ./data/divide-attributes
 ```
 
-2. Example config settings shown in `configs/example_config.yaml` > `divide_attributes`. Note that attribute list is required.
+2. Example config settings shown in `configs/example_config.yaml` > `divide-attributes`. Note that attribute list is required.
 
 3. Multiprocessing:
 The default setting is to use total CPU cores. To specify another core number:

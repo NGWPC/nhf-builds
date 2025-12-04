@@ -6,8 +6,8 @@ crs: "EPSG:5070"
 
 # build hf
 build:
-  reference_divides_path: data/reference_divides.parquet
-  reference_flowpaths_path: data/reference_flowpaths.parquet
+  reference_divides_path: data/reference/reference_divides.parquet
+  reference_flowpaths_path: data/reference/reference_flowpaths.parquet
   # debug_outlet_count: 2000 # If specified, only the total amount of rivers here will be built
   divide_aggregation_threshold: 3.0
 
@@ -25,15 +25,15 @@ tasks:
 flowpath_attributes:
   flowpath_id: fp_id
   use_stream_order: True
-  dem_path: data/divide_attributes/usgs/usgs_250m_dem_5070.tif
-  tw_path: data/TW_bf_predictions.parquet
-  y_path: data/Y_bf_predictions.parquet
-  r_path: data/r_predictions.parquet
+  dem_path: data/divide-attributes/usgs/usgs_250m_dem_5070.tif
+  tw_path: data/flowpath-attributes/TW_bf_predictions.parquet
+  y_path: data/flowpath-attributes/Y_bf_predictions.parquet
+  r_path: data/flowpath-attributes/r_predictions.parquet
 
 # divide attributes
 divide_attributes:
   processes: 10
-  data_dir: data/divide_attributes
+  data_dir: data/divide-attributes
   divide_id: div_id
   tmp_dir: data/tmp/divide-attributes
   split_vpu: True
@@ -316,7 +316,7 @@ gages:
       snap_tolerance_m: 100.0
       update_existing: True
       exclude_ids: ["15056210", "15493000"]
-      out_gpkg: "gages.gpkg"
+      out_gpkg: "gages/gages.gpkg"
       gpkg_layer_name: "gages"
 
   ###--------------------------------------------

@@ -105,8 +105,12 @@ def build_usgs_gages_from_kmz(
         gdf["name_plain"] = gdf["Name"].map(strip_html)
         gdf[state_col] = infer_state_from_filename(kmz)
 
-        keep = ["geometry", state_col, "site_no", "name_plain", "Name", "Description"]
-        gdf = gdf[keep].rename(columns={"Name": "name_raw", "Description": "description"})
+        try:
+            keep = ["geometry", state_col, "site_no", "name_plain", "Name", "Description"]
+            gdf = gdf[keep].rename(columns={"Name": "name_raw", "Description": "description"})
+        except KeyError:
+            keep = ["geometry", state_col, "site_no", "name_plain", "Name", "description"]
+            gdf = gdf[keep].rename(columns={"Name": "name_raw"})
         ## adding a column to show the status
         gdf["status"] = "USGS-discontinued"
         frames.append(gdf)
