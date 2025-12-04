@@ -11,6 +11,7 @@ from hydrofabric_builds import HFConfig, TaskInstance
 from hydrofabric_builds.logs import setup_logging
 from hydrofabric_builds.pipeline.build_divide_attributes import build_divide_attributes
 from hydrofabric_builds.pipeline.build_flowpath_attributes import build_flowpath_attributes
+from hydrofabric_builds.pipeline.build_fp_crosswalk import build_fp_crosswalk
 from hydrofabric_builds.pipeline.build_gages import build_gages
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.build_hydrolocations import build_hydrolocations
@@ -202,6 +203,8 @@ def main() -> int:
             runner.run_task(
                 task_id="flowpath_attributes", python_callable=build_flowpath_attributes, op_kwargs={}
             )
+        if config.tasks.fp_crosswalk:
+            runner.run_task(task_id="fp_crosswalk", python_callable=build_fp_crosswalk, op_kwargs={})
 
         print("\n" + "=" * 60)
         print("Pipeline completed")

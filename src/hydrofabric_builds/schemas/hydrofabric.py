@@ -855,3 +855,70 @@ class WaterbodiesConfig(BaseModel):
         self.refres.path = self.input_dir / self.refres.path
         self.dem.path = self.input_dir / self.dem.path
         return self
+
+
+### fp_crosswalk  ###
+class FPCrosswalkReference(BaseModel):
+    """fp_crosswalk: reference (file1) network"""
+
+    id_col: str = "flowpath_id"
+
+
+class FPCrosswalkTarget(BaseModel):
+    """fp_crosswalk: target (file2) network"""
+
+    path: Path = Path("data/nwm_flows.gpkg")
+    layer: str = "nwm_streams"
+    id_col: str = "ID"
+
+
+class FPCrosswalkOutputs(BaseModel):
+    """fp_crosswalk: final matches table inside a GPKG (no geometry is fine)"""
+
+    path: Path = Path("data/fp_crosswalk_matches.parquet")
+
+
+class FPCrosswalkConfig(BaseModel):
+    """Config class for the `fp_crosswalk:` block in the YAML."""
+
+    # nested blocks
+    reference: FPCrosswalkReference = Field(default_factory=FPCrosswalkReference)
+    target: FPCrosswalkTarget = Field(default_factory=FPCrosswalkTarget)
+    outputs: FPCrosswalkOutputs = Field(default_factory=FPCrosswalkOutputs)
+
+    # geometric / matching params
+    search_radius_m: float = 15.0
+    percent_inside_min: float = 0.005
+    node_snap_tol_m: float = 0.01
+    endpoint_buffer_m: float = 20.0
+
+    # parallelization
+    parallel: bool = True
+    n_jobs: int = 3
+    parallel_chunksize: int = 200
+
+    path: Path = Field(default=Path("/data/nhd_crosswalk.parquet"))
+
+    model_config = ConfigDict(extra="ignore")
+
+    def resolve_paths(self, base: Path | None = None) -> "FPCrosswalkConfig":
+        """
+        Resolve all relative paths against `base`.
+
+        Usage:
+            fp_cfg = FPCrosswalkConfig(**raw["fp_crosswalk"]).resolve_paths(base)
+        """
+        base = base or Path.cwd()
+
+        def _resolve(p: Path, root: Path) -> Path:
+            return p if p.is_absolute() else (root / p)
+
+        # reference / target files
+        self.reference.path = _resolve(self.reference.path, base)
+        self.target.path = _resolve(self.target.path, base)
+
+        # checkpoint + outputs
+        self.checkpoint.path = _resolve(self.checkpoint.path, base)
+        self.outputs.matches_gpkg = _resolve(self.outputs.matches_gpkg, base)
+
+        return self

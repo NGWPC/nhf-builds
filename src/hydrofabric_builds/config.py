@@ -12,6 +12,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     BuildHydrofabricConfig,
     DivideAttributesModelConfig,
     FlowpathAttributesModelConfig,
+    FPCrosswalkConfig,
     GagesConfig,
     WaterbodiesConfig,
 )
@@ -35,6 +36,10 @@ class TaskSelection(BaseModel):
     waterbodies: bool = Field(default=True, description="Decides if we want to run the waterbodies task")
 
     gages: bool = Field(default=True, description="Decides if we want to run the gages task")
+
+    fp_crosswalk: bool = Field(
+        default=True, description="Decides if we want to run the flowpath crosswalk task"
+    )
 
     hydrolocations: bool = Field(
         default=True, description="Decides if we want to run the hydrolocations task"
@@ -82,6 +87,10 @@ class HFConfig(BaseModel):
     )
 
     gages: GagesConfig = Field(default=GagesConfig(), description="Settings for building gages")
+
+    fp_crosswalk: FPCrosswalkConfig = Field(
+        default=FPCrosswalkConfig(), description="Settings for building flowpath crosswalks"
+    )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Self:

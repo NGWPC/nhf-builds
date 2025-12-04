@@ -19,6 +19,7 @@ tasks:
   waterbodies: True
   hydrolocations: True
   gages: True
+  fp_crosswalk: True
 
 
 # flowpaths
@@ -338,3 +339,25 @@ gages:
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: "EPSG:4326"      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
    work_crs: "EPSG:5070"           # an area-equal crs to calculate buffers and distances
+
+# --------------------------------------------------
+# flowpath crosswalk (fp_crosswalk)
+# --------------------------------------------------
+fp_crosswalk:
+  # reference (file1) – usually hydrofabric reference flowpaths
+  reference:
+    id_col: "flowpath_id"                     # id1_col in code
+
+  # target network (file2) – e.g., NWM or NHDPlus
+  target:
+    path: "data/reference/nwm_flows.gpkg"               # <- file2
+    layer: "nwm_streams"                      # layer2 in code
+    id_col: "ID"                              # id2_col in code
+
+  # geometric / matching parameters
+  search_radius_m: 10.0       # buffer radius around each reference flowline
+  percent_inside_min: 0.005    # min pct of matched path inside band for single-candidate shortcut
+
+  outputs:
+    # final full-table crosswalk output
+    path: "data/fp_crosswalk_matches.parquet"
