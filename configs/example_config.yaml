@@ -127,7 +127,122 @@ divide_attributes:
       file_name: 'gw.csv' # must include 'gw' or 'groundwater' to be used
       agg_type: 'groundwater'
       field_name: 'groundwater' # field name not honored, all fields in csv will be joined
-
+    lzfpm:
+      file_name: 'sac-sma/LZFPM.tif'
+      agg_type: 'mean'
+      field_name: 'lzfpm_mean'
+    lzpk:
+      file_name: 'sac-sma/LZPK.tif'
+      agg_type: 'mean'
+      field_name: 'lzpk_mean'
+    lztwm:
+      file_name: 'sac-sma/LZTWM.tif'
+      agg_type: 'mean'
+      field_name: 'lztwm_mean'
+    rexp:
+      file_name: 'sac-sma/REXP.tif'
+      agg_type: 'mean'
+      field_name: 'rexp_mean'
+    uzk:
+      file_name: 'sac-sma/UZK.tif'
+      agg_type: 'mean'
+      field_name: 'uzk_mean'
+    zperc:
+      file_name: 'sac-sma/ZPERC.tif'
+      agg_type: 'mean'
+      field_name: 'zperc_mean'
+    lzfsm:
+      file_name: 'sac-sma/LZFSM.tif'
+      agg_type: 'mean'
+      field_name: 'lzfsm_mean'
+    lzsk:
+      file_name: 'sac-sma/LZSK.tif'
+      agg_type: 'mean'
+      field_name: 'lzsk_mean'
+    pfree:
+      file_name: 'sac-sma/PFREE.tif'
+      agg_type: 'mean'
+      field_name: 'pfree_mean'
+    uzfwm:
+      file_name: 'sac-sma/UZFWM.tif'
+      agg_type: 'mean'
+      field_name: 'uzfwm_mean'
+    uztwm:
+      file_name: 'sac-sma/UZTWM.tif'
+      agg_type: 'mean'
+      field_name: 'uztwm_mean'
+    mfmin:
+      file_name: 'snow17/MFMIN.tif'
+      agg_type: 'mean'
+      field_name: 'mfmin_mean'
+    mfmax:
+      file_name: 'snow17/MFMAX.tif'
+      agg_type: 'mean'
+      field_name: 'mfmax_mean'
+    mfmax:
+      file_name: 'snow17/UADJ.tif'
+      agg_type: 'mean'
+      field_name: 'uadj_mean'
+    axaj:
+      file_name: 'nwm/AXAJ.tif'
+      agg_type: 'mean'
+      field_name: 'a_xinanjiang_inflection_point_parameter'
+    bxaj:
+      file_name: 'nwm/BXAJ.tif'
+      agg_type: 'mean'
+      field_name: 'b_xinanjiang_shape_parameter'
+    xxaj:
+      file_name: 'nwm/XXAJ.tif'
+      agg_type: 'mean'
+      field_name: 'x_xinanjiang_shape_parameter'
+    temp_delta_jan:
+      file_name: 'ueb/jan.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_jan_mean'
+    temp_delta_feb:
+      file_name: 'ueb/feb.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_feb_mean'
+    temp_delta_mar:
+      file_name: 'ueb/mar.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_mar_mean'
+    temp_delta_apr:
+      file_name: 'ueb/apr.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_apr_mean'
+    temp_delta_may:
+      file_name: 'ueb/may.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_may_mean'
+    temp_delta_jun:
+      file_name: 'ueb/jun.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_jun_mean'
+    temp_delta_jul:
+      file_name: 'ueb/jul.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_jul_mean'
+    temp_delta_aug:
+      file_name: 'ueb/aug.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_aug_mean'
+    temp_delta_sep:
+      file_name: 'ueb/sep.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_sep_mean'
+    temp_delta_oct:
+      file_name: 'ueb/oct.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_oct_mean'
+    temp_delta_nov:
+      file_name: 'ueb/nov.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_nov_mean'
+    temp_delta_dec:
+      file_name: 'ueb/dec.tif'
+      agg_type: 'mean'
+      field_name: 'temp_delta_dec_mean'
 
 # waterbodies - all values have defaults
 waterbodies:
