@@ -121,11 +121,11 @@ divide_attributes:
       agg_type: 'weighted_circular_mean'
       field_name: 'aspect_circmean'
     glaciers:
-      file_name: 'glims_20250624.parquet' # must include 'glacier' or 'glims' to be used
+      file_name: 'glaciers/glims_20250624.parquet' # must include 'glacier' or 'glims' to be used
       agg_type: 'percent'
       field_name: 'glacier_percent'
     groundwater:
-      file_name: 'gw.csv' # must include 'gw' or 'groundwater' to be used
+      file_name: 'gw/gw.csv' # must include 'gw' or 'groundwater' to be used
       agg_type: 'groundwater'
       field_name: 'groundwater' # field name not honored, all fields in csv will be joined
     lzfpm:
