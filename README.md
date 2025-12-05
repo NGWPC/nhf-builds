@@ -24,7 +24,7 @@ Docs will be spun up at localhost:8080/
 
 The following schema is the proposed data model for NGWPC hydrofabric datasets produced by this repo.
 
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/schema_v2.png" alt="schema_v2" width="100%" height="100%"/>
+<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_v0.3.7_schema.png" alt="nhf_v0.3.7_schema.png" width="100%" height="100%"/>
 
 ##### Flowpaths FACT Table
 
@@ -51,4 +51,4 @@ To ensure `flowpaths` can be mapped to back to the materials that created them, 
 - Reference Flowpaths -> `ref_fp_id`
 - Reference Reservoirs -> `dam_id`
 - USGS/ENVCA/CADWR/TXDOT Streamflow Gages -> `site_no`
-- NHD+ -> `COMID`
+- NHD+ -> `nhd_feature_id`

@@ -54,8 +54,8 @@ def build_crosswalk(
       - buffer by `search_radius_m`,
       - find intersecting NWM segments,
       - compute percent of each NWM segment inside that buffer,
-      - keep only the segment with the highest pct_inside,
-      - if best pct_inside >= percent_inside_min:
+      - keep only the segment with the highest percent_inside,
+      - if best percent_inside >= percent_inside_min:
             record its nwm_id
         else:
             record nwm_id = NaN.
@@ -63,7 +63,7 @@ def build_crosswalk(
     Returns
     -------
     DataFrame with one row per reference flowpath:
-        ref_id, nwm_id, pct_inside
+        ref_id, nwm_id, percent_inside
     """
     sindex = nwm_flows.sindex
     results: list[dict[str, Any]] = []
@@ -81,8 +81,8 @@ def build_crosswalk(
             results.append(
                 {
                     "ref_id": ref_id,
-                    "nwm_id": np.nan,
-                    "pct_inside": np.nan,
+                    "nhd_feature_id": np.nan,
+                    "percent_inside": np.nan,
                 }
             )
             continue
@@ -98,10 +98,10 @@ def build_crosswalk(
             nwm_geom = nwm_flows.geometry.iloc[nwm_idx]
             nwm_id = nwm_flows.iloc[nwm_idx][nwm_id_col]
 
-            pct_inside = _percent_in_buffer(nwm_geom, buffer)
+            percent_inside = _percent_in_buffer(nwm_geom, buffer)
 
-            if pct_inside > best_pct:
-                best_pct = pct_inside
+            if percent_inside > best_pct:
+                best_pct = percent_inside
                 best_nwm_id = nwm_id
 
         # If there were no candidates at all:
@@ -109,8 +109,8 @@ def build_crosswalk(
             results.append(
                 {
                     "ref_id": ref_id,
-                    "nwm_id": np.nan,
-                    "pct_inside": np.nan,
+                    "nhd_feature_id": np.nan,
+                    "percent_inside": np.nan,
                 }
             )
             continue
@@ -121,21 +121,21 @@ def build_crosswalk(
             results.append(
                 {
                     "ref_id": ref_id,
-                    "nwm_id": np.nan,
-                    "pct_inside": round(best_pct, 4),
+                    "nhd_feature_id": np.nan,
+                    "percent_inside": round(best_pct, 4),
                 }
             )
         else:
             results.append(
                 {
                     "ref_id": ref_id,
-                    "nwm_id": best_nwm_id,
-                    "pct_inside": round(best_pct, 4),
+                    "nhd_feature_id": best_nwm_id,
+                    "percent_inside": round(best_pct, 4),
                 }
             )
     pd_results = pd.DataFrame(results)
     pd_results["ref_id"] = pd_results["ref_id"].astype("Int64")
-    pd_results["nwm_id"] = pd_results["nwm_id"].astype("Int64")
+    pd_results["nhd_feature_id"] = pd_results["nhd_feature_id"].astype("Int64")
     return pd_results
 
 

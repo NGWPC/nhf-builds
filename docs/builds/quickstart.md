@@ -19,11 +19,12 @@ Below are the data files needed for running a full build of the NHF dataset and 
 
 5. Divide Attributes
 - `aws s3 sync s3://edfs-data/attributes/5070/ ./data/divide-attributes`
-- `aws s3 cp s3://edfs-data/glaciers/glims_20250624.parquet ./data/divide-attributes/glims_20250624.parquet`
-- `aws s3 cp s3://edfs-data/attributes/gw/gw.csv ./data/divide-attributes/gw.csv`
+- `aws s3 sync s3://edfs-data/attributes/gw/ ./data/divide-attributes`
+- `aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/divide-attributes`
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
+- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
