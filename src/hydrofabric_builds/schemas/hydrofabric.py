@@ -624,6 +624,7 @@ class GageInput(BaseModel):
     id_col_name: str = "site_no"
     x_col_name: str | None = None
     y_col_name: str | None = None
+    area_col_name: str = "area_sqkm"
 
 
 class GagesInputs(BaseModel):
@@ -639,6 +640,11 @@ class GagesInputs(BaseModel):
     CADWR_ENVCA: GageInput = Field(
         default_factory=lambda: GageInput(
             path=Path("CADWR_ENVCA/gage_xy.csv"), x_col_name="lon", y_col_name="lat"
+        )
+    )
+    CIROH_UA: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("CIROH_UA/gage_area.csv"), id_col_name="gage", area_col_name="area_sqkm"
         )
     )
     nwm_calib_gages: GageInput = Field(

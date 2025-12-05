@@ -17,6 +17,7 @@ e.g. /home/<you>/Documents/hydrofabric-builds/data/gages/, preserving the expect
          ├─ gage_xy.csv                   # CADWR/ENVCA/AK/HI/PR etc.
          └─ all_gages_gpkgs/nwm_calib_gages.txt
          ├─ nldi_upstream_basins.gpkg     # USGS API, optional
+         ├─ CIROH_UA/gage_area.csv        # CIROH csv file for upstream area
 `
 
 ## What you’ll get (final dataset)
@@ -74,6 +75,10 @@ The gages task in hydrofabric-builds coordinates these steps:
 ### 7) Assign NLDI basins column to gages
 
 the upstream area are read from USGS API and are compared with total upstream area calculated in hydrofabric. It is a method to make sure the flowpaths are assigned cor rectly to gages.
+
+### 8) Add upstream basin area from CIROH-UA csv file to gages
+
+the upstream areas are read for CIROH csv file and added to gages wherever USGS API does not provide upstream area values. It adds ~ 10000 upstream area values to the list.
 
 ### 8) Assign flowpath to gages
 
