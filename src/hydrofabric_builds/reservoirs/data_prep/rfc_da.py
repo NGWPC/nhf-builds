@@ -141,6 +141,7 @@ def build_rfc_da_hydraulics(
     ref_wb_path: str | Path,
     osm_ref_wb_path: str | Path,
     nid_clean_path: str | Path,
+    hf_lakes_path: str | Path,
     max_waterbody_nearest_dist_m: float,
     min_area_sqkm: float,
     out_dir: str | Path,
@@ -163,6 +164,7 @@ def build_rfc_da_hydraulics(
     :param ref_wb_path: path to the file reference_waterbodies
     :param osm_ref_wb_path: path to osm_dams_all
     :param nid_clean_path: path to nid dams file
+    :param hf_lakes_path: path to HF 2.2/NWM lakes to be appended
     :param max_waterbody_nearest_dist_m: maximum distance between points and waterbodies
     :param min_area_sqkm: minimum waterbody area to be considered
     :param out_dir: output directory
@@ -178,7 +180,7 @@ def build_rfc_da_hydraulics(
     rfc_da_hydr_path = out_rfcda
 
     # 1) WB elevations (ref + OSM)
-    logging.info("Building reference reservoirs elevation")
+    logger.info("Building reference reservoirs elevation")
     build_ref_wb_elevs(
         dem_path,
         ref_reservoirs_path,
@@ -189,7 +191,7 @@ def build_rfc_da_hydraulics(
         work_crs=work_crs,
     )
 
-    logging.info("Building OSM waterbody elevation")
+    logger.info("Building OSM waterbody elevation")
     build_osm_wb_elevs(
         dem_path,
         ref_reservoirs_path,
@@ -201,7 +203,7 @@ def build_rfc_da_hydraulics(
     )
 
     # 2) Dam locations + NID attrs + WB elevs + dam_elev
-    logging.info("Building RFC DA locations")
+    logger.info("Building RFC DA locations")
     df_locs = build_rfc_da_locs(
         dem_path=dem_path,
         ref_reservoirs_path=ref_reservoirs_path,
@@ -216,7 +218,7 @@ def build_rfc_da_hydraulics(
     )
 
     # 3) Join in minimal res (dam_id, ref_fab_fp, x, y)
-    logging.info("Joining reservoirs")
+    logger.info("Joining reservoirs")
     res = gpd.read_file(ref_reservoirs_path)
     res_min = res[["dam_id", "ref_fab_fp", "x", "y"]].drop_duplicates().copy()
 
@@ -225,13 +227,13 @@ def build_rfc_da_hydraulics(
     df_joined = df_attr.merge(res_min, on="dam_id", how="left")
 
     # 4) Hydraulics
-    logging.info("Calculating hydraulics")
+    logger.info("Calculating hydraulics")
     hydr_attrs = populate_hydraulics(df_joined, use_hazard=use_hazard)
 
     # 5) Combine hydraulics with res_min to build final GeoDataFrame in 5070
     #    (geometry from x,y as in R)
     # Keep first record per dam_id
-    logging.info("Building final RFC-DA dataframe")
+    logger.info("Building final RFC-DA dataframe")
     df_joined = df_joined.sort_values("dam_id").drop_duplicates(  # or by something meaningful
         subset="dam_id", keep="first"
     )
@@ -239,23 +241,21 @@ def build_rfc_da_hydraulics(
 
     hydr_attrs = hydr_attrs.sort_values("dam_id").drop_duplicates(subset="dam_id", keep="first")
 
+    hydr_attrs_list = [
+        "LkArea",
+        "LkMxE",
+        "WeirC",
+        "WeirL",
+        "WeirE",
+        "OrficeC",
+        "OrficeA",
+        "OrficeE",
+        "Dam_Length",
+        "ifd",
+    ]
+
     hydr_df = df_joined.merge(
-        hydr_attrs[
-            [
-                "dam_id",
-                "H_m",
-                "LkArea",
-                "LkMxE",
-                "WeirC",
-                "WeirL",
-                "WeirE",
-                "OrficeC",
-                "OrficeA",
-                "OrficeE",
-                "Dam_Length",
-                "ifd",
-            ]
-        ],
+        hydr_attrs[["dam_id", "H_m"] + hydr_attrs_list],
         on="dam_id",
         how="left",
         suffixes=("", "_hydr"),
@@ -269,6 +269,24 @@ def build_rfc_da_hydraulics(
 
     hydr_gdf = hydr_gdf.drop(columns=["x_x", "y_x"]).rename(columns={"x_y": "x", "y_y": "y"})
 
+    # Patch: Add HF 2.2 Lakes (to be improved)
+    df_lakes = gpd.read_file(hf_lakes_path)
+
+    df_lakes = df_lakes.rename(
+        columns={
+            "lake_x": "x",
+            "lake_y": "y",
+            "lake_id": "nwm_lake_id",
+            "OrificeC": "OrficeC",
+            "OrificeA": "OrficeA",
+            "OrificeE": "OrficeE",
+        }
+    )
+    df_lakes = df_lakes[["geometry", "x", "y", "nwm_lake_id", "ref_fab_fp"] + hydr_attrs_list]
+    df_lakes = df_lakes.loc[~df_lakes["ref_fab_fp"].isnull(), :].copy()
+
+    hydr_gdf = pd.concat([hydr_gdf, df_lakes], ignore_index=True)
+
     hydr_gdf.to_file(rfc_da_hydr_path, driver="GPKG")
-    logging.info(f"Saved RFC-DA reservoirs to {rfc_da_hydr_path}")
+    logger.info(f"Saved RFC-DA reservoirs to {rfc_da_hydr_path}")
     return hydr_gdf

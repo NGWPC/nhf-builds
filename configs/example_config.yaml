@@ -249,8 +249,8 @@ divide_attributes:
 waterbodies:
   input_dir: "data/reservoirs"
   output_dir: "data/reservoirs/output"
-  rfcda_output_name: "rfc-da-hydraulics-v1.gpkg"
-  rfcda_file: "data/reservoirs/output/rfc-da-hydraulics-v1.gpkg" # Note: By default this concatenates output_dir and rfcda_output_name but can be specified
+  rfcda_output_name: "rfc-da-hydraulics-v2.gpkg"
+  rfcda_file: "data/reservoirs/output/rfc-da-hydraulics-v2.gpkg" # Note: By default this concatenates output_dir and rfcda_output_name but can be specified
   default_src_crs: "EPSG:4326"
   work_crs: "EPSG:5070"
   nid:
@@ -284,6 +284,12 @@ waterbodies:
     prefer_crs_of_dem: True
     band: 1
     nodata: null
+  nwm:
+    prep_nwm_lakes: False # set to true if you want to do this, or it will run if file not found
+    input_path: "source_files/nwm_patch_conus_nextgen.gpkg"
+    layer: "lakes"
+    buffer_size_m: 500
+    output_path: "source_files/nwm_lakes.gpkg"
   rules:
     max_waterbody_nearest_dist_m: 1000.0
     min_area_sqkm: 0.2

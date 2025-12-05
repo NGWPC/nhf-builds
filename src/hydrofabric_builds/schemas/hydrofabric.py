@@ -724,6 +724,27 @@ class GagesConfig(BaseModel):
 
 
 # RFC-DA Configs
+class ResNWMLakesInputs(BaseModel):
+    """NWM preparation inputs to generate RFC-DA"""
+
+    prep_nwm_lakes: bool = Field(
+        default=False,
+        description="Prepare NWM/HF 2.2 lakes to be used in RFCDA. Generally, this file will be available on s3 and synced.",
+    )
+    input_path: Path = Field(
+        default=Path("source_files/nwm_patch_conus_nextgen.gpkg"),
+        description="Source path if preparing NWM lakes from scratch. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="lakes")
+    buffer_size_m: int | float = Field(
+        default=500, description="Buffer size for waterbodies when matching to lakes"
+    )
+    output_path: Path = Field(
+        default=Path("source_files/nwm_lakes.gpkg"),
+        description="Output path if creating or file to use in pipeline if not creating. When using defaults, WaterbodiesConfig will inject preceding input path.",
+    )
+
+
 class ResNIDInputs(BaseModel):
     """NID inputs to generate RFC-DA"""
 
@@ -844,6 +865,10 @@ class WaterbodiesConfig(BaseModel):
     )
     osm: ResOSMInputs = Field(default=ResOSMInputs(), description="OSM configs")
     dem: ResDEMInputs = Field(default=ResDEMInputs(), description="DEM configs")
+    nwm_lakes: ResNWMLakesInputs = Field(
+        default=ResNWMLakesInputs(),
+        description="NWM Lakes configuration. Includes if data prep should be run.",
+    )
     rules: ResRules = Field(default=ResRules(), description="Rules")
 
     @model_validator(mode="after")
@@ -854,6 +879,9 @@ class WaterbodiesConfig(BaseModel):
         self.refwb.path = self.input_dir / self.refwb.path
         self.refres.path = self.input_dir / self.refres.path
         self.dem.path = self.input_dir / self.dem.path
+        self.nwm_lakes.input_path = self.input_dir / self.nwm_lakes.input_path
+        self.nwm_lakes.output_path = self.input_dir / self.nwm_lakes.output_path
+
         return self
 
 

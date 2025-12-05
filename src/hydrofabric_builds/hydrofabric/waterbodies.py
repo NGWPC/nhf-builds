@@ -21,6 +21,7 @@ def rfc_da_pipeline(cfg: WaterbodiesConfig) -> None:
         ref_wb_path=cfg.refwb.path,
         osm_ref_wb_path=cfg.osm.path,
         nid_clean_path=cfg.nid.path,  # or .parquet
+        hf_lakes_path=cfg.nwm_lakes.output_path,
         max_waterbody_nearest_dist_m=cfg.rules.max_waterbody_nearest_dist_m,
         min_area_sqkm=cfg.rules.min_area_sqkm,
         out_dir=cfg.output_dir,
