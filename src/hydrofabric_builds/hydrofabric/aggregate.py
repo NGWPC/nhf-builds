@@ -1,11 +1,12 @@
 """Geometry aggregation module for hydrofabric builds."""
 
 import logging
+from itertools import chain
 from typing import Any
 
 import rustworkx as rx
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import unary_union
+from shapely.ops import linemerge, unary_union
 
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
 
@@ -154,7 +155,7 @@ def _process_aggregation_pairs(
                     "length_km": length_km,
                     "area_sqkm": div_area_sum,
                     "ref_id_to_percentage": ref_id_to_percentage,
-                    "line_geometry": unary_union(line_geoms),
+                    "line_geometry": linemerge(list(chain.from_iterable(geom.geoms for geom in line_geoms))),
                     "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
                 }
             )
@@ -459,7 +460,7 @@ def _process_non_nextgen_virtual_flowpaths(
                 "hydroseq": hydroseq,
                 "length_km": length_km,
                 "area_sqkm": area_sqkm,
-                "line_geometry": unary_union(line_geoms),
+                "line_geometry": linemerge(list(chain.from_iterable(geom.geoms for geom in line_geoms))),
             }
         )
 
