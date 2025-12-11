@@ -21,12 +21,12 @@ e.g. /home/<you>/Documents/hydrofabric-builds/data/gages/, preserving the expect
 `
 
 ## What you’ll get (final dataset)
-* Live USGS gages: ~12,000
+* Live USGS gages: ~9,000
 * Discontinued USGS gages: ~14,700 (some overlap with “live”)
 * TXDOT gages: ~77
 * CADWR gages: ~25
 * ENVCA gages: ~27
-* NWM calibration gages that were missing: ~68
+* NWM calibration gages list: ~1640
 * Alaska, Puerto Rico, Hawaii: ~30
 * Total: 26,754 point features
 
@@ -38,11 +38,15 @@ The gages task in hydrofabric-builds coordinates these steps:
 
 * build_usgs_gages_from_kmz() scans a folder of USGS KML-in-KMZ files and extracts points + site_no.
 
+* The source files are already provided. However, they can be downloaded by  users from this [link](https://waterwatch.usgs.gov/?m=stategage).
+
 * Result becomes the initial gages GeoDataFrame.
 
 ### 2-USGS live (SHP)
 
 * merge_usgs_shapefile_into_gages() reads several USGS shapefiles and adds missing sites.
+
+* The shapefiles are already provided as source files. However, the user can download them form this [link](https://waterwatch.usgs.gov/index.php?id=wwds_shp).
 
 * With update_existing=True, it overwrites geometry/name/state for matching site_no when the shapefile has better data.
 
@@ -70,23 +74,24 @@ The gages task in hydrofabric-builds coordinates these steps:
 
 * Non-USGS IDs (e.g., Canadian IDs with letters) are reported and skipped.
 
-### 6) Finding upstream area for USGS gages using API
+### 6) Finding upstream area for USGS gages using API (NLDI)
 
-### 7) Assign NLDI basins column to gages
+* The upstream area are read from USGS API and are compared with total upstream area calculated in hydrofabric (NHF). It is a method to make sure the flowpaths are assigned cor recently to gages.
 
-the upstream area are read from USGS API and are compared with total upstream area calculated in hydrofabric. It is a method to make sure the flowpaths are assigned cor rectly to gages.
+* The USGS Network Linked Data Index (NLDI) API is available in this [link](https://api.water.usgs.gov/nldi/swagger-ui/index.html?configUrl=/api/nldi/v3/api-docs/swagger-config#/linked-data-controller/getDataSources).
 
-### 8) Add upstream basin area from CIROH-UA csv file to gages
+### 7) Add upstream basin area from CIROH-UA csv file to gages
 
-the upstream areas are read for CIROH csv file and added to gages wherever USGS API does not provide upstream area values. It adds ~ 10000 upstream area values to the list.
+* the upstream areas are read for CIROH csv file and added to gages wherever USGS API does not provide upstream area values. It adds ~ 10000 upstream area values to the list.
+* The file is accessible from the following [link](https://github.com/CIROH-UA/community_hf_patcher/blob/main/scripts/hydro/gages/gage_area.csv).
 
 ### 8) Assign flowpath to gages
 
-Here we assign the nearest flowpaths to gages, wherever the upstream areas were not matched.
+* For each USGS gage, we assigned a corresponding flowpath in the NHF product using a hierarchical procedure based on upstream drainage area and spatial proximity. First, we queried the USGS NLDI API to obtain the reported upstream drainage area for all gages with available information and compared these values to the upstream area of candidate NHF flowpaths, assigning the gage to the flowpath whose upstream area most closely matched the USGS value. For gages where NLDI drainage area was unavailable, we instead used upstream area estimates from the CIROH community_hf_patcher dataset and repeated the same area-matching procedure. If neither the USGS NLDI nor CIROH-based upstream areas produced a sufficiently close match to the NHF upstream area, we then applied a purely spatial method, assigning the gage to the nearest NHF flowpath within a 1,000 m search radius.
 
-## 9) drop the columns we don't need
+### 9) drop the columns we don't need
 `keep_cols = ["site_no", "geometry", "status", "USGS_basin_km2", "fp_id", "method_fp_to_gage"]
 `
-### 6- Write final output
+### 10) Write final output
 
 * Exports a single GeoPackage with the unified usgs_gages layer.
