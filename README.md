@@ -9,6 +9,9 @@ This repo is managed through [UV](https://docs.astral.sh/uv/getting-started/inst
 uv sync
 ```
 
+### Quickstart
+[See here for all steps for downloading data from the RTX EDFS Test Account Bucket](docs/builds/quickstart.md)
+
 ### Development
 To ensure that hydrofabric-builds follows the specified structure, be sure to install the local dev dependencies and run `uv run pre-commit install`
 
@@ -19,6 +22,13 @@ uv sync --extra docs
 uv run mkdocs serve -a localhost:8080
 ```
 Docs will be spun up at localhost:8080/
+
+Additional documentation can be found below for:
+- [Divide Attributes](docs/builds/divide_attributes.md)
+- [Flowpath Attributes](docs/builds/flowpath_attributes.md.md)
+- [POI/Gages](docs/builds/POI_gages_builder.md)
+- [Reservoir Attrubutes](docs/builds/reservoir_attrs.md)
+- [Gage Locations](docs/builds/snap_gages_to_flowpaths.md)
 
 #### Proposed Schema
 
