@@ -749,6 +749,7 @@ class ResNWMLakesInputs(BaseModel):
         default=Path("source_files/nwm_lakes.gpkg"),
         description="Output path if creating or file to use in pipeline if not creating. When using defaults, WaterbodiesConfig will inject preceding input path.",
     )
+    lakes_keep: list[int] = Field(default=[], description="List of lake_id's to keep in RFCDA")
 
 
 class ResNIDInputs(BaseModel):
@@ -797,6 +798,9 @@ class ResReferenceReservoirsInputs(BaseModel):
     max_distance_m: float = Field(
         default=1000.0,
         description="max distance of reference reservoir points from column 'distance_to_fp_m'",
+    )
+    ref_res_keep: list[str] = Field(
+        default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
     )
 
 

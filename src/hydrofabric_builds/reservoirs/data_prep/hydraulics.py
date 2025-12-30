@@ -165,6 +165,7 @@ def populate_hydraulics(
         _num(df.get("osm_area_sqkm")) * 1e6,
         _num(df.get("surface_area")),
     )
+    LkArea = np.where(LkArea == 0, np.nan, LkArea)
 
     # ---- Storage → mean depth (m) ----
     # 1233.48184    : acre-feet to m3 conversion factor

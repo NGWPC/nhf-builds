@@ -8,12 +8,12 @@ import numpy as np
 import pandas as pd
 
 from hydrofabric_builds.reservoirs.data_prep.rfc_da import build_rfc_da_hydraulics
-from hydrofabric_builds.schemas.hydrofabric import WaterbodiesConfig
+from hydrofabric_builds.schemas.hydrofabric import BuildHydrofabricConfig, WaterbodiesConfig
 
 logger = logging.getLogger(__name__)
 
 
-def rfc_da_pipeline(cfg: WaterbodiesConfig) -> None:
+def rfc_da_pipeline(cfg: WaterbodiesConfig, cfg_ref: BuildHydrofabricConfig) -> None:
     """The main file entering reservoir attributes calculation"""
     hydr = build_rfc_da_hydraulics(
         dem_path=cfg.dem.path,
@@ -22,6 +22,7 @@ def rfc_da_pipeline(cfg: WaterbodiesConfig) -> None:
         osm_ref_wb_path=cfg.osm.path,
         nid_clean_path=cfg.nid.path,  # or .parquet
         hf_lakes_path=cfg.nwm_lakes.output_path,
+        ref_fp_path=cfg_ref.reference_flowpaths_path,
         max_waterbody_nearest_dist_m=cfg.rules.max_waterbody_nearest_dist_m,
         min_area_sqkm=cfg.rules.min_area_sqkm,
         out_dir=cfg.output_dir,
@@ -29,6 +30,8 @@ def rfc_da_pipeline(cfg: WaterbodiesConfig) -> None:
         work_crs=cfg.work_crs,
         default_crs=cfg.default_src_crs,
         use_hazard=True,
+        lakes_keep=cfg.nwm_lakes.lakes_keep,
+        res_keep=cfg.refres.ref_res_keep,
     )
     logger.info(f"[OK] attributes have been estimated for {len(hydr)} reservoirs")
     del hydr
@@ -54,6 +57,7 @@ def crosswalk_waterbodies(hf_path: Path, rfcda_path: Path) -> gpd.GeoDataFrame:
 
     # join on cross walk table
     logger.info("Crosswalking reference flowpath IDs")
+    gdf_res = gdf_res.loc[~gdf_res["ref_fab_fp"].isnull(), :].copy()
     gdf_res["ref_fab_fp"] = pd.to_numeric(gdf_res["ref_fab_fp"]).astype(np.int64)
     gdf_res = gdf_res.merge(hf_ref, left_on="ref_fab_fp", right_on="ref_fp_id", how="left")
     gdf_res = gdf_res.merge(hf_fp[["fp_id"]], on="fp_id", how="left")
