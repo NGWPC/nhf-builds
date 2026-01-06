@@ -5,6 +5,7 @@ from itertools import chain
 from typing import Any
 
 import rustworkx as rx
+from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge, unary_union
 
@@ -138,12 +139,17 @@ def _process_aggregation_pairs(
                         ref_id_to_percentage[fp_id] /= total_percentage
 
             # Get geometries from lookup dicts
-            line_geoms: list[BaseGeometry] = [
+            line_geoms: list[BaseGeometry] | list[LineString] = [
                 fp_lookup[fp_id]["shapely_geometry"] for fp_id in fp_geometry_ids if fp_id in fp_lookup
             ]
             polygon_geoms: list[BaseGeometry] = [
                 div_lookup[fp_id]["shapely_geometry"] for fp_id in group_ids if fp_id in div_lookup
             ]
+
+            try:
+                linestrings = linemerge(list(chain.from_iterable(geom.geoms for geom in line_geoms)))
+            except AttributeError:
+                linestrings = linemerge(line_geoms)
 
             results.append(
                 {
@@ -155,7 +161,7 @@ def _process_aggregation_pairs(
                     "length_km": length_km,
                     "area_sqkm": div_area_sum,
                     "ref_id_to_percentage": ref_id_to_percentage,
-                    "line_geometry": linemerge(list(chain.from_iterable(geom.geoms for geom in line_geoms))),
+                    "line_geometry": linestrings,
                     "polygon_geometry": unary_union(polygon_geoms) if polygon_geoms else None,
                 }
             )
