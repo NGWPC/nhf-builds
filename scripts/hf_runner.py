@@ -23,6 +23,7 @@ from hydrofabric_builds.pipeline.processing import (
     reduce_combine_base_hydrofabric,
 )
 from hydrofabric_builds.pipeline.trace_graph_attributes import trace_hydrofabric_attributes
+from hydrofabric_builds.pipeline.validate_hf import validate_hf
 from hydrofabric_builds.pipeline.write import write_base_hydrofabric
 
 logger = setup_logging()
@@ -174,17 +175,18 @@ def main() -> int:
 
     with LocalRunner(config) as runner:
         if config.tasks.build_hydrofabric:
-            runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
-            runner.run_task(task_id="build_graph", python_callable=build_graph, op_kwargs={})
-            runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
-            runner.run_task(task_id="map_build_base", python_callable=map_build_hydrofabric, op_kwargs={})
-            runner.run_task(
-                task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
-            )
-            runner.run_task(
-                task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
-            )
-            runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
+            #runner.run_task(task_id="download", python_callable=download_reference_data, op_kwargs={})
+            #runner.run_task(task_id="build_graph", python_callable=build_graph, op_kwargs={})
+            #runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
+            #runner.run_task(task_id="map_build_base", python_callable=map_build_hydrofabric, op_kwargs={})
+            #runner.run_task(
+            #    task_id="reduce_base", python_callable=reduce_combine_base_hydrofabric, op_kwargs={}
+            #)
+            #runner.run_task(
+            #    task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
+            #)
+            #runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
+            runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
 
         if config.tasks.gages:
             runner.run_task("gages", python_callable=build_gages, op_kwargs={})
