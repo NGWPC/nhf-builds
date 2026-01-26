@@ -53,6 +53,7 @@ dependencies = [
   "rustworkx==0.17.1",
   "exactextract==0.2.2",
   "rasterstats>=0.20.0",
+  "zarr==3.1.5"
 ]
 
 [project.optional-dependencies]
