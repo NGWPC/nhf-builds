@@ -53,6 +53,7 @@ dependencies = [
   "rustworkx==0.17.1",
   "exactextract==0.2.2",
   "rasterstats>=0.20.0",
+  "xarray-spatial==0.5.2"
 ]
 
 [project.optional-dependencies]
@@ -139,7 +140,7 @@ convention = "numpy"
 "*/__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = false
 disallow_any_unimported = false
 warn_unused_configs = true
