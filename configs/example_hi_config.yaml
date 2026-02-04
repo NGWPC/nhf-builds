@@ -89,3 +89,40 @@ divide_attributes:
     #   file_name: nwm/imperv.tif
     #   agg_type: mean
     #   field_name: imperv_mean
+    twi:
+      file_name: twi/twi.tif
+      agg_type: quartile_dist
+      field_name: twi_quartile
+    twi_2:                      # another twi option
+      file_name: twi/twi.tif
+      agg_type: quantile_dist
+      field_name: twi_quantile
+    elevation:
+      file_name: usgs/hi_dem_250.tif
+      agg_type: mean
+      field_name: elevation_mean
+    slope:
+      file_name: usgs/hi_slope_250.tif
+      agg_type: mean
+      field_name: slope250m_mean
+    aspect:
+      file_name: usgs/hi_aspect_250.tif
+      agg_type: weighted_circular_mean
+      field_name: aspect_circmean
+    groundwater:
+      file_name: gw/gw_hi_nhf_0.1.5.csv # must include 'gw' or 'groundwater' to be used
+      agg_type: groundwater
+      field_name: groundwater # field name not honored, all fields in csv will be joined
+    axaj:
+      file_name: nwm/AXAJ.tif
+      agg_type: mean
+      field_name: a_xinanjiang_inflection_point_parameter
+    bxaj:
+      file_name: nwm/BXAJ.tif
+      agg_type: mean
+      field_name: b_xinanjiang_shape_parameter
+    xxaj:
+      file_name: nwm/XXAJ.tif
+      agg_type: mean
+      field_name: x_xinanjiang_shape_parameter
+    
