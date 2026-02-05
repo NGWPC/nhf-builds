@@ -46,7 +46,7 @@ if __name__ == "__main__":
     graph = rx.PyDiGraph()
     graph.add_nodes_from(range(len(all_ids)))
     graph.extend_from_edge_list(
-        [(id_to_idx[src], id_to_idx[dst]) for src, dst in zip(edges["fp_id"], edges["to_fp_id"])]
+        [(id_to_idx[src], id_to_idx[dst]) for src, dst in zip(edges["fp_id"], edges["to_fp_id"], strict=True)]
     )
 
     is_dag = rx.is_directed_acyclic_graph(graph)
