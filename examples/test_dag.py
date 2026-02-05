@@ -38,20 +38,16 @@ if __name__ == "__main__":
     )
     con.close()
 
+    # Map fp_ids to sequential indices for graph construction
+    all_ids = pd.concat([edges["fp_id"], edges["to_fp_id"]]).unique()
+    id_to_idx = {fp_id: idx for idx, fp_id in enumerate(all_ids)}
+
     # Build directed graph from edge list
     graph = rx.PyDiGraph()
-    node_indices: dict[int, int] = {}
-
-    for _, row in edges.iterrows():
-        fp_id = int(row["fp_id"])
-        to_fp_id = int(row["to_fp_id"])
-
-        if fp_id not in node_indices:
-            node_indices[fp_id] = graph.add_node(fp_id)
-        if to_fp_id not in node_indices:
-            node_indices[to_fp_id] = graph.add_node(to_fp_id)
-
-        graph.add_edge(node_indices[fp_id], node_indices[to_fp_id], None)
+    graph.add_nodes_from(range(len(all_ids)))
+    graph.extend_from_edge_list(
+        [(id_to_idx[src], id_to_idx[dst]) for src, dst in zip(edges["fp_id"], edges["to_fp_id"])]
+    )
 
     is_dag = rx.is_directed_acyclic_graph(graph)
     print(f"Flowpath network is DAG: {is_dag}\n")
