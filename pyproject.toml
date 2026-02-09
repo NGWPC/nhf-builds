@@ -53,7 +53,8 @@ dependencies = [
   "rustworkx==0.17.1",
   "exactextract==0.2.2",
   "rasterstats>=0.20.0",
-  "xarray-spatial==0.5.2"
+  "xarray-spatial==0.5.2",
+  "dask==2026.1.2"
 ]
 
 [project.optional-dependencies]
