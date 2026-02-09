@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_0.1.4.gpkg # If not specified, will default to version
+output_name: hi_nhf_0.1.5.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -12,13 +12,19 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: False
+  build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: False
   waterbodies: False
   hydrolocations: False
   gages: False
   fp_crosswalk: False
+
+# flowpaths
+flowpath_attributes:
+  flowpath_id: fp_id
+  use_stream_order: True
+  dem_path: data/hi/divide-attributes/usgs/hi_dem_250.tif
 
 # divide attributes
 divide_attributes:

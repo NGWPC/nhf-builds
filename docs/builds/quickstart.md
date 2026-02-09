@@ -91,7 +91,7 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 ## Puerto Rico/Virgin Islands
 1. Reference Fabric
 - `aws s3 cp s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_divides.parquet ./data/reference/prvi_0.1.5_reference_divides.parquet`
-- `aws s3 s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_flowpaths.parquet ./data/reference/prvi_0.1.5_reference_flowpaths.parquet`
+- `aws s3 cp s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_flowpaths.parquet ./data/reference/prvi_0.1.5_reference_flowpaths.parquet`
 
 2. Gages
 - TBD

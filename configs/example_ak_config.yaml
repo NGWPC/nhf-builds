@@ -20,6 +20,12 @@ tasks:
   gages: False
   fp_crosswalk: False
 
+flowpath_attributes:
+  flowpath_id: fp_id
+  use_stream_order: True
+  dem_path: data/ak/divide-attributes/usgs/ak_dem_250.tif
+
+
 # divide attributes
 divide_attributes:
   processes: 1
