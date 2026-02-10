@@ -13,9 +13,185 @@ build:
 # choose tasks to run
 tasks:
   build_hydrofabric: True
-  divide_attributes: False
+  divide_attributes: True
   flowpath_attributes: False
   waterbodies: False
   hydrolocations: False
   gages: False
   fp_crosswalk: False
+
+flowpath_attributes:
+  flowpath_id: fp_id
+  use_stream_order: True
+  dem_path: data/ak/divide-attributes/usgs/ak_dem_250.tif
+
+
+# divide attributes
+divide_attributes:
+  processes: 1
+  data_dir: data/ak/divide-attributes
+  divide_id: div_id
+  tmp_dir: data/ak/tmp/divide-attributes
+  split_vpu: False
+  debug: False
+  attributes: # attributes must be specified - there are no defaults
+    bexp1:
+      file_name: nwm/bexp_0.tif
+      agg_type: mode
+      field_name: bexp_mode
+    isltyp:
+      file_name: nwm/ISLTYP.tif
+      agg_type: mode
+      field_name: isltyp_mode
+    ivgtyp:
+      file_name: nwm/IVGTYP.tif
+      agg_type: mode
+      field_name: ivgtyp_mode
+    dksat:
+      file_name: nwm/dksat_0.tif
+      agg_type: weighted_geometric_mean
+      field_name: dksat_geomean
+    psisat:
+      file_name: nwm/psisat_0.tif
+      agg_type: weighted_geometric_mean
+      field_name: psisat_geomean
+    cwpvt:
+      file_name: nwm/cwpvt.tif
+      agg_type: mean
+      field_name: cwpvt_mean
+    mp:
+      file_name: nwm/mp.tif
+      agg_type: mean
+      field_name: mp_mean
+    mfsno:
+      file_name: nwm/mfsno.tif
+      agg_type: mean
+      field_name: mfsno_mean
+    quartz:
+      file_name: nwm/quartz_0.tif
+      agg_type: mean
+      field_name: quartz_mean
+    refkdt:
+      file_name: nwm/refkdt.tif
+      agg_type: mean
+      field_name: refkdt_mean
+    slope_1km:
+      file_name: nwm/slope.tif
+      agg_type: mean
+      field_name: slope1km_mean
+    smcmax:
+      file_name: nwm/smcmax_0.tif
+      agg_type: mean
+      field_name: smcmax_mean
+    smcwlt:
+      file_name: nwm/smcwlt_0.tif
+      agg_type: mean
+      field_name: smcwlt_mean
+    vcmx:
+      file_name: nwm/vcmx25.tif
+      agg_type: mean
+      field_name: vcmx_mean
+    impervious:
+      file_name: impervious/ak_full_imperv_percent.tif
+      agg_type: mean
+      field_name: imperv_mean
+    twi:
+      file_name: twi/twi_ak.tif
+      agg_type: quartile_dist
+      field_name: twi_quartile
+    twi_2:                      # another twi option
+      file_name: twi/twi_ak.tif
+      agg_type: quantile_dist
+      field_name: twi_quantile
+    elevation:
+      file_name: usgs/ak_dem_250.tif
+      agg_type: mean
+      field_name: elevation_mean
+    slope:
+      file_name: usgs/ak_slope_250.tif
+      agg_type: mean
+      field_name: slope250m_mean
+    aspect:
+      file_name: usgs/ak_aspect_250.tif
+      agg_type: weighted_circular_mean
+      field_name: aspect_circmean
+    glaciers:
+      file_name: glaciers/glims_20250624.parquet # must include 'glacier' or 'glims' to be used
+      agg_type: percent
+      field_name: glacier_percent
+    groundwater:
+      file_name: gw/gw_ak_nhf_0.1.5.csv # must include 'gw' or 'groundwater' to be used
+      agg_type: groundwater
+      field_name: groundwater # field name not honored, all fields in csv will be joined
+    # mfmin:
+    #   file_name: snow17/MFMIN.tif
+    #   agg_type: mean
+    #   field_name: mfmin_mean
+    # mfmax:
+    #   file_name: snow17/MFMAX.tif
+    #   agg_type: mean
+    #   field_name: mfmax_mean
+    # uadj:
+    #   file_name: snow17/UADJ.tif
+    #   agg_type: mean
+    #   field_name: uadj_mean
+    axaj:
+      file_name: nwm/AXAJ.tif
+      agg_type: mean
+      field_name: a_xinanjiang_inflection_point_parameter
+    bxaj:
+      file_name: nwm/BXAJ.tif
+      agg_type: mean
+      field_name: b_xinanjiang_shape_parameter
+    xxaj:
+      file_name: nwm/XXAJ.tif
+      agg_type: mean
+      field_name: x_xinanjiang_shape_parameter
+    temp_delta_jan:
+        file_name: ueb/jan.tif
+        agg_type: mean
+        field_name: temp_delta_jan_mean
+    temp_delta_feb:
+      file_name: ueb/feb.tif
+      agg_type: mean
+      field_name: temp_delta_feb_mean
+    temp_delta_mar:
+      file_name: ueb/mar.tif
+      agg_type: mean
+      field_name: temp_delta_mar_mean
+    temp_delta_apr:
+      file_name: ueb/apr.tif
+      agg_type: mean
+      field_name: temp_delta_apr_mean
+    temp_delta_may:
+      file_name: ueb/may.tif
+      agg_type: mean
+      field_name: temp_delta_may_mean
+    temp_delta_jun:
+      file_name: ueb/jun.tif
+      agg_type: mean
+      field_name: temp_delta_jun_mean
+    temp_delta_jul:
+      file_name: ueb/jul.tif
+      agg_type: mean
+      field_name: temp_delta_jul_mean
+    temp_delta_aug:
+      file_name: ueb/aug.tif
+      agg_type: mean
+      field_name: temp_delta_aug_mean
+    temp_delta_sep:
+      file_name: ueb/sep.tif
+      agg_type: mean
+      field_name: temp_delta_sep_mean
+    temp_delta_oct:
+      file_name: ueb/oct.tif
+      agg_type: mean
+      field_name: temp_delta_oct_mean
+    temp_delta_nov:
+      file_name: ueb/nov.tif
+      agg_type: mean
+      field_name: temp_delta_nov_mean
+    temp_delta_dec:
+      file_name: ueb/dec.tif
+      agg_type: mean
+      field_name: temp_delta_dec_mean

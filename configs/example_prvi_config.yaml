@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:6566
-output_name: prvi_nhf_0.1.4.gpkg # If not specified, will default to version
+output_name: prvi_nhf_0.1.5.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -19,3 +19,115 @@ tasks:
   hydrolocations: False
   gages: False
   fp_crosswalk: False
+
+# flowpaths
+flowpath_attributes:
+  flowpath_id: fp_id
+  use_stream_order: True
+  dem_path: data/prvi/divide-attributes/usgs/prvi_dem_250.tif
+
+# divide attributes
+divide_attributes:
+  processes: 1
+  data_dir: data/prvi/divide-attributes
+  divide_id: div_id
+  tmp_dir: data/prvi/tmp/divide-attributes
+  split_vpu: False
+  debug: False
+  attributes: # attributes must be specified - there are no defaults
+    bexp1:
+      file_name: nwm/bexp_0.tif
+      agg_type: mode
+      field_name: bexp_mode
+    isltyp:
+      file_name: nwm/ISLTYP.tif
+      agg_type: mode
+      field_name: isltyp_mode
+    ivgtyp:
+      file_name: nwm/IVGTYP.tif
+      agg_type: mode
+      field_name: ivgtyp_mode
+    dksat:
+      file_name: nwm/dksat_0.tif
+      agg_type: weighted_geometric_mean
+      field_name: dksat_geomean
+    psisat:
+      file_name: nwm/psisat_0.tif
+      agg_type: weighted_geometric_mean
+      field_name: psisat_geomean
+    cwpvt:
+      file_name: nwm/cwpvt.tif
+      agg_type: mean
+      field_name: cwpvt_mean
+    mp:
+      file_name: nwm/mp.tif
+      agg_type: mean
+      field_name: mp_mean
+    mfsno:
+      file_name: nwm/mfsno.tif
+      agg_type: mean
+      field_name: mfsno_mean
+    quartz:
+      file_name: nwm/quartz_0.tif
+      agg_type: mean
+      field_name: quartz_mean
+    refkdt:
+      file_name: nwm/refkdt.tif
+      agg_type: mean
+      field_name: refkdt_mean
+    slope_1km:
+      file_name: nwm/slope.tif
+      agg_type: mean
+      field_name: slope1km_mean
+    smcmax:
+      file_name: nwm/smcmax_0.tif
+      agg_type: mean
+      field_name: smcmax_mean
+    smcwlt:
+      file_name: nwm/smcwlt_0.tif
+      agg_type: mean
+      field_name: smcwlt_mean
+    vcmx:
+      file_name: nwm/vcmx25.tif
+      agg_type: mean
+      field_name: vcmx_mean
+    impervious:
+      file_name: impervious/prvi_full_imperv_percent.tif
+      agg_type: mean
+      field_name: imperv_mean
+    twi:
+      file_name: twi/twi_pr.tif
+      agg_type: quartile_dist
+      field_name: twi_quartile
+    twi_2:                      # another twi option
+      file_name: twi/twi_pr.tif
+      agg_type: quantile_dist
+      field_name: twi_quantile
+    elevation:
+      file_name: usgs/prvi_dem_250.tif
+      agg_type: mean
+      field_name: elevation_mean
+    slope:
+      file_name: usgs/prvi_slope_250.tif
+      agg_type: mean
+      field_name: slope250m_mean
+    aspect:
+      file_name: usgs/prvi_aspect_250.tif
+      agg_type: weighted_circular_mean
+      field_name: aspect_circmean
+    axaj:
+      file_name: nwm/AXAJ.tif
+      agg_type: mean
+      field_name: a_xinanjiang_inflection_point_parameter
+    bxaj:
+      file_name: nwm/BXAJ.tif
+      agg_type: mean
+      field_name: b_xinanjiang_shape_parameter
+    xxaj:
+      file_name: nwm/XXAJ.tif
+      agg_type: mean
+      field_name: x_xinanjiang_shape_parameter
+    groundwater:
+      file_name: gw/gw_pr_nhf_0.1.5.csv # must include 'gw' or 'groundwater' to be used
+      agg_type: groundwater
+      field_name: groundwater # field name not honored, all fields in csv will be joined
