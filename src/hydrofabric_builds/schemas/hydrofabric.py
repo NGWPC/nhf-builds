@@ -441,19 +441,19 @@ class FlowpathAttributesModelConfig(BaseModel):
         default=here() / Path("data/usgs_250m_dem_5070.tif"), title="DEM Path", description="Path to DEM"
     )
     tw_path: Path = Field(
-        default=here() / Path("data/TW_bf_predictions.parquet"),
+        default=None,
         title="Topwidth Path",
-        description="Path to RiverML topwidth predictions",
+        description="Path to RiverML topwidth predictions. If None, it will be skipped.",
     )
     y_path: Path = Field(
-        default=here() / Path("data/Y_bf_predictions.parquet"),
+        default=None,
         title="Y Path",
-        description="Path to RiverML Y predictions",
+        description="Path to RiverML Y predictions. If None, it will be skipped.",
     )
     r_path: Path = Field(
-        default=here() / Path("data/r_predictions.parquet"),
+        default=None,
         title="R Path",
-        description="Path to RiverML R predictions",
+        description="Path to RiverML R predictions. If None, it will be skipped.",
     )
 
 
