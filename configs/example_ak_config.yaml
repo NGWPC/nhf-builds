@@ -13,8 +13,8 @@ build:
 # choose tasks to run
 tasks:
   build_hydrofabric: True
-  divide_attributes: True
-  flowpath_attributes: False
+  divide_attributes: False
+  flowpath_attributes: True
   waterbodies: False
   hydrolocations: False
   gages: False

@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:6566
-output_name: prvi_t.gpkg # If not specified, will default to version
+output_name: prvi_0.1.5.gpkg # If not specified, will default to version
 
 # hf builds
 build:
