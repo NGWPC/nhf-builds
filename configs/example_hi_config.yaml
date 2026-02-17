@@ -14,7 +14,7 @@ build:
 tasks:
   build_hydrofabric: True
   divide_attributes: True
-  flowpath_attributes: False
+  flowpath_attributes: True
   waterbodies: False
   hydrolocations: False
   gages: False
