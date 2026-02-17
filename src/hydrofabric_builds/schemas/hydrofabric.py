@@ -92,9 +92,6 @@ class Aggregations(BaseModel):
     connectors: list[dict] = Field(
         description=("A list of connection segments and their geometries"),
     )
-    virtual_flowpaths: list[dict] = Field(
-        description=("A list of all virtual flowpaths and their geometries"),
-    )
     non_nextgen_virtual_flowpaths: list[dict] = Field(
         description=("A list of all non_nextgen virtual flowpaths and their geometries"),
     )
