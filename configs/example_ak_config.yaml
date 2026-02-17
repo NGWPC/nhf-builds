@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:3338
-output_name: ak_nhf_0.1.5c.gpkg # If not specified, will default to version
+output_name: ak_nhf_0.1.52.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -123,18 +123,18 @@ divide_attributes:
       file_name: gw/gw_ak_nhf_0.1.5.csv # must include 'gw' or 'groundwater' to be used
       agg_type: groundwater
       field_name: groundwater # field name not honored, all fields in csv will be joined
-    # mfmin:
-    #   file_name: snow17/MFMIN.tif
-    #   agg_type: mean
-    #   field_name: mfmin_mean
-    # mfmax:
-    #   file_name: snow17/MFMAX.tif
-    #   agg_type: mean
-    #   field_name: mfmax_mean
-    # uadj:
-    #   file_name: snow17/UADJ.tif
-    #   agg_type: mean
-    #   field_name: uadj_mean
+    mfmin:
+      file_name: snow17/MFMIN.tif
+      agg_type: mean
+      field_name: mfmin_mean
+    mfmax:
+      file_name: snow17/MFMAX.tif
+      agg_type: mean
+      field_name: mfmax_mean
+    uadj:
+      file_name: snow17/UADJ.tif
+      agg_type: mean
+      field_name: uadj_mean
     axaj:
       file_name: nwm/AXAJ.tif
       agg_type: mean
