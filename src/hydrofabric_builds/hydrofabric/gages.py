@@ -54,6 +54,14 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         missing = [c for c in required if c not in gages.columns]
         if missing:
             raise ValueError(f"Pre-built gages missing required columns: {missing}")
+        # Drop columns that steps 9-11 will regenerate to avoid duplicates
+        stale = [
+            c
+            for c in ("ref_fp_id", "method_fp_to_gage", "fp_id", "virtual_fp_id", "hy_id")
+            if c in gages.columns
+        ]
+        if stale:
+            gages = gages.drop(columns=stale)
         if gages.crs and gages.crs.to_epsg() != 4326:
             gages = gages.to_crs("EPSG:4326")
         logger.info(f"Loaded {len(gages)} pre-built gages from {gage_cfg.gages.prebuilt_gages}")
