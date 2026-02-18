@@ -38,8 +38,8 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 - `aws s3 cp s3://edfs-data/reference-builds/ak/ak_0.1.5_reference_divides.parquet ./data/reference/ak_0.1.5_reference_divides.parquet`
 - `aws s3 cp s3://edfs-data/reference-builds/ak/ak_0.1.5_reference_flowpaths.parquet ./data/reference/ak_0.1.5_reference_flowpaths.parquet`
 
-2. Gages
-- TBD
+2. Gages - same as CONUS
+- `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
 - TBD
@@ -66,8 +66,8 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 - `aws s3 cp s3://edfs-data/reference-builds/hi/hi_0.1.5_reference_divides.parquet ./data/reference/hi_0.1.5_reference_divides.parquet`
 - `aws s3 cp s3://edfs-data/reference-builds/hi/hi_0.1.5_reference_flowpaths.parquet ./data/reference/hi_0.1.5_reference_flowpaths.parquet`
 
-2. Gages
-- TBD
+2. Gages - same as CONUS
+- `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
 - TBD
@@ -93,8 +93,8 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 - `aws s3 cp s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_divides.parquet ./data/reference/prvi_0.1.5_reference_divides.parquet`
 - `aws s3 cp s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_flowpaths.parquet ./data/reference/prvi_0.1.5_reference_flowpaths.parquet`
 
-2. Gages
-- TBD
+2. Gages - same as CONUS
+- `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
 - TBD
