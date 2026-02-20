@@ -3,6 +3,7 @@ import struct
 import sys
 
 import numpy as np
+import rioxarray  # noqa: F401
 import xarray as xr
 from rasterio.warp import Resampling
 
