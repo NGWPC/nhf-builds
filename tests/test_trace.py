@@ -134,6 +134,11 @@ def _check_virtual_flowpath_area_contributions(
         )
 
 
+def _check_virtual_flowpaths_not_routing(virtual_fp_pl: pl.DataFrame) -> None:
+    """Assert that no virtual flowpaths are marked as routing segments."""
+    assert (~virtual_fp_pl["routing_segment"]).all(), "Found virtual flowpaths with routing_segment=True"
+
+
 def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: HFConfig) -> None:
     """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
     runner = LocalRunner(trace_case_upstream_no_divide_config)
@@ -216,6 +221,7 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
@@ -306,6 +312,7 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
@@ -396,6 +403,7 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
@@ -480,6 +488,7 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
@@ -564,6 +573,7 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
@@ -648,6 +658,7 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
 
 
 def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
@@ -731,3 +742,4 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpaths_not_routing(virtual_fp_pl)
