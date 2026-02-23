@@ -139,6 +139,63 @@ def _check_virtual_flowpaths_not_routing(virtual_fp_pl: pl.DataFrame) -> None:
     assert (~virtual_fp_pl["routing_segment"]).all(), "Found virtual flowpaths with routing_segment=True"
 
 
+def _check_terminal_virtual_nexus_meets_flowpath(
+    virtual_nex_pl: pl.DataFrame,
+    virtual_fp_pl: pl.DataFrame,
+    reference_fp_pl: pl.DataFrame,
+    fp_pl: pl.DataFrame,
+) -> None:
+    """Check that every terminal virtual nexus connects back to a real flowpath.
+
+    Terminal virtual nexuses (dn_virtual_fp_id is null) sit at the downstream end
+    of a virtual flowpath chain. The crosswalk path is:
+    Terminal Nexus -> Virtual Flowpath -> reference_flowpaths -> Flowpath.
+
+    Parameters
+    ----------
+    virtual_nex_pl : pl.DataFrame
+        Virtual nexus dataframe
+    virtual_fp_pl : pl.DataFrame
+        Virtual flowpath dataframe
+    reference_fp_pl : pl.DataFrame
+        Reference flowpath crosswalk table
+    fp_pl : pl.DataFrame
+        Flowpath dataframe
+    """
+    terminal = virtual_nex_pl.filter(pl.col("dn_virtual_fp_id").is_null())
+    if len(terminal) == 0:
+        return
+
+    # Terminal Nexus -> Virtual Flowpath (via dn_virtual_nex_id)
+    hop1 = terminal.join(
+        virtual_fp_pl.select("virtual_fp_id", "dn_virtual_nex_id"),
+        left_on="virtual_nex_id",
+        right_on="dn_virtual_nex_id",
+        how="left",
+    )
+    orphans = hop1.filter(pl.col("virtual_fp_id").is_null())
+    assert len(orphans) == 0, (
+        f"Found {len(orphans)} terminal virtual nexuses with no draining virtual flowpath"
+    )
+
+    # Virtual Flowpath -> reference_flowpaths (via virtual_fp_id); div_id links
+    # to the regular flowpath the virtual chain connects to.
+    ref_vfp = reference_fp_pl.filter(pl.col("virtual_fp_id").is_not_null()).select("virtual_fp_id", "div_id")
+    hop2 = hop1.join(ref_vfp, on="virtual_fp_id", how="left")
+    missing_ref = hop2.filter(pl.col("div_id").is_null())
+    assert len(missing_ref) == 0, (
+        f"Found {len(missing_ref)} terminal virtual flowpaths with no reference_flowpaths entry"
+    )
+
+    # div_id must exist in the flowpaths table
+    valid_fp_ids = set(fp_pl["fp_id"].to_list())
+    matched_fp_ids = set(hop2["div_id"].drop_nulls().to_list())
+    dangling = matched_fp_ids - valid_fp_ids
+    assert len(dangling) == 0, (
+        f"Found {len(dangling)} div_id values from terminal virtual nexus crosswalk not in flowpaths: {dangling}"
+    )
+
+
 def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: HFConfig) -> None:
     """Testing the tracing output for when there is a no-divide connector at the upstream-most point of a divide"""
     runner = LocalRunner(trace_case_upstream_no_divide_config)
@@ -222,6 +279,8 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
@@ -313,6 +372,8 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
@@ -404,6 +465,8 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
@@ -489,6 +552,8 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
@@ -574,6 +639,8 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
@@ -659,6 +726,8 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
@@ -743,3 +812,5 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_virtual_flowpaths_not_routing(virtual_fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
