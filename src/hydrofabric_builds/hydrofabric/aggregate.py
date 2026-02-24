@@ -314,65 +314,6 @@ def _process_non_nextgen_flowpaths(
     return results
 
 
-def _process_virtual_flowpaths(
-    classifications: Classifications,
-    fp_lookup: dict[str, dict[str, Any]],
-    div_lookup: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Process virtual flowpaths - each tuple pair becomes one virtual flowpath.
-
-    Each (flowpath_id, downstream_target) tuple represents a single virtual flowpath
-    that should NOT be merged with others, even if they share the same downstream.
-
-    Parameters
-    ----------
-    classifications : Classifications
-        Classification results
-    fp_lookup : dict[str, dict[str, Any]]
-        Flowpath lookup dict with shapely_geometry
-    div_lookup : dict[str, dict[str, Any]]
-        Divide lookup dict with shapely_geometry
-
-    Returns
-    -------
-    list[dict[str, Any]]
-        Virtual flowpath data - one entry per tuple pair
-    """
-    results: list[dict[str, Any]] = []
-
-    # Each tuple (fp_id, downstream_target) is a separate virtual flowpath
-    for fp_id, downstream_target in classifications.virtual_flowpath_pairs:
-        if fp_id not in fp_lookup:
-            logger.debug(f"Flowpath {fp_id} not found in lookup")
-            continue
-
-        fp_data = fp_lookup[fp_id]
-
-        if fp_id in div_lookup:
-            area_sqkm = float(div_lookup[fp_id]["shapely_geometry"].area / 1e6)
-        else:
-            area_sqkm = 0.0
-        # Single flowpath attributes
-        length_km = float(fp_data["shapely_geometry"].length / 1e3)  # m to km
-        hydroseq = int(fp_data["hydroseq"])
-        vpu_id = fp_data["VPUID"]
-
-        results.append(
-            {
-                "ref_ids": [fp_id],  # Single flowpath in a list
-                "dn_id": downstream_target,  # Where this virtual flowpath connects
-                "up_id": fp_id,  # Same as the only flowpath
-                "vpu_id": vpu_id,
-                "hydroseq": hydroseq,
-                "length_km": length_km,
-                "area_sqkm": area_sqkm,
-                "line_geometry": fp_lookup[fp_id]["shapely_geometry"],
-            }
-        )
-
-    return results
-
-
 def _process_non_nextgen_virtual_flowpaths(
     classifications: Classifications,
     fp_lookup: dict[str, dict[str, Any]],
@@ -504,8 +445,6 @@ def _aggregate_geometries(
 
     connectors = _process_connectors(classifications, fp_lookup, div_lookup)
 
-    virtual_flowpaths = _process_virtual_flowpaths(classifications, fp_lookup, div_lookup)
-
     non_nextgen_virtual_flowpaths = _process_non_nextgen_virtual_flowpaths(
         classifications, fp_lookup, div_lookup, subgraph, node_indices
     )
@@ -515,6 +454,5 @@ def _aggregate_geometries(
         independents=independents,
         non_nextgen_flowpaths=non_nextgen_flowpaths,
         connectors=connectors,
-        virtual_flowpaths=virtual_flowpaths,
         non_nextgen_virtual_flowpaths=non_nextgen_virtual_flowpaths,
     )

@@ -92,9 +92,6 @@ class Aggregations(BaseModel):
     connectors: list[dict] = Field(
         description=("A list of connection segments and their geometries"),
     )
-    virtual_flowpaths: list[dict] = Field(
-        description=("A list of all virtual flowpaths and their geometries"),
-    )
     non_nextgen_virtual_flowpaths: list[dict] = Field(
         description=("A list of all non_nextgen virtual flowpaths and their geometries"),
     )
@@ -441,19 +438,19 @@ class FlowpathAttributesModelConfig(BaseModel):
         default=here() / Path("data/usgs_250m_dem_5070.tif"), title="DEM Path", description="Path to DEM"
     )
     tw_path: Path = Field(
-        default=here() / Path("data/TW_bf_predictions.parquet"),
+        default=None,
         title="Topwidth Path",
-        description="Path to RiverML topwidth predictions",
+        description="Path to RiverML topwidth predictions. If None, it will be skipped.",
     )
     y_path: Path = Field(
-        default=here() / Path("data/Y_bf_predictions.parquet"),
+        default=None,
         title="Y Path",
-        description="Path to RiverML Y predictions",
+        description="Path to RiverML Y predictions. If None, it will be skipped.",
     )
     r_path: Path = Field(
-        default=here() / Path("data/r_predictions.parquet"),
+        default=None,
         title="R Path",
-        description="Path to RiverML R predictions",
+        description="Path to RiverML R predictions. If None, it will be skipped.",
     )
 
 
@@ -669,6 +666,14 @@ class GagesBlock(BaseModel):
     input_dir: Path = Path("data/gages")
     inputs: GagesInputs = Field(default_factory=GagesInputs)
     target: GagesTarget = Field(default_factory=GagesTarget)
+    prebuilt_gages: Path | None = Field(
+        default=None,
+        description="Path to a pre-built gages gpkg. If set, skip gage collection (steps 1-8) and use this table for assignment.",
+    )
+    prebuilt_gages_layer: str = Field(
+        default="gages",
+        description="Layer name in the pre-built gages gpkg.",
+    )
 
 
 class NLDIUpstreamBasins(BaseModel):
