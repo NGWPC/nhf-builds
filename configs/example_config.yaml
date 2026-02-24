@@ -341,11 +341,7 @@ gages:
     layer_points: "sites"
 
   ###--------------------------------------------
-<<<<<<< 9759-update-envca-gages
   ## SNAPPING FLOWPATHS TO GAGES based on upstream catchments area
-=======
-  ##SNAPPING FLOWPATHS TO GAGES based on upstream catchments area
->>>>>>> main
   ###--------------------------------------------
   assign_fp_to_gages:
    rel_err: 0.25                    # relative acceptable error between total upstream area and USGS upstream area.
