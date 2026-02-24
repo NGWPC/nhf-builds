@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class FPInfo(NamedTuple):
+    """Flowpath info extracted from lookup."""
+
     id: str
     order: int
     area: float
@@ -24,6 +26,8 @@ class FPInfo(NamedTuple):
 
 @dataclass
 class Context:
+    """Immutable trace context shared across processing."""
+
     graph: rx.PyDiGraph
     node_indices: dict[str, int]
     fp_lookup: dict[str, dict[str, Any]]
@@ -33,6 +37,8 @@ class Context:
 
 @dataclass
 class State:
+    """Mutable trace state accumulated during processing."""
+
     queue: list[str] = field(default_factory=list)
     processed: set[str] = field(default_factory=set)
     cumulative_areas: dict[str, float] = field(default_factory=dict)
@@ -47,6 +53,7 @@ class State:
 
 
 def get_info(ctx: Context, fid: str) -> FPInfo:
+    """Get flowpath info from lookup."""
     row = ctx.fp_lookup[fid]
     return FPInfo(
         id=fid,
@@ -57,6 +64,7 @@ def get_info(ctx: Context, fid: str) -> FPInfo:
 
 
 def get_upstreams(ctx: Context, fid: str) -> list[str]:
+    """Get immediate upstream flowpath IDs."""
     if fid not in ctx.node_indices:
         return []
     idx = ctx.node_indices[fid]
@@ -64,6 +72,7 @@ def get_upstreams(ctx: Context, fid: str) -> list[str]:
 
 
 def get_ancestors(ctx: Context, fid: str) -> set[str]:
+    """Get all ancestor flowpath IDs."""
     if fid not in ctx.node_indices:
         return set()
     idx = ctx.node_indices[fid]
@@ -93,18 +102,20 @@ def find_longest_path_ids(ctx: Context, start_id: str) -> set[str]:
     return {subgraph[i] for i in longest}
 
 
-def enqueue(st: State, ids: list[str], *, skip_processed: bool = False):
+def enqueue(st: State, ids: list[str]) -> None:
+    """Append unprocessed IDs to the queue."""
     for fid in ids:
-        if not skip_processed or fid not in st.processed:
+        if fid not in st.processed:
             st.queue.append(fid)
 
 
-def aggregate(st: State, src: str, tgt: str):
+def aggregate(st: State, src: str, tgt: str) -> None:
+    """Record an aggregation pair."""
     st.aggregations.add((src, tgt))
     st.aggregation_set.update([src, tgt])
 
 
-def mark_virtual_tree(ctx: Context, st: State, start_id: str, tgt_id: str):
+def mark_virtual_tree(ctx: Context, st: State, start_id: str, tgt_id: str) -> None:
     """Iteratively mark tree as virtual/aggregated."""
     stack = [start_id]
     while stack:
@@ -116,7 +127,7 @@ def mark_virtual_tree(ctx: Context, st: State, start_id: str, tgt_id: str):
         stack.extend(get_upstreams(ctx, curr))
 
 
-def traverse_and_aggregate(ctx: Context, st: State, start_id: str):
+def traverse_and_aggregate(ctx: Context, st: State, start_id: str) -> None:
     """Find longest path; mark others virtual."""
     if start_id not in ctx.node_indices:
         return
@@ -146,7 +157,8 @@ def traverse_and_aggregate(ctx: Context, st: State, start_id: str):
         queue.extend(get_upstreams(ctx, curr))
 
 
-def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo):
+def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo) -> None:
+    """Handle a headwater flowpath with no upstreams."""
     if curr_id in ctx.div_ids:
         if curr_id not in st.aggregation_set:
             st.independent.add(curr_id)
@@ -156,7 +168,8 @@ def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo):
         st.non_nextgen_virtual_pairs.append((curr_id, fp.to_id))
 
 
-def handle_single_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FPInfo, up_id: str):
+def handle_single_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FPInfo, up_id: str) -> None:
+    """Handle a flowpath with exactly one upstream."""
     if curr_id not in ctx.div_ids:
         if fp.order <= 2:
             traverse_and_aggregate(ctx, st, curr_id)
@@ -190,10 +203,13 @@ def handle_single_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: F
             aggregate(st, curr_id, up_id)
 
     st.virtual_pairs.append((curr_id, fp.to_id))
-    enqueue(st, [up_id], skip_processed=True)
+    enqueue(st, [up_id])
 
 
-def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FPInfo, upstreams: list[str]):
+def handle_multi_upstream_flowpath(
+    ctx: Context, st: State, curr_id: str, fp: FPInfo, upstreams: list[str]
+) -> None:
+    """Handle a flowpath with multiple upstreams that has a divide."""
     ups_info = [get_info(ctx, u) for u in upstreams if u in ctx.fp_lookup and u not in st.processed]
     order_1 = [u for u in ups_info if u.order == 1]
     higher = [u for u in ups_info if u.order > 1]
@@ -208,7 +224,7 @@ def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FP
             if fp.to_id != "0":
                 st.connectors.discard(fp.to_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, upstreams, skip_processed=True)
+            enqueue(st, upstreams)
         elif cum_area < ctx.threshold:
             aggregate(st, curr_id, best.id)
             st.cumulative_areas[best.id] = cum_area
@@ -216,12 +232,12 @@ def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FP
                 if u.id != best.id:
                     mark_virtual_tree(ctx, st, u.id, curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, [best.id], skip_processed=True)
+            enqueue(st, [best.id])
         else:
             if curr_id not in st.aggregation_set:
                 st.connectors.add(curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, upstreams, skip_processed=True)
+            enqueue(st, upstreams)
         return
 
     if len(upstreams) == 2:
@@ -229,7 +245,7 @@ def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FP
             if curr_id not in st.aggregation_set:
                 st.connectors.add(curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, upstreams, skip_processed=True)
+            enqueue(st, upstreams)
         else:
             high_id, o1_id = higher[0].id, order_1[0].id
             if fp.area < 0.005:
@@ -238,24 +254,24 @@ def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FP
                     st.independent.discard(high_id)
                     st.virtual_pairs.append((curr_id, high_id))
                     mark_virtual_tree(ctx, st, o1_id, curr_id)
-                    enqueue(st, [high_id], skip_processed=True)
+                    enqueue(st, [high_id])
                 else:
                     st.connectors.discard(fp.to_id)
                     aggregate(st, curr_id, fp.to_id)
                     st.independent.discard(fp.to_id)
                     st.virtual_pairs.append((curr_id, fp.to_id))
-                    enqueue(st, upstreams, skip_processed=True)
+                    enqueue(st, upstreams)
             elif cum_area < ctx.threshold:
                 aggregate(st, curr_id, high_id)
                 st.cumulative_areas[high_id] = cum_area
                 mark_virtual_tree(ctx, st, o1_id, curr_id)
                 st.virtual_pairs.append((curr_id, fp.to_id))
-                enqueue(st, [h.id for h in higher], skip_processed=True)
+                enqueue(st, [h.id for h in higher])
             else:
                 if curr_id not in st.aggregation_set:
                     st.connectors.add(curr_id)
                 st.virtual_pairs.append((curr_id, fp.to_id))
-                enqueue(st, upstreams, skip_processed=True)
+                enqueue(st, upstreams)
         return
 
     # 3+ upstreams
@@ -266,10 +282,13 @@ def handle_multi_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FP
     elif curr_id not in st.aggregation_set:
         st.connectors.add(curr_id)
     st.virtual_pairs.append((curr_id, fp.to_id))
-    enqueue(st, upstreams, skip_processed=True)
+    enqueue(st, upstreams)
 
 
-def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: str, fp: FPInfo, upstreams: list[str]):
+def handle_multi_upstream_flowpath_no_divide(
+    ctx: Context, st: State, curr_id: str, fp: FPInfo, upstreams: list[str]
+) -> None:
+    """Handle a flowpath with multiple upstreams that lacks a divide."""
     ups_info = [get_info(ctx, u) for u in upstreams if u in ctx.fp_lookup and u not in st.processed]
 
     if fp.order == 1:
@@ -287,19 +306,19 @@ def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: s
             if u.id != best.id:
                 mark_virtual_tree(ctx, st, u.id, curr_id)
         st.virtual_pairs.append((curr_id, "0"))
-        enqueue(st, [best.id], skip_processed=True)
+        enqueue(st, [best.id])
         return
 
     ds_ups = get_upstreams(ctx, fp.to_id)
-    other_laterals = [u for u in ds_ups if u != curr_id]
+    other_laterals = [uid for uid in ds_ups if uid != curr_id]
 
     if not other_laterals:
         st.connectors.discard(fp.to_id)
         aggregate(st, curr_id, fp.to_id)
         st.independent.discard(fp.to_id)
 
-        all_ups_no_div = all(u not in ctx.div_ids for u in upstreams)
-        some_ups_no_div = any(u not in ctx.div_ids for u in upstreams)
+        all_ups_no_div = all(uid not in ctx.div_ids for uid in upstreams)
+        some_ups_no_div = any(uid not in ctx.div_ids for uid in upstreams)
 
         if all_ups_no_div:
             if get_ancestors(ctx, curr_id).isdisjoint(ctx.div_ids):
@@ -307,29 +326,29 @@ def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: s
                 return
             best = max(ups_info, key=lambda x: (x.order, x.area, x.id))
             aggregate(st, curr_id, best.id)
-            for u in upstreams:
-                if u != best.id:
-                    st.force_queue.add(u)
-                    mark_virtual_tree(ctx, st, u, curr_id)
+            for uid in upstreams:
+                if uid != best.id:
+                    st.force_queue.add(uid)
+                    mark_virtual_tree(ctx, st, uid, curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, [best.id], skip_processed=True)
+            enqueue(st, [best.id])
             return
 
         if some_ups_no_div:
             best = max(ups_info, key=lambda x: (x.order, x.area, x.id))
             if best.id not in ctx.div_ids:
                 aggregate(st, curr_id, best.id)
-                for u in upstreams:
-                    if u != best.id:
-                        st.force_queue.add(u)
-                        mark_virtual_tree(ctx, st, u, curr_id)
+                for uid in upstreams:
+                    if uid != best.id:
+                        st.force_queue.add(uid)
+                        mark_virtual_tree(ctx, st, uid, curr_id)
                 st.virtual_pairs.append((curr_id, fp.to_id))
-                enqueue(st, [best.id], skip_processed=True)
+                enqueue(st, [best.id])
                 return
             if curr_id not in st.aggregation_set:
                 st.connectors.add(curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, upstreams, skip_processed=True)
+            enqueue(st, upstreams)
             return
 
         # All upstreams have divides
@@ -339,7 +358,7 @@ def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: s
             if u.order == 1:
                 mark_virtual_tree(ctx, st, u.id, curr_id)
         st.virtual_pairs.append((curr_id, fp.to_id))
-        enqueue(st, [u.id for u in ups_info if u.order > 1], skip_processed=True)
+        enqueue(st, [u.id for u in ups_info if u.order > 1])
         return
 
     if lacks_deep_divides(ctx, upstreams):
@@ -362,7 +381,7 @@ def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: s
                 st.force_queue.add(u.id)
                 mark_virtual_tree(ctx, st, u.id, curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, [u.id for u in higher], skip_processed=True)
+            enqueue(st, [u.id for u in higher])
         else:
             best_sub = max(o_1_2, key=lambda x: (x.order, x.area, x.id))
             aggregate(st, curr_id, best_sub.id)
@@ -371,19 +390,19 @@ def handle_multi_upstream_flowpath_no_divide(ctx: Context, st: State, curr_id: s
                     st.force_queue.add(u.id)
                     mark_virtual_tree(ctx, st, u.id, curr_id)
             st.virtual_pairs.append((curr_id, fp.to_id))
-            enqueue(st, [best_sub.id], skip_processed=True)
+            enqueue(st, [best_sub.id])
     else:
         st.connectors.discard(fp.to_id)
         aggregate(st, curr_id, fp.to_id)
         st.independent.discard(fp.to_id)
         st.virtual_pairs.append((curr_id, fp.to_id))
-        enqueue(st, upstreams, skip_processed=True)
+        enqueue(st, upstreams)
 
 
 # anomalies
 
 
-def _anomaly_9272756(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_9272756(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.virtual_pairs.append((curr_id, ds_id))
     st.aggregation_set.add(curr_id)
     mark_virtual_tree(ctx, st, "9272732", curr_id)
@@ -396,17 +415,17 @@ def _anomaly_9272756(ctx: Context, st: State, curr_id: str, ds_id: str):
     aggregate(st, "9272686", "9270812")
     aggregate(st, "9270812", "9272318")
     st.independent.discard(ds_id)
-    enqueue(st, ["9270644", "9272308"], skip_processed=True)
+    enqueue(st, ["9270644", "9272308"])
 
 
-def _anomaly_7262417(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7262417(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     traverse_and_aggregate(ctx, st, "7262465")
     st.independent.add(curr_id)
     st.virtual_pairs.append((curr_id, ds_id))
-    enqueue(st, ["7262413"], skip_processed=True)
+    enqueue(st, ["7262413"])
 
 
-def _anomaly_7262801(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7262801(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.virtual_pairs.append((curr_id, ds_id))
     aggregate(st, "7262727", curr_id)
     st.virtual_pairs.append(("7262727", curr_id))
@@ -427,10 +446,10 @@ def _anomaly_7262801(ctx: Context, st: State, curr_id: str, ds_id: str):
 
     mark_virtual_tree(ctx, st, "7262803", "7262805")
     mark_virtual_tree(ctx, st, "7262933", "7262887")
-    enqueue(st, ["940200288"], skip_processed=True)
+    enqueue(st, ["940200288"])
 
 
-def _anomaly_7261789(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7261789(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.virtual_pairs.append((curr_id, ds_id))
     mark_virtual_tree(ctx, st, "7261795", curr_id)
 
@@ -442,10 +461,10 @@ def _anomaly_7261789(ctx: Context, st: State, curr_id: str, ds_id: str):
     st.aggregation_set.update([curr_id, ds_id])
 
     mark_virtual_tree(ctx, st, "7262255", "7262253")
-    enqueue(st, ["7262417"], skip_processed=True)
+    enqueue(st, ["7262417"])
 
 
-def _anomaly_7264167(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7264167(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, "7260693")
     st.aggregation_set.update([curr_id, "7260693"])
     st.virtual_pairs.append(("7260693", curr_id))
@@ -461,31 +480,33 @@ def _anomaly_7264167(ctx: Context, st: State, curr_id: str, ds_id: str):
     st.non_nextgen_virtual_pairs.append(("7264103", "7260373"))
 
     st.virtual_pairs.append((curr_id, ds_id))
-    enqueue(st, ["7264107"], skip_processed=True)
+    enqueue(st, ["7264107"])
 
 
-def _anomaly_mark_virtual_tree(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_mark_virtual_tree(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, curr_id, ds_id)
     st.independent.discard(ds_id)
 
 
-def _anomaly_22769238(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_22769238(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, "22769236", curr_id)
     aggregate(st, curr_id, "22769244")
     st.aggregation_set.update([curr_id, "22769244"])
     st.virtual_pairs.extend([("22769244", curr_id), (curr_id, ds_id)])
-    enqueue(st, ["22769244"], skip_processed=True)
+    st.processed.add("22769244")
+    enqueue(st, get_upstreams(ctx, "22769244"))
 
 
-def _anomaly_7257691(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7257691(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, "7258923")
     aggregate(st, "7258923", "7257829")
     st.aggregation_set.update([curr_id, "7258923", "7257829"])
     st.virtual_pairs.extend([("7258923", curr_id), ("7257829", "7258923"), (curr_id, ds_id)])
-    enqueue(st, ["7257829"], skip_processed=True)
+    st.processed.add("7257829")
+    enqueue(st, get_upstreams(ctx, "7257829"))
 
 
-def _anomaly_19058436(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_19058436(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, "19058434", curr_id)
     aggregate(st, curr_id, "19058438")
     st.aggregation_set.update([curr_id, "19058438"])
@@ -502,7 +523,7 @@ def _anomaly_19058436(ctx: Context, st: State, curr_id: str, ds_id: str):
     st.virtual_pairs.append((curr_id, ds_id))
 
 
-def _anomaly_21532894(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_21532894(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, "21534286")
     st.aggregation_set.update([curr_id, "21534286"])
     st.virtual_pairs.append(("21534286", curr_id))
@@ -510,7 +531,7 @@ def _anomaly_21532894(ctx: Context, st: State, curr_id: str, ds_id: str):
 
     chain = [("21534286", "21532958"), ("21532958", "21532956"), ("21532956", "21533002")]
     trees = ["21532950", "21532954"]
-    for (src, tgt), tree in zip(chain[:2], trees):
+    for (src, tgt), tree in zip(chain[:2], trees, strict=False):
         aggregate(st, src, tgt)
         st.aggregation_set.add(tgt)
         st.virtual_pairs.append((tgt, src))
@@ -525,20 +546,20 @@ def _anomaly_21532894(ctx: Context, st: State, curr_id: str, ds_id: str):
     st.virtual_pairs.append(("21534452", "21532956"))
     st.connectors.add("21534452")
     st.virtual_pairs.append((curr_id, ds_id))
-    enqueue(st, ["21534456", "21534462", "21534454"], skip_processed=True)
+    enqueue(st, ["21534456", "21534462", "21534454"])
 
 
-def _anomaly_12745197(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_12745197(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     for tgt in ["12744163", "12744931", "12745039"]:
         aggregate(st, curr_id, tgt)
         st.aggregation_set.add(tgt)
         st.virtual_pairs.append((tgt, curr_id))
     st.aggregation_set.add(curr_id)
     st.virtual_pairs.append((curr_id, ds_id))
-    enqueue(st, ["12745041"], skip_processed=True)
+    enqueue(st, ["12745041"])
 
 
-def _anomaly_3254269(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_3254269(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, ds_id)
     st.aggregation_set.update([curr_id, ds_id])
     st.virtual_pairs.append((curr_id, ds_id))
@@ -546,10 +567,10 @@ def _anomaly_3254269(ctx: Context, st: State, curr_id: str, ds_id: str):
     aggregate(st, "3254167", "3258317")
     st.aggregation_set.update(["3254167", "3258317"])
     st.virtual_pairs.append(("3254167", "3258317"))
-    enqueue(st, ["3258317", "3254159"], skip_processed=True)
+    enqueue(st, ["3258317", "3254159"])
 
 
-def _anomaly_7264077(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_7264077(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, "7259909")
     st.aggregation_set.add(curr_id)
     st.virtual_pairs.append((curr_id, "7259909"))
@@ -557,7 +578,7 @@ def _anomaly_7264077(ctx: Context, st: State, curr_id: str, ds_id: str):
     traverse_and_aggregate(ctx, st, "7259795")
 
 
-def _anomaly_17493533(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_17493533(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.virtual_pairs.append((curr_id, "17493589"))
     st.virtual_pairs.append(("17493529", curr_id))
     aggregate(st, curr_id, "17493529")
@@ -566,18 +587,18 @@ def _anomaly_17493533(ctx: Context, st: State, curr_id: str, ds_id: str):
     aggregate(st, "17493529", "17493261")
     st.virtual_pairs.append(("17493261", "17493529"))
     st.aggregation_set.add("17493261")
-    enqueue(st, ["17493321", "17493245"], skip_processed=True)
+    enqueue(st, ["17493321", "17493245"])
 
 
-def _anomaly_12327133(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_12327133(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, "12327137", curr_id)
     aggregate(st, curr_id, "12327125")
     st.aggregation_set.update(["12327125", curr_id])
     st.virtual_pairs.extend([(curr_id, ds_id), ("12327125", curr_id)])
-    enqueue(st, ["12327119"], skip_processed=True)
+    enqueue(st, ["12327119"])
 
 
-def _anomaly_3023064(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_3023064(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.virtual_pairs.append((curr_id, ds_id))
     mark_virtual_tree(ctx, st, "3023066", curr_id)
     st.virtual_pairs.append(("3023062", curr_id))
@@ -589,23 +610,24 @@ def _anomaly_3023064(ctx: Context, st: State, curr_id: str, ds_id: str):
     aggregate(st, "3022994", "3022998")
     st.aggregation_set.update(["3022994", "3022998"])
     st.virtual_pairs.extend([("3022994", "3023012"), ("3022998", "3023012")])
-    enqueue(st, ["3022996", "3022994"], skip_processed=True)
+    st.processed.add("3022994")
+    enqueue(st, ["3022996"] + get_upstreams(ctx, "3022994"))
 
 
-def _anomaly_5353277(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_5353277(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, "5353283", curr_id)
     st.aggregation_set.add("5353277")
     aggregate(st, curr_id, "5353281")
     st.aggregation_set.add("5353281")
     st.virtual_pairs.extend([("5353281", curr_id), (curr_id, ds_id)])
-    enqueue(st, ["5352717"], skip_processed=True)
+    enqueue(st, ["5352717"])
 
 
-def _anomaly_traverse_only(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_traverse_only(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     traverse_and_aggregate(ctx, st, curr_id)
 
 
-def _anomaly_mark_with_agg(ctx: Context, st: State, curr_id: str, ds_id: str):
+def _anomaly_mark_with_agg(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     mark_virtual_tree(ctx, st, curr_id, ds_id)
     st.aggregation_set.add(curr_id)
 
@@ -629,9 +651,8 @@ ANOMALY_HANDLERS = {
     "12327133": _anomaly_12327133,
     "3023064": _anomaly_3023064,
     "5353277": _anomaly_5353277,
-    **{
-        k: _anomaly_traverse_only
-        for k in [
+    **dict.fromkeys(
+        [
             "17245948",
             "4386267",
             "8367918",
@@ -642,14 +663,15 @@ ANOMALY_HANDLERS = {
             "3053522",
             "18852694",
             "7312267",
-        ]
-    },
+        ],
+        _anomaly_traverse_only,
+    ),
     "8367540": _anomaly_mark_with_agg,
     "14625948": _anomaly_mark_with_agg,
 }
 
 
-def process_flowpath(ctx: Context, st: State, curr_id: str):
+def process_flowpath(ctx: Context, st: State, curr_id: str) -> None:
     """Process a single flowpath - dispatch to appropriate handler."""
     if handler := ANOMALY_HANDLERS.get(curr_id):
         handler(ctx, st, curr_id, get_info(ctx, curr_id).to_id)
@@ -669,13 +691,30 @@ def process_flowpath(ctx: Context, st: State, curr_id: str):
             handle_multi_upstream_flowpath_no_divide(ctx, st, curr_id, fp, upstreams)
 
 
-def run(ctx: Context, st: State):
+def run(ctx: Context, st: State) -> None:
     """Process queue until empty."""
     while st.queue:
         curr_id = st.queue.pop(0)
         if curr_id not in st.processed:
             st.processed.add(curr_id)
             process_flowpath(ctx, st, curr_id)
+
+
+def _deduplicate_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, ...]]:
+    """Remove duplicate pairs, keeping first occurrence of each source ID.
+
+    Anomaly handlers can add a flowpath to virtual_pairs and then queue it for
+    normal processing, which appends a second pair for the same source ID.
+    Duplicates cause orphan virtual flowpaths in the build phase because the
+    reference_flowpaths entry gets overwritten by the later duplicate.
+    """
+    seen: set[str] = set()
+    result: list[tuple[str, ...]] = []
+    for src, tgt in pairs:
+        if src not in seen:
+            seen.add(src)
+            result.append((src, tgt))
+    return result
 
 
 def to_classifications(st: State) -> Classifications:
@@ -687,8 +726,8 @@ def to_classifications(st: State) -> Classifications:
     res.non_nextgen_flowpaths = st.non_nextgen
     res.aggregation_pairs = list(st.aggregations)
     res.aggregation_set = st.aggregation_set
-    res.virtual_flowpath_pairs = st.virtual_pairs
-    res.non_nextgen_virtual_flowpath_pairs = st.non_nextgen_virtual_pairs
+    res.virtual_flowpath_pairs = _deduplicate_pairs(st.virtual_pairs)
+    res.non_nextgen_virtual_flowpath_pairs = _deduplicate_pairs(st.non_nextgen_virtual_pairs)
     res.force_queue_flowpaths = st.force_queue
     return res
 
@@ -707,7 +746,8 @@ def _trace_stack(
         cfg: Configuration
         partition_data: Dict with subgraph, node_indices, fp_lookup
 
-    Returns:
+    Returns
+    -------
         Classifications result
     """
     ctx = Context(
