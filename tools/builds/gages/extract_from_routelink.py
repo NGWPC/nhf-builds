@@ -5,7 +5,39 @@ import geopandas
 import pandas as pd
 
 
-def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None):
+def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None) -> None:
+    """Extract gages from RouteLink file
+
+    Use ogr2ogr to convert NC file to GPKG and add EPSG:4326 georef i.e. ogr2ogr RouteLink.gpkg RouteLink.nc -t_srs EPSG:4326 -s_srs EPSG:4326
+
+    Parameters
+    ----------
+    routelink : Path
+        RouteLink file to extract from
+    output_csv: Path
+        Path to write gage list CSV
+    shape: Path | None
+        Shapefile to use for clipping
+    """
+    gages = geopandas.read_file(routelink).to_crs(epsg=4326)
+
+
+    # first get gages only
+    gages = gages.loc[gages["gages"].str.strip() != ""].copy()
+
+    # then check intersection if requested
+    if shape:
+        # Get boundary to clip to
+        shp = geopandas.read_file(shape).to_crs(epsg=4326)
+        merged_geom = shp['geometry'].union_all()
+        gages = gages.loc[gages["geometry"].intersects(merged_geom), :].copy()
+
+
+    gages['lat'], gages['lon']  = gages['geometry'].y, gages['geometry'].x
+    gages = gages.rename(columns={'gages' : 'gageid'})
+    gages['gageid'] = gages["gageid"].str.strip()
+
+    gages[['gageid', 'lat', 'lon']].to_csv(output_csv, index=False)
     """Extract gages from RouteLink file
 
     Use ogr2ogr to convert NC file to GPKG and add EPSG:4326 georef i.e. ogr2ogr RouteLink.gpkg RouteLink.nc -t_srs EPSG:4326 -s_srs EPSG:4326
