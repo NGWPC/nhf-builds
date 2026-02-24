@@ -637,10 +637,8 @@ class GagesInputs(BaseModel):
     txdot_gages: GageInput = Field(
         default_factory=lambda: GageInput(path=Path("TXDOT_gages/TXDOT_gages.txt"))
     )
-    CADWR_ENVCA: GageInput = Field(
-        default_factory=lambda: GageInput(
-            path=Path("CADWR_ENVCA/gage_xy.csv"), x_col_name="lon", y_col_name="lat"
-        )
+    other: GageInput = Field(
+        default_factory=lambda: GageInput(path=Path("other/gage_xy.csv"), x_col_name="lon", y_col_name="lat")
     )
     CIROH_UA: GageInput = Field(
         default_factory=lambda: GageInput(
@@ -716,7 +714,7 @@ class GagesConfig(BaseModel):
             self.gages.inputs.usgs_discontinued,
             self.gages.inputs.usgs_active,
             self.gages.inputs.txdot_gages,
-            self.gages.inputs.CADWR_ENVCA,
+            self.gages.inputs.other,
             self.gages.inputs.nwm_calib_gages,
         ]:
             if inp.dir is not None:
