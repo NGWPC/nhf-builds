@@ -671,67 +671,6 @@ ANOMALY_HANDLERS = {
 }
 
 
-def process_flowpath(ctx: Context, st: State, curr_id: str) -> None:
-    """Process a single flowpath - dispatch to appropriate handler."""
-    if handler := ANOMALY_HANDLERS.get(curr_id):
-        handler(ctx, st, curr_id, get_info(ctx, curr_id).to_id)
-        return
-
-    fp = get_info(ctx, curr_id)
-    upstreams = get_upstreams(ctx, curr_id)
-
-    match (len(upstreams), curr_id in ctx.div_ids):
-        case (0, _):
-            handle_headwater(ctx, st, curr_id, fp)
-        case (1, _):
-            handle_single_upstream_flowpath(ctx, st, curr_id, fp, upstreams[0])
-        case (_, True):
-            handle_multi_upstream_flowpath(ctx, st, curr_id, fp, upstreams)
-        case (_, False):
-            handle_multi_upstream_flowpath_no_divide(ctx, st, curr_id, fp, upstreams)
-
-
-def run(ctx: Context, st: State) -> None:
-    """Process queue until empty."""
-    while st.queue:
-        curr_id = st.queue.pop(0)
-        if curr_id not in st.processed:
-            st.processed.add(curr_id)
-            process_flowpath(ctx, st, curr_id)
-
-
-def _deduplicate_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, ...]]:
-    """Remove duplicate pairs, keeping first occurrence of each source ID.
-
-    Anomaly handlers can add a flowpath to virtual_pairs and then queue it for
-    normal processing, which appends a second pair for the same source ID.
-    Duplicates cause orphan virtual flowpaths in the build phase because the
-    reference_flowpaths entry gets overwritten by the later duplicate.
-    """
-    seen: set[str] = set()
-    result: list[tuple[str, ...]] = []
-    for src, tgt in pairs:
-        if src not in seen:
-            seen.add(src)
-            result.append((src, tgt))
-    return result
-
-
-def to_classifications(st: State) -> Classifications:
-    """Convert state to output format."""
-    res = Classifications()
-    res.processed_flowpaths = st.processed
-    res.independent_flowpaths = st.independent
-    res.connector_segments = list(st.connectors)
-    res.non_nextgen_flowpaths = st.non_nextgen
-    res.aggregation_pairs = list(st.aggregations)
-    res.aggregation_set = st.aggregation_set
-    res.virtual_flowpath_pairs = _deduplicate_pairs(st.virtual_pairs)
-    res.non_nextgen_virtual_flowpath_pairs = _deduplicate_pairs(st.non_nextgen_virtual_pairs)
-    res.force_queue_flowpaths = st.force_queue
-    return res
-
-
 def _trace_stack(
     start_id: str,
     div_ids: set[str],
@@ -761,9 +700,55 @@ def _trace_stack(
     st = State(queue=[start_id])
 
     if div_ids:
-        run(ctx, st)
+        while st.queue:
+            curr_id = st.queue.pop(0)
+            if curr_id in st.processed:
+                continue
+            st.processed.add(curr_id)
 
-    return to_classifications(st)
+            if handler := ANOMALY_HANDLERS.get(curr_id):
+                handler(ctx, st, curr_id, get_info(ctx, curr_id).to_id)
+                continue
+
+            fp = get_info(ctx, curr_id)
+            upstreams = get_upstreams(ctx, curr_id)
+
+            match (len(upstreams), curr_id in ctx.div_ids):
+                case (0, _):
+                    handle_headwater(ctx, st, curr_id, fp)
+                case (1, _):
+                    handle_single_upstream_flowpath(ctx, st, curr_id, fp, upstreams[0])
+                case (_, True):
+                    handle_multi_upstream_flowpath(ctx, st, curr_id, fp, upstreams)
+                case (_, False):
+                    handle_multi_upstream_flowpath_no_divide(ctx, st, curr_id, fp, upstreams)
+
+    # Deduplicate pairs, keeping first occurrence of each source ID
+    seen: set[str] = set()
+    deduped_virtual: list[tuple[str, ...]] = []
+    for src, tgt in st.virtual_pairs:
+        if src not in seen:
+            seen.add(src)
+            deduped_virtual.append((src, tgt))
+
+    seen.clear()
+    deduped_nn_virtual: list[tuple[str, ...]] = []
+    for src, tgt in st.non_nextgen_virtual_pairs:
+        if src not in seen:
+            seen.add(src)
+            deduped_nn_virtual.append((src, tgt))
+
+    res = Classifications()
+    res.processed_flowpaths = st.processed
+    res.independent_flowpaths = st.independent
+    res.connector_segments = list(st.connectors)
+    res.non_nextgen_flowpaths = st.non_nextgen
+    res.aggregation_pairs = list(st.aggregations)
+    res.aggregation_set = st.aggregation_set
+    res.virtual_flowpath_pairs = deduped_virtual
+    res.non_nextgen_virtual_flowpath_pairs = deduped_nn_virtual
+    res.force_queue_flowpaths = st.force_queue
+    return res
 
 
 def _trace_single_flowpath_attributes(
