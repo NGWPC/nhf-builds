@@ -38,6 +38,7 @@ def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None
     coords_x = coords["x"]
     coords_y = coords["y"]
 
+    # Test for 'gages' field to be non empty and, if shapefile given, test for geometry intersection
     merged_geom = merge_shape_geometries(shape) if shape else None
     gage_filter = (
         lambda idx: gages["geometry"][idx].intersects(merged_geom) and gages["gages"][idx].strip() != ""
@@ -45,7 +46,8 @@ def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None
         else lambda idx: gages["gages"][idx].strip() != ""
     )
 
-    ca_gages = pd.concat(
+    # Collect all gages that pass filter check into a DataFrame
+    filtered_gages = pd.concat(
         pd.DataFrame(
             [[gages["gages"][idx].strip(), coords_x[idx], coords_y[idx]]], columns=["gageid", "lon", "lat"]
         )
@@ -55,7 +57,7 @@ def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None
         )
     )
 
-    ca_gages.to_csv(output_csv, index=False)
+    filtered_gages.to_csv(output_csv, index=False)
 
 
 if __name__ == "__main__":
