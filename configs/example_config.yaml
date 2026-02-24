@@ -309,7 +309,7 @@ gages:
         path: TXDOT_gages/TXDOT_gages.txt
         gage_source_crs: EPSG:4326
         id_col_name: site_no
-      CADWR_ENVCA:
+      OTHER:
         path: CADWR_ENVCA/gage_xy_v1.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
