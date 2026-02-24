@@ -70,31 +70,12 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # Steps 1-8: collect gages from local sources + APIs
         # -----------------------------------------------------------------
 
-<<<<<<< 9759-update-envca-gages
-    # ---------------------------------------------------------------------
-    # 4) CADWR/ENVCA/AK/HI/PR & misc. XY CSVs
-    # ---------------------------------------------------------------------
-    gages_xy_path = local_root / gage_cfg.gages.inputs.other.path
-    src_crs = gage_cfg.gages.inputs.other.gage_source_crs
-    if gages_xy_path.exists():
-        gages = merge_gage_xy_into_gages(
-            gages=gages,
-            gage_xy_csv=gages_xy_path,
-            src_crs=src_crs,
-            update_existing=update_existing,
-            exclude_ids=exclude_ids,
-            fill_value="-",
-        )
-    else:
-        logger.warning(f"gages: 'other' file list not found, skipping: {gages_xy_path}")
-=======
         # ---------------------------------------------------------------------
         # 1) USGS discontinued (KMZ)
         # ---------------------------------------------------------------------
         """
         State gage file with kmz format can be downloaded from the following USGS link:
         https://waterwatch.usgs.gov/index.php?id=stategage
->>>>>>> main
 
         choose "past flow/runoff"
         choose option "streamgage locations in KML"
@@ -166,8 +147,8 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 4) CADWR/ENVCA/AK/HI/PR & misc. XY CSVs
         # ---------------------------------------------------------------------
-        gages_xy_path = local_root / gage_cfg.gages.inputs.CADWR_ENVCA.path
-        src_crs = gage_cfg.gages.inputs.CADWR_ENVCA.gage_source_crs
+        gages_xy_path = local_root / gage_cfg.gages.inputs.other.path
+        src_crs = gage_cfg.gages.inputs.other.gage_source_crs
         if gages_xy_path.exists():
             gages = merge_gage_xy_into_gages(
                 gages=gages,
@@ -178,7 +159,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
                 fill_value="-",
             )
         else:
-            logger.warning(f"gages: CADWR_ENVCA file list not found, skipping: {gages_xy_path}")
+            logger.warning(f"gages: 'other' file list not found, skipping: {gages_xy_path}")
 
         # ---------------------------------------------------------------------
         # 5) NWM calibration gages — ensure presence; fill missing via NWIS Site Service
