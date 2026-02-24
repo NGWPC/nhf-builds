@@ -47,7 +47,8 @@ class State:
     non_nextgen: set[str] = field(default_factory=set)
     aggregations: set[tuple[str, str]] = field(default_factory=set)
     aggregation_set: set[str] = field(default_factory=set)
-    non_nextgen_virtual_pairs: list[tuple[str, str]] = field(default_factory=list)
+    non_nextgen_virtual_pairs: list[tuple[str, ...]] = field(default_factory=list)
+    non_nextgen_virtual_sources: set[str] = field(default_factory=set)
     force_queue: set[str] = field(default_factory=set)
 
 
@@ -122,7 +123,9 @@ def mark_virtual_tree(ctx: Context, st: State, start_id: str, tgt_id: str) -> No
         st.non_nextgen.add(curr)
         aggregate(st, curr, tgt_id)
         st.processed.add(curr)
-        st.non_nextgen_virtual_pairs.append((curr, tgt_id))
+        if curr not in st.non_nextgen_virtual_sources:
+            st.non_nextgen_virtual_sources.add(curr)
+            st.non_nextgen_virtual_pairs.append((curr, tgt_id))
         stack.extend(get_upstreams(ctx, curr))
 
 
@@ -148,7 +151,9 @@ def traverse_and_aggregate(ctx: Context, st: State, start_id: str) -> None:
 
         if curr not in longest_ids or all_non_nextgen:
             st.non_nextgen.add(curr)
-            st.non_nextgen_virtual_pairs.append((curr, fp.to_id))
+            if curr not in st.non_nextgen_virtual_sources:
+                st.non_nextgen_virtual_sources.add(curr)
+                st.non_nextgen_virtual_pairs.append((curr, fp.to_id))
 
         aggregate(st, curr, start_id)
         queue.extend(get_upstreams(ctx, curr))
@@ -161,7 +166,9 @@ def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo) -> None:
             st.independent.add(curr_id)
     else:
         st.non_nextgen.add(curr_id)
-        st.non_nextgen_virtual_pairs.append((curr_id, fp.to_id))
+        if curr_id not in st.non_nextgen_virtual_sources:
+            st.non_nextgen_virtual_sources.add(curr_id)
+            st.non_nextgen_virtual_pairs.append((curr_id, fp.to_id))
 
 
 def handle_single_upstream_flowpath(ctx: Context, st: State, curr_id: str, fp: FPInfo, up_id: str) -> None:
@@ -217,7 +224,8 @@ def handle_multi_upstream_flowpath(
             aggregate(st, curr_id, tgt)
             st.independent.discard(tgt)
             if fp.to_id != "0":
-                st.connectors.discard(fp.to_id)
+                if fp.to_id in st.connectors:
+                    st.connectors.remove(fp.to_id)
             enqueue(st, upstreams)
         elif cum_area < ctx.threshold:
             aggregate(st, curr_id, best.id)
@@ -246,7 +254,8 @@ def handle_multi_upstream_flowpath(
                     mark_virtual_tree(ctx, st, o1_id, curr_id)
                     enqueue(st, [high_id])
                 else:
-                    st.connectors.discard(fp.to_id)
+                    if fp.to_id in st.connectors:
+                        st.connectors.remove(fp.to_id)
                     aggregate(st, curr_id, fp.to_id)
                     st.independent.discard(fp.to_id)
                     enqueue(st, upstreams)
@@ -263,7 +272,8 @@ def handle_multi_upstream_flowpath(
 
     # 3+ upstreams
     if fp.area < 0.005:
-        st.connectors.discard(fp.to_id)
+        if fp.to_id in st.connectors:
+            st.connectors.remove(fp.to_id)
         aggregate(st, curr_id, fp.to_id)
         st.independent.discard(fp.to_id)
     elif curr_id not in st.aggregation_set:
@@ -298,7 +308,8 @@ def handle_multi_upstream_flowpath_no_divide(
     other_laterals = [uid for uid in ds_ups if uid != curr_id]
 
     if not other_laterals:
-        st.connectors.discard(fp.to_id)
+        if fp.to_id in st.connectors:
+            st.connectors.remove(fp.to_id)
         aggregate(st, curr_id, fp.to_id)
         st.independent.discard(fp.to_id)
 
@@ -371,7 +382,8 @@ def handle_multi_upstream_flowpath_no_divide(
                     mark_virtual_tree(ctx, st, u.id, curr_id)
             enqueue(st, [best_sub.id])
     else:
-        st.connectors.discard(fp.to_id)
+        if fp.to_id in st.connectors:
+            st.connectors.remove(fp.to_id)
         aggregate(st, curr_id, fp.to_id)
         st.independent.discard(fp.to_id)
         enqueue(st, upstreams)
@@ -402,14 +414,18 @@ def _anomaly_7262417(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
 def _anomaly_7262801(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, "7262727", curr_id)
     st.non_nextgen.add("7262683")
-    st.non_nextgen_virtual_pairs.append(("7262683", "7262727"))
+    if "7262683" not in st.non_nextgen_virtual_sources:
+        st.non_nextgen_virtual_sources.add("7262683")
+        st.non_nextgen_virtual_pairs.append(("7262683", "7262727"))
     aggregate(st, "7262727", "7262683")
     st.aggregation_set.update(["7262683", "7262727", curr_id])
 
     st.non_nextgen.add("7262819")
     aggregate(st, "7262819", "7262727")
     st.aggregation_set.add("7262819")
-    st.non_nextgen_virtual_pairs.append(("7262819", "7262727"))
+    if "7262819" not in st.non_nextgen_virtual_sources:
+        st.non_nextgen_virtual_sources.add("7262819")
+        st.non_nextgen_virtual_pairs.append(("7262819", "7262727"))
 
     for src, tgt in [("7262727", "7262805"), ("7262805", "7262887"), ("7262887", "7262959")]:
         aggregate(st, src, tgt)
@@ -444,7 +460,9 @@ def _anomaly_7264167(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
 
     aggregate(st, "7260373", "7264103")
     st.aggregation_set.add("7264103")
-    st.non_nextgen_virtual_pairs.append(("7264103", "7260373"))
+    if "7264103" not in st.non_nextgen_virtual_sources:
+        st.non_nextgen_virtual_sources.add("7264103")
+        st.non_nextgen_virtual_pairs.append(("7264103", "7260373"))
 
     enqueue(st, ["7264107"])
 
@@ -458,16 +476,14 @@ def _anomaly_22769238(ctx: Context, st: State, curr_id: str, ds_id: str) -> None
     mark_virtual_tree(ctx, st, "22769236", curr_id)
     aggregate(st, curr_id, "22769244")
     st.aggregation_set.update([curr_id, "22769244"])
-    st.processed.add("22769244")
-    enqueue(st, get_upstreams(ctx, "22769244"))
+    enqueue(st, ["22769244"])
 
 
 def _anomaly_7257691(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     aggregate(st, curr_id, "7258923")
     aggregate(st, "7258923", "7257829")
     st.aggregation_set.update([curr_id, "7258923", "7257829"])
-    st.processed.add("7257829")
-    enqueue(st, get_upstreams(ctx, "7257829"))
+    enqueue(st, ["7257829"])
 
 
 def _anomaly_19058436(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
@@ -553,8 +569,7 @@ def _anomaly_3023064(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
     st.aggregation_set.add("3023012")
     aggregate(st, "3022994", "3022998")
     st.aggregation_set.update(["3022994", "3022998"])
-    st.processed.add("3022994")
-    enqueue(st, ["3022996"] + get_upstreams(ctx, "3022994"))
+    enqueue(st, ["3022996", "3022994"])
 
 
 def _anomaly_5353277(ctx: Context, st: State, curr_id: str, ds_id: str) -> None:
@@ -665,14 +680,6 @@ def _trace_stack(
                 case (_, False):
                     handle_multi_upstream_flowpath_no_divide(ctx, st, curr_id, fp, upstreams)
 
-    # Deduplicate non-nextgen virtual pairs, keeping first occurrence of each source ID
-    seen: set[str] = set()
-    deduped_nn_virtual: list[tuple[str, ...]] = []
-    for src, tgt in st.non_nextgen_virtual_pairs:
-        if src not in seen:
-            seen.add(src)
-            deduped_nn_virtual.append((src, tgt))
-
     res = Classifications()
     res.processed_flowpaths = st.processed
     res.independent_flowpaths = st.independent
@@ -680,7 +687,7 @@ def _trace_stack(
     res.non_nextgen_flowpaths = st.non_nextgen
     res.aggregation_pairs = list(st.aggregations)
     res.aggregation_set = st.aggregation_set
-    res.non_nextgen_virtual_flowpath_pairs = deduped_nn_virtual
+    res.non_nextgen_virtual_flowpath_pairs = st.non_nextgen_virtual_pairs
     res.force_queue_flowpaths = st.force_queue
     return res
 
