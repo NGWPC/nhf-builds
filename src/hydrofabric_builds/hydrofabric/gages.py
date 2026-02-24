@@ -147,8 +147,8 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 4) CADWR/ENVCA/AK/HI/PR & misc. XY CSVs
         # ---------------------------------------------------------------------
-        gages_xy_path = local_root / gage_cfg.gages.inputs.CADWR_ENVCA.path
-        src_crs = gage_cfg.gages.inputs.CADWR_ENVCA.gage_source_crs
+        gages_xy_path = local_root / gage_cfg.gages.inputs.other.path
+        src_crs = gage_cfg.gages.inputs.other.gage_source_crs
         if gages_xy_path.exists():
             gages = merge_gage_xy_into_gages(
                 gages=gages,
@@ -159,7 +159,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
                 fill_value="-",
             )
         else:
-            logger.warning(f"gages: CADWR_ENVCA file list not found, skipping: {gages_xy_path}")
+            logger.warning(f"gages: 'other' file list not found, skipping: {gages_xy_path}")
 
         # ---------------------------------------------------------------------
         # 5) NWM calibration gages — ensure presence; fill missing via NWIS Site Service
