@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_0.1.5.gpkg # If not specified, will default to version
+output_name: hi_nhf_0.1.52.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -17,7 +17,7 @@ tasks:
   flowpath_attributes: True
   waterbodies: False
   hydrolocations: False
-  gages: False
+  gages: True
   fp_crosswalk: False
 
 # flowpaths
@@ -131,3 +131,49 @@ divide_attributes:
       file_name: nwm/XXAJ.tif
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
+
+gages:
+  gages:
+    inputs:
+      usgs_discontinued:
+        dir: usgs_gages_discontinued
+        gage_source_crs: EPSG:4326
+        id_col_name: site_no
+      usgs_active:
+        dir: usgs_active_gages
+        id_col_name: site_no
+      CIROH_UA:
+        path: CIROH_UA/gage_area.csv
+        id_col_name: gage
+        area_col_name: area_sqkm
+      nwm_calib_gages:
+        path: nwm_calib/nwm_calib_gages_07112025.csv
+        gage_source_crs: EPSG:4326
+        id_col_name: site_no
+    target:
+      crs: EPSG:32604
+      snap_tolerance_m: 100.0
+      update_existing: True
+      exclude_ids: []
+      out_gpkg: gages/gages_hi.gpkg
+      gpkg_layer_name: gages
+
+  ###--------------------------------------------
+  ## A file for USGS upstream area and basins shapefiles
+  ###--------------------------------------------
+  NLDI_upstream_basins:
+    run_NLDI_upstream_basins: False # OCONUS does not have upstream basins
+    path: nldi_upstream_basins.gpkg
+    layer_polys: NLDI_upstream_basins
+    layer_points: "sites"
+
+  ###--------------------------------------------
+  ##SNAPPING FLOWPATHS TO GAGES based on upstream catchments area
+  ###--------------------------------------------
+  assign_fp_to_gages:
+   rel_err: 0.25                    # relative acceptable error between total upstream area and USGS upstream area.
+   buffer_m: 1000.0                 # Buffering around point gages to find flowpaths. in meters
+   parallel: False                  # serial (False) or parallel (True)
+   max_workers: null                  # None: if serial
+   USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
+   work_crs: EPSG:32604           # an area-equal crs to calculate buffers and distances

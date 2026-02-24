@@ -92,9 +92,6 @@ class Aggregations(BaseModel):
     connectors: list[dict] = Field(
         description=("A list of connection segments and their geometries"),
     )
-    virtual_flowpaths: list[dict] = Field(
-        description=("A list of all virtual flowpaths and their geometries"),
-    )
     non_nextgen_virtual_flowpaths: list[dict] = Field(
         description=("A list of all non_nextgen virtual flowpaths and their geometries"),
     )
@@ -667,6 +664,14 @@ class GagesBlock(BaseModel):
     input_dir: Path = Path("data/gages")
     inputs: GagesInputs = Field(default_factory=GagesInputs)
     target: GagesTarget = Field(default_factory=GagesTarget)
+    prebuilt_gages: Path | None = Field(
+        default=None,
+        description="Path to a pre-built gages gpkg. If set, skip gage collection (steps 1-8) and use this table for assignment.",
+    )
+    prebuilt_gages_layer: str = Field(
+        default="gages",
+        description="Layer name in the pre-built gages gpkg.",
+    )
 
 
 class NLDIUpstreamBasins(BaseModel):
