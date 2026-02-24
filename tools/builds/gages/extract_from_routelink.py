@@ -5,20 +5,6 @@ import geopandas
 import pandas as pd
 
 
-def merge_shape_geometries(path: str):
-    """Merge several vector geometries into one for clipping
-
-    Parameters
-    ----------
-    path: str
-    """
-    shp = geopandas.read_file(path).to_crs(epsg=4326)
-    merged = shp["geometry"][0]
-    for geom in shp["geometry"]:
-        merged = merged.union(geom)
-    return merged
-
-
 def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None):
     """Extract gages from RouteLink file
 
@@ -39,7 +25,7 @@ def extract_from_routelink(routelink: Path, output_csv: Path, shape: Path | None
     coords_y = coords["y"]
 
     # Test for 'gages' field to be non empty and, if shapefile given, test for geometry intersection
-    merged_geom = merge_shape_geometries(shape) if shape else None
+    merged_geom = geopandas.read_file(shape).to_crs(epsg=4326)["geometry"].union_all() if shape else None
     gage_filter = (
         lambda idx: gages["geometry"][idx].intersects(merged_geom) and gages["gages"][idx].strip() != ""
         if shape
