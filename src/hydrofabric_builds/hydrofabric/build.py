@@ -304,6 +304,7 @@ def _build_hydrofabric(
         fp_data.append(
             {
                 "fp_id": int(unit_id),
+                "fp_to_id": int(downstream_unit_id) if downstream_unit_id is not None else None,
                 "dn_nex_id": int(nexus_id),
                 "up_nex_id": None,  # Will fix later
                 "div_id": int(unit_id),
@@ -415,9 +416,11 @@ def _build_hydrofabric(
             if dn_ref_id:
                 ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
 
+        downstream_vfp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
         virtual_fp_data.append(
             {
                 "virtual_fp_id": int(virtual_fp_id),
+                "virtual_fp_to_id": int(downstream_vfp_id) if downstream_vfp_id is not None else None,
                 "dn_virtual_nex_id": int(virtual_nexus_id),
                 "up_virtual_nex_id": None,
                 "routing_segment": False,
@@ -448,6 +451,7 @@ def _build_hydrofabric(
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
         flowpaths_gdf["fp_id"] = flowpaths_gdf["fp_id"].astype("Int64")
+        flowpaths_gdf["fp_to_id"] = flowpaths_gdf["fp_to_id"].astype("Int64")
         flowpaths_gdf["dn_nex_id"] = flowpaths_gdf["dn_nex_id"].astype("Int64")
         flowpaths_gdf["up_nex_id"] = flowpaths_gdf["up_nex_id"].astype("Int64")
 
@@ -462,6 +466,9 @@ def _build_hydrofabric(
         if virtual_fp_data:
             virtual_flowpaths_gdf = gpd.GeoDataFrame(virtual_fp_data, crs=cfg.crs)
             virtual_flowpaths_gdf["virtual_fp_id"] = virtual_flowpaths_gdf["virtual_fp_id"].astype("Int64")
+            virtual_flowpaths_gdf["virtual_fp_to_id"] = virtual_flowpaths_gdf["virtual_fp_to_id"].astype(
+                "Int64"
+            )
             virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
                 "Int64"
             )

@@ -97,6 +97,7 @@ class Flowpaths:
         """
         return [
             "fp_id",
+            "fp_to_id",
             "dn_nex_id",
             "up_nex_id",
             "div_id",
@@ -115,6 +116,7 @@ class Flowpaths:
         return pa.schema(
             [
                 pa.field("fp_id", pa.int32(), nullable=False),
+                pa.field("fp_to_id", pa.int32(), nullable=True),
                 pa.field("dn_nex_id", pa.int32(), nullable=False),
                 pa.field("up_nex_id", pa.int32(), nullable=True),
                 pa.field("div_id", pa.int32(), nullable=False),
