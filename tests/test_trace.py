@@ -147,17 +147,16 @@ def _check_fp_to_id(fp_pl: pl.DataFrame) -> None:
     assert null_count >= 1, "Expected at least one outlet flowpath with null fp_to_id"
 
 
-def _check_terminal_virtual_nexus_meets_flowpath(
+def _check_virtual_nexus_meets_flowpath(
     virtual_nex_pl: pl.DataFrame,
     virtual_fp_pl: pl.DataFrame,
     reference_fp_pl: pl.DataFrame,
     fp_pl: pl.DataFrame,
 ) -> None:
-    """Check that every terminal virtual nexus connects back to a real flowpath.
+    """Check that every virtual nexus connects back to a real flowpath.
 
-    Terminal virtual nexuses (dn_virtual_fp_id is null) sit at the downstream end
-    of a virtual flowpath chain. The crosswalk path is:
-    Terminal Nexus -> Virtual Flowpath -> reference_flowpaths -> Flowpath.
+    The crosswalk path is:
+    Virtual Nexus -> Virtual Flowpath -> reference_flowpaths -> Flowpath.
 
     Parameters
     ----------
@@ -170,21 +169,18 @@ def _check_terminal_virtual_nexus_meets_flowpath(
     fp_pl : pl.DataFrame
         Flowpath dataframe
     """
-    terminal = virtual_nex_pl.filter(pl.col("dn_virtual_fp_id").is_null())
-    if len(terminal) == 0:
+    if len(virtual_nex_pl) == 0:
         return
 
-    # Terminal Nexus -> Virtual Flowpath (via dn_virtual_nex_id)
-    hop1 = terminal.join(
+    # Virtual Nexus -> Virtual Flowpath (via dn_virtual_nex_id)
+    hop1 = virtual_nex_pl.join(
         virtual_fp_pl.select("virtual_fp_id", "dn_virtual_nex_id"),
         left_on="virtual_nex_id",
         right_on="dn_virtual_nex_id",
         how="left",
     )
     orphans = hop1.filter(pl.col("virtual_fp_id").is_null())
-    assert len(orphans) == 0, (
-        f"Found {len(orphans)} terminal virtual nexuses with no draining virtual flowpath"
-    )
+    assert len(orphans) == 0, f"Found {len(orphans)} virtual nexuses with no draining virtual flowpath"
 
     # Virtual Flowpath -> reference_flowpaths (via virtual_fp_id); div_id links
     # to the regular flowpath the virtual chain connects to.
@@ -271,15 +267,15 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
@@ -353,7 +349,6 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     df = pd.DataFrame(
         {
             "virtual_nex_id": pd.Series([3, 4, 5], dtype="Int64"),
-            "dn_virtual_fp_id": pd.Series([pd.NA, pd.NA, pd.NA], dtype="Int64"),
             "vpu_id": pd.Series(["02", "02", "02"], dtype="object"),
         }
     )
@@ -363,7 +358,7 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
@@ -437,7 +432,6 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     df = pd.DataFrame(
         {
             "virtual_nex_id": pd.Series([4, 5, 6], dtype="Int64"),
-            "dn_virtual_fp_id": pd.Series([pd.NA, pd.NA, pd.NA], dtype="Int64"),
             "vpu_id": pd.Series(["01", "01", "01"], dtype="object"),
         }
     )
@@ -447,7 +441,7 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
@@ -517,15 +511,15 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
@@ -595,15 +589,15 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
@@ -673,15 +667,15 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
@@ -750,12 +744,12 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
-    _check_terminal_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)

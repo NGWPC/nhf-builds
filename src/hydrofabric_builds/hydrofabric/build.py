@@ -404,11 +404,8 @@ def _build_hydrofabric(
             # Virtual nexus reuses the virtual_fp_id (no new ID allocation)
             virtual_nexus_id = virtual_fp_id
 
-            downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
-
             virtual_nexus_data_dict[virtual_nexus_id] = {
                 "virtual_nex_id": virtual_nexus_id,
-                "dn_virtual_fp_id": downstream_virtual_fp_id,
                 "vpu_id": unit["vpu_id"],
                 "geometry": endpoint,
             }
@@ -460,7 +457,6 @@ def _build_hydrofabric(
         if virtual_nexus_data:
             virtual_nexus_gdf = gpd.GeoDataFrame(virtual_nexus_data, crs=cfg.crs)
             virtual_nexus_gdf["virtual_nex_id"] = virtual_nexus_gdf["virtual_nex_id"].astype("Int64")
-            virtual_nexus_gdf["dn_virtual_fp_id"] = virtual_nexus_gdf["dn_virtual_fp_id"].astype("Int64")
         else:
             virtual_nexus_gdf = None
 
