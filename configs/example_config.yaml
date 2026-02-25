@@ -328,8 +328,8 @@ gages:
       snap_tolerance_m: 100.0
       update_existing: True
       exclude_ids: ["15056210", "15493000"]
-      out_gpkg: gages/gages.gpkg
-      gpkg_layer_name: gages
+      out_gpkg: gages/gages_v1.gpkg
+      gpkg_layer_name: gages_v1
 
   ###--------------------------------------------
   ## A file for USGS upstream area and basins shapefiles
