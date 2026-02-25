@@ -423,7 +423,6 @@ def _build_hydrofabric(
                 "virtual_fp_to_id": int(downstream_vfp_id) if downstream_vfp_id is not None else None,
                 "dn_virtual_nex_id": int(virtual_nexus_id),
                 "up_virtual_nex_id": None,
-                "routing_segment": False,
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
