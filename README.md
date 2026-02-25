@@ -34,7 +34,7 @@ Additional documentation can be found below for:
 
 The following schema is the proposed data model for NGWPC hydrofabric datasets produced by this repo.
 
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_v0.3.7_schema.png" alt="nhf_v0.3.7_schema.png" width="100%" height="100%"/>
+<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_v1.1.2_schema.png" alt="nhf_v1.1.2_schema.png" width="100%" height="100%"/>
 
 ##### Flowpaths FACT Table
 
