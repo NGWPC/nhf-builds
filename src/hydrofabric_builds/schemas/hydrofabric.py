@@ -40,23 +40,9 @@ class Classifications(BaseModel):
             "Small flowpaths (areasqkm < threshold) that connect two higher-order streams. These have two upstream flowpaths where both have streamorder > 1. They remain independent despite being small because they serve as connectors between large stream branches, and aggregation would present inconsistencies within routing"
         ),
     )
-    virtual_flowpath_pairs: list[tuple[str, ...]] = Field(
-        default_factory=list,
-        description=(
-            "List of virtual flowpath groups. Each tuple contains flowpath IDs "
-            "that form a connected chain (upstream → downstream). "
-            "Multiple tuples can have the same downstream target. "
-            "Example: [('A', 'B', 'C'), ('D', 'E'), ('F',)] where A→B→C, D→E, and F "
-            "are three separate virtual flowpaths."
-        ),
-    )
     non_nextgen_virtual_flowpath_pairs: list[tuple[str, ...]] = Field(
         default_factory=list,
-        description=(
-            "List of non-NextGen virtual flowpath groups. Same structure as "
-            "virtual_flowpath_pairs but for flowpaths that don't connect to "
-            "routing segments."
-        ),
+        description="List of non-NextGen virtual flowpath pairs (source_id, target_id).",
     )
     processed_flowpaths: set[str] = Field(
         default_factory=set,
