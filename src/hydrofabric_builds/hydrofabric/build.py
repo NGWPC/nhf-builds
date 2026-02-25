@@ -416,11 +416,9 @@ def _build_hydrofabric(
             if dn_ref_id:
                 ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
 
-        downstream_vfp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
         virtual_fp_data.append(
             {
                 "virtual_fp_id": int(virtual_fp_id),
-                "virtual_fp_to_id": int(downstream_vfp_id) if downstream_vfp_id is not None else None,
                 "dn_virtual_nex_id": int(virtual_nexus_id),
                 "up_virtual_nex_id": None,
                 "length_km": unit["length_km"],
@@ -465,9 +463,6 @@ def _build_hydrofabric(
         if virtual_fp_data:
             virtual_flowpaths_gdf = gpd.GeoDataFrame(virtual_fp_data, crs=cfg.crs)
             virtual_flowpaths_gdf["virtual_fp_id"] = virtual_flowpaths_gdf["virtual_fp_id"].astype("Int64")
-            virtual_flowpaths_gdf["virtual_fp_to_id"] = virtual_flowpaths_gdf["virtual_fp_to_id"].astype(
-                "Int64"
-            )
             virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
                 "Int64"
             )
