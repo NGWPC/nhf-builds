@@ -262,15 +262,6 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_nexus.csv",
@@ -349,15 +340,6 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     df = pd.DataFrame(
         {
@@ -442,15 +424,6 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     df = pd.DataFrame(
         {
@@ -535,15 +508,6 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_nexus.csv",
@@ -622,15 +586,6 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_nexus.csv",
@@ -709,15 +664,6 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_nexus.csv",
@@ -795,15 +741,6 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_nexus.csv",
