@@ -720,7 +720,10 @@ class TestDivideAttributesStats:
         values = [0, 1, 2]
         weights = [0, 0, 1]
 
-        assert weighted_circular_mean(values, weights) == circmean(np.radians(values), weights=weights)
+        assert (
+            weighted_circular_mean(values, weights)
+            == np.degrees(circmean(np.radians(values), weights=weights)) % 360
+        )
 
     def test_weighted_circular_mean__bad_weights(self) -> None:
         """Value error for incorrect weights shape"""
