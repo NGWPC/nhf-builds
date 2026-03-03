@@ -35,27 +35,28 @@ def crosswalk_nwm_lakes(hf_path: Path, nwm_lakes_path: Path) -> gpd.GeoDataFrame
     gdf_res = gdf_res.merge(hf_ref, left_on="ref_fab_fp", right_on="ref_fp_id", how="left")
     gdf_res = gdf_res.merge(hf_fp[["fp_id"]], on="fp_id", how="left")
     gdf_res = gdf_res.loc[~gdf_res["fp_id"].isnull(), :].copy()
-    gdf_res["lake_id"] = range(1, gdf_res.shape[0] + 1)
+    gdf_res["nwm_lake_id"] = range(1, gdf_res.shape[0] + 1)
 
     # select final attribute list
     gdf_res = gdf_res[
         [
+            "nwm_lake_id",
             "lake_id",
             "fp_id",
             "ref_fp_id",
             # "dam_id",
             # "dam_name",
             # "dam_type",
-            # "LkArea",
-            # "LkMxE",
-            # "WeirC",
-            # "WeirL",
-            # "WeirE",
+            "LkArea",
+            "LkMxE",
+            "WeirC",
+            "WeirL",
+            "WeirE",
             # "OrficeC",
             # "OrficeA",
             # "OrficeE",
-            # "Dam_Length",
-            # "ifd",
+            "Dam_Length",
+            "ifd",
             "geometry",
         ]
     ]

@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import geopandas as gpd
-import numpy as np
 
 
 def associate_flowpaths_point(
@@ -77,27 +76,22 @@ def associate_flowpaths_point(
         # get point geometry
         pt = gdf_points.loc[gdf_points[point_id] == pt_row, "geometry"].values[0]
 
-        # get candidate flowpaths
-        cand_rows = sub[flowpath_id].to_numpy()
+        # select flowpath geometry and ID from flowpath table for each candidate list
+        candidates = gdf_flowpaths.loc[
+            gdf_flowpaths[flowpath_id].isin(sub[flowpath_id].values), [flowpath_id, "geometry"]
+        ].copy()
 
-        # break if there are no candidates - nulls to be handled later
-        if cand_rows.size == 0:
+        # if no flowpaths in buffer, skip
+        if candidates.shape[0] == 0:
             continue
 
-        # get geometries of candidates
-        cand_geoms = gdf_flowpaths.loc[gdf_flowpaths[flowpath_id].isin(cand_rows), "geometry"].values
+        # calculate distance from point
+        candidates["dist"] = candidates["geometry"].distance(pt)
 
-        # get distances between point and candidate geometry
-        dists = np.fromiter((pt.distance(geom) for geom in cand_geoms), dtype=float, count=len(cand_geoms))
-
-        # select the flowpath id of the minimum distance
-        best_fp_row = int(cand_rows[int(dists.argmin())])
-
-        # add to the dict: point_id : first matching flowpath_id
-        # TODO: pick by minimum hydroseq if tie?
-        out[pt_row] = str(
-            gdf_flowpaths.loc[gdf_flowpaths[flowpath_id] == str(best_fp_row), flowpath_id].values[0]
-        )
+        # select first minimum distance
+        # TODO: take lower hydrosequence if tie?
+        best_fp = candidates.loc[candidates["dist"] == min(candidates["dist"]), flowpath_id].values[0]
+        out[pt_row] = str(best_fp)
 
     # assign dict of points and flowpaths to point gdf
     for k, v in out.items():
