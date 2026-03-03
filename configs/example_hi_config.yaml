@@ -186,6 +186,6 @@ nwm_lakes:
   input_layer: "lakes"
   processed_path: "data/nwm_lakes/hawaii_nwm_lakes.gpkg"
   associate_flowpaths: True
-  flowpath_association_method: "point"
+  flowpath_association_method: "nearest_point"
   populate_nwm_hydaulics: False
   id_field: "lake_id"

@@ -5,7 +5,7 @@ from pathlib import Path
 import geopandas as gpd
 
 
-def associate_flowpaths_point(
+def associate_flowpaths_nearest_point(
     points_path: Path,
     flowpaths_path: Path,
     search_radius_m: int | float,
@@ -102,7 +102,7 @@ def associate_flowpaths_point(
     return gdf_points
 
 
-def associate_flowpaths_polygon(
+def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
     polygon_id: str,
@@ -110,7 +110,7 @@ def associate_flowpaths_polygon(
     flowpath_id_out_field: str = "ref_fp_id",
     flowpath_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
-    """Associate polygons with flowpaths"""
+    """Associate the intersection of a waterbody polygon and its flowpath outlet"""
     # TODO: fill out
     # gdf_flowpaths = (
     #     gpd.read_parquet(flowpaths_path)

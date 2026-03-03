@@ -8,8 +8,8 @@ import geopandas as gpd
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import (
-    associate_flowpaths_point,
-    associate_flowpaths_polygon,
+    associate_flowpaths_nearest_point,
+    associate_flowpaths_polygon_outlet,
 )
 from hydrofabric_builds.hydrofabric.nwm_lakes import crosswalk_nwm_lakes
 from hydrofabric_builds.reservoirs.data_prep.hydraulics import populate_nwm_hydaulics
@@ -37,9 +37,9 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
     # Preprocess lakes by associating with flowpaths if requested or if processed path does not exist
     if cfg.nwm_lakes.associate_flowpaths or not cfg.nwm_lakes.processed_path.exists():
         # Use nearest point association method
-        if cfg.nwm_lakes.flowpath_association_method == "point":
+        if cfg.nwm_lakes.flowpath_association_method == "nearest_point":
             logger.info("Associating flowpath points")
-            gdf = associate_flowpaths_point(
+            gdf = associate_flowpaths_nearest_point(
                 points_path=cfg.nwm_lakes.input_path,
                 flowpaths_path=Path(cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.nwm_lakes.search_radius_m,
@@ -48,11 +48,11 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
                 flowpath_id_out_field="ref_fab_fp",
                 points_layer="lakes",
             )
-        # use polygon method
-        elif cfg.nwm_lakes.flowpath_association_method == "polygon":
+        # use polygon flowpath outlet method
+        elif cfg.nwm_lakes.flowpath_association_method == "polygon_outlet":
             logger.info("Creating waterbodies table based on point layer")
             # TODO: add when polygon association is available
-            gdf = associate_flowpaths_polygon(
+            gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.nwm_lakes.input_path,
                 flowpaths_path=Path(cfg.build.reference_flowpaths_path),
                 polygon_id=cfg.nwm_lakes.id_field,
