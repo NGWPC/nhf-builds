@@ -886,6 +886,34 @@ class WaterbodiesConfig(BaseModel):
         return self
 
 
+class NWMLakesConfig(BaseModel):
+    """Config for NWM Lakes"""
+
+    input_path: Path = Field(
+        default=here() / "data/nwm_lakes/nwm_lakes.gpkg", description="File name of source waterbodies"
+    )
+    input_layer: str | None = Field(
+        default=None, description="Layer name of lakes if input file is a GPKG with mutliple layers"
+    )
+    processed_path: Path = Field(
+        default=here() / "data/nwm_lakes/nwm_lakes_process.gpkg",
+        description="File name of source waterbodies with flowpath associations and hydraulics",
+    )
+    associate_flowpaths: bool = Field(
+        default=False, description="Flag to associate waterbodies with reference flowpaths if True"
+    )
+    flowpath_association_method: str = Field(
+        default="point", description="Specify the method used to associate flowpaths"
+    )
+    populate_nwm_hydaulics: bool = Field(
+        default=False, description="Flag to populate NWM hydaulics fields if True"
+    )
+    id_field: str = Field(default="lake_id", description="ID field in input lakes file")
+    search_radius_m: float | int = Field(
+        default=200, description="Radius in meters to buffer points for nearest flowpath method"
+    )
+
+
 ### fp_crosswalk  ###
 class FPCrosswalkReference(BaseModel):
     """fp_crosswalk: reference (file1) network"""

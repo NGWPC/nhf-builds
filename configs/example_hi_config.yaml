@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_0.1.52.gpkg # If not specified, will default to version
+output_name: hi_nhf_0.1.54.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -19,6 +19,7 @@ tasks:
   hydrolocations: False
   gages: True
   fp_crosswalk: False
+  nwm_lakes: True
 
 # flowpaths
 flowpath_attributes:
@@ -177,3 +178,14 @@ gages:
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
    work_crs: EPSG:32604           # an area-equal crs to calculate buffers and distances
+
+
+# nwm lakes
+nwm_lakes:
+  input_path: "data/nwm_lakes/hi_nextgen_workaround.gpkg"
+  input_layer: "lakes"
+  processed_path: "data/nwm_lakes/hawaii_nwm_lakes.gpkg"
+  associate_flowpaths: True
+  flowpath_association_method: "point"
+  populate_nwm_hydaulics: False
+  id_field: "lake_id"

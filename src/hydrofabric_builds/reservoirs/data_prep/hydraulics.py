@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 
@@ -387,3 +388,8 @@ def populate_hydraulics(
     )
 
     return out
+
+
+def populate_nwm_hydaulics(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Populate hydaulics for NWM lakes"""
+    return

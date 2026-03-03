@@ -15,6 +15,7 @@ from hydrofabric_builds.pipeline.build_fp_crosswalk import build_fp_crosswalk
 from hydrofabric_builds.pipeline.build_gages import build_gages
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.build_hydrolocations import build_hydrolocations
+from hydrofabric_builds.pipeline.build_nwm_lakes import build_nwm_lakes
 from hydrofabric_builds.pipeline.build_waterbodies import build_waterbodies
 from hydrofabric_builds.pipeline.download import download_reference_data
 from hydrofabric_builds.pipeline.processing import (
@@ -191,6 +192,9 @@ def main() -> int:
 
         if config.tasks.waterbodies:
             runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
+
+        if config.tasks.nwm_lakes:
+            runner.run_task("nwm_lakes", python_callable=build_nwm_lakes, op_kwargs={})
 
         if config.tasks.hydrolocations:
             runner.run_task("hydrolocations", python_callable=build_hydrolocations, op_kwargs={})
