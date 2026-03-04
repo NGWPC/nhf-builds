@@ -910,7 +910,7 @@ class NWMLakesConfig(BaseModel):
     )
     id_field: str = Field(default="lake_id", description="ID field in input lakes file")
     search_radius_m: float | int = Field(
-        default=200, description="Radius in meters to buffer points for nearest flowpath method"
+        default=25000, description="Radius in meters to buffer points for nearest flowpath method"
     )
     fields: list[str] = Field(
         default=[
@@ -931,7 +931,8 @@ class NWMLakesConfig(BaseModel):
             "reservoir_index_GDL_AK",
             "reservoir_index_Medium_Range",
             "reservoir_index_Short_Range",
-        ]
+        ],
+        description="Fields to retain in final layer. IDs and geometry will be kept by default.",
     )
 
 

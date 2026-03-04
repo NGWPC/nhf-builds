@@ -372,3 +372,15 @@ fp_crosswalk:
   outputs:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
+
+
+# nwm lakes
+nwm_lakes:
+  input_path: "data/nwm_lakes/nwm_lakes_sconus_input.gpkg"
+  input_layer: "nwm_lakes"
+  processed_path: "data/nwm_lakes/nwm_lakes_sconus_flowpaths.gpkg"
+  associate_flowpaths: True
+  flowpath_association_method: "polygon_outlet"
+  populate_nwm_hydaulics: False
+  id_field: "lake_id"
+  search_radius_m: 25000

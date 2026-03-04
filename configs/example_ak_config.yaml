@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:3338
-output_name: ak_nhf_0.1.52.gpkg # If not specified, will default to version
+output_name: ak_nhf_0.1.54.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -13,11 +13,12 @@ build:
 # choose tasks to run
 tasks:
   build_hydrofabric: True
-  divide_attributes: True
-  flowpath_attributes: True
+  divide_attributes: False
+  flowpath_attributes: False
   waterbodies: False
   hydrolocations: False
-  gages: True
+  gages: False
+  nwm_lakes: True
   fp_crosswalk: False
 
 flowpath_attributes:
@@ -242,3 +243,12 @@ gages:
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
    work_crs: EPSG:3338          # an area-equal crs to calculate buffers and distances
+
+# nwm lakes
+nwm_lakes:
+  input_path: "data/nwm_lakes/ak_lakeparm.gpkg"
+  processed_path: "data/nwm_lakes/ak_nwm_lakes.gpkg"
+  associate_flowpaths: True
+  flowpath_association_method: "nearest_point"
+  populate_nwm_hydaulics: False
+  id_field: "lake_id"

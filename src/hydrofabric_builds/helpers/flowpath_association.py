@@ -17,7 +17,7 @@ def associate_flowpaths_nearest_point(
 ) -> gpd.GeoDataFrame:
     """Associate point geometries with flowpath lines by buffering by a search radius and selecting mimnium distance
 
-    Adapted from gage nearest fp code
+    Adapted from gage nearest fp code. Use a large buffer to ensure matches.
 
     Parameters
     ----------
@@ -96,8 +96,6 @@ def associate_flowpaths_nearest_point(
     # assign dict of points and flowpaths to point gdf
     for k, v in out.items():
         gdf_points.loc[gdf_points[point_id] == k, flowpath_id_out_field] = v
-
-    # TODO: when fp is missing
 
     return gdf_points
 

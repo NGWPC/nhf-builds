@@ -182,10 +182,11 @@ gages:
 
 # nwm lakes
 nwm_lakes:
-  input_path: "data/nwm_lakes/hi_nextgen_workaround.gpkg"
-  input_layer: "lakes"
-  processed_path: "data/nwm_lakes/hawaii_nwm_lakes.gpkg"
+  input_path:  "data/nwm_lakes/nwm_lakes_hi_input.gpkg"
+  input_layer: "nwm_lakes"
+  processed_path: "data/nwm_lakes/nwm_lakes_hi_flowpaths.gpkg"
   associate_flowpaths: True
-  flowpath_association_method: "nearest_point"
+  flowpath_association_method: "polygon_outlet"
   populate_nwm_hydaulics: False
   id_field: "lake_id"
+  search_radius_m: 25000
