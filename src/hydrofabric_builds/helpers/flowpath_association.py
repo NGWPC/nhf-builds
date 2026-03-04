@@ -11,7 +11,7 @@ def associate_flowpaths_nearest_point(
     search_radius_m: int | float,
     point_id: str,
     flowpath_id: str,
-    flowpath_id_out_field: str = "ref_fp_id",
+    flowpath_id_out_field: str,
     flowpath_layer: str | None = None,
     points_layer: str | None = None,
 ) -> gpd.GeoDataFrame:

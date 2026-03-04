@@ -912,6 +912,27 @@ class NWMLakesConfig(BaseModel):
     search_radius_m: float | int = Field(
         default=200, description="Radius in meters to buffer points for nearest flowpath method"
     )
+    fields: list[str] = Field(
+        default=[
+            "lake_id",
+            "LkArea",
+            "temp",
+            "LkMxE",
+            "WeirC",
+            "WeirL",
+            "WeirE",
+            "OrificeC",
+            "OrificeA",
+            "OrificeE",
+            "Dam_Length",
+            "ifd",
+            "reservoir_index_AnA",
+            "reservoir_index_Extended_AnA",
+            "reservoir_index_GDL_AK",
+            "reservoir_index_Medium_Range",
+            "reservoir_index_Short_Range",
+        ]
+    )
 
 
 ### fp_crosswalk  ###
