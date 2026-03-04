@@ -1,7 +1,6 @@
 """Contains all code for building OCONUS waterbodies in task"""
 
 import logging
-from pathlib import Path
 from typing import Any, cast
 
 from hydrofabric_builds.config import HFConfig
@@ -53,9 +52,13 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             # TODO: add when polygon association is available
             gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.nwm_lakes.input_path,
-                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
+                flowpaths_path=cfg.output_file_path,
+                flowpath_layer="flowpaths",
+                search_radius_m=cfg.nwm_lakes.search_radius_m,
                 polygon_id=cfg.nwm_lakes.id_field,
-                flowpath_id="flowpath_id",
+                flowpath_id="fp_id",
+                flowpath_id_out_field="fp_id",
+                polygon_layer=cfg.nwm_lakes.input_layer,
             )
 
         # invalid method
