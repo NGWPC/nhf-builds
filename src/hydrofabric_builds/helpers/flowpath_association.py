@@ -106,7 +106,6 @@ def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
     search_radius_m: int | float,
-    polygon_id: str,
     flowpath_id: str,
     flowpath_id_out_field: str = "fp_id",
     flowpath_layer: str | None = None,
@@ -124,8 +123,6 @@ def associate_flowpaths_polygon_outlet(
         Flowpath linestrings
     search_radius_m : int | float
         Buffer radius for matching flowpaths
-    polygon_id : str
-        Column name for ID in lakes gdf
     flowpath_id : str
         Column name for ID in flowpath gdf
     flowpath_id_out_field: str
@@ -154,11 +151,12 @@ def associate_flowpaths_polygon_outlet(
 
     # change to reference flowpath CRS if not matching
     if gdf_poly.crs != gdf_flowpaths.crs:
-        gdf_points = gdf_poly.to_crs(gdf_flowpaths.crs)
-        assert gdf_points.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
+        gdf_poly = gdf_poly.to_crs(gdf_flowpaths.crs)
+        assert gdf_poly.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
 
+    # iterates through buffers, intersects, chooses minimum hydrosequence
     for idx, _lake in gdf_poly.iterrows():
-        for search_radius in range(0, search_radius_m, search_radius_m / 10):
+        for search_radius in range(0, search_radius_m, int(search_radius_m / 10)):  # type: ignore[arg-type]
             buffered = (
                 gdf_poly["geometry"][idx]
                 if search_radius == 0
@@ -172,5 +170,7 @@ def associate_flowpaths_polygon_outlet(
             gdf_poly.loc[idx, flowpath_id_out_field] = candidates[flowpath_id][min_idx]
             gdf_poly.loc[idx, "buffer_radius"] = search_radius
             break
+
+    gdf_poly["geometry"] = gdf_poly["geometry"].centroid
 
     return gdf_poly
