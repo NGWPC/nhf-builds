@@ -49,7 +49,6 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         # use polygon flowpath outlet method
         elif cfg.nwm_lakes.flowpath_association_method == "polygon_outlet":
             logger.info("Creating waterbodies table based on point layer")
-            # TODO: add when polygon association is available
             gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.nwm_lakes.input_path,
                 flowpaths_path=cfg.output_file_path,
@@ -59,6 +58,10 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
                 flowpath_id="fp_id",
                 flowpath_id_out_field="fp_id",
                 polygon_layer=cfg.nwm_lakes.input_layer,
+                attrib_src_path=cfg.nwm_lakes.attrib_src_path,
+                attrib_src_layer=cfg.nwm_lakes.attrib_src_layer,
+                attrib_src_key=cfg.nwm_lakes.attrib_src_key,
+                attrib_src_fields=cfg.nwm_lakes.fields,
             )
 
         # invalid method

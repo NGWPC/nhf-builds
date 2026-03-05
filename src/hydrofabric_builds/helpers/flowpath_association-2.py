@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 
 
 def associate_flowpaths_nearest_point(
@@ -17,7 +18,7 @@ def associate_flowpaths_nearest_point(
 ) -> gpd.GeoDataFrame:
     """Associate point geometries with flowpath lines by buffering by a search radius and selecting mimnium distance
 
-    Adapted from gage nearest fp code. Use a large buffer to ensure matches.
+    Adapted from gage nearest fp code
 
     Parameters
     ----------
@@ -50,9 +51,7 @@ def associate_flowpaths_nearest_point(
         else gpd.read_file(flowpaths_path, layer=flowpath_layer)
     )
     gdf_points = (
-        gpd.read_file(points_path, layer=points_layer)
-        if points_layer is not None
-        else gpd.read_file(points_path)
+        gpd.read_file(points_path, layer=points_layer) if points_layer else gpd.read_file(points_path)
     )
 
     # coerce geometry to 2D linestings
@@ -99,6 +98,8 @@ def associate_flowpaths_nearest_point(
     for k, v in out.items():
         gdf_points.loc[gdf_points[point_id] == k, flowpath_id_out_field] = v
 
+    # TODO: when fp is missing
+
     return gdf_points
 
 
@@ -106,15 +107,14 @@ def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
     search_radius_m: int | float,
+    polygon_id: str,
     flowpath_id: str,
     flowpath_id_out_field: str = "fp_id",
-    polygon_id: str = "newID",
-    polygon_layer: str | None = None,
     flowpath_layer: str | None = None,
-    attrib_src_path: Path | None = None,
-    attrib_src_layer: str | None = None,
-    attrib_src_key: str | None = None,
-    attrib_src_fields: list[str] | None = None,
+    polygon_layer: str | None = None,
+    attrib_source_file: Path |  None = None,
+    attrib_source_layer: str |  None = None,
+    attrib_source_key: str |  None = None,
 ) -> gpd.GeoDataFrame:
     """Associate the intersection of waterbody polygons and their flowpath outlets
 
@@ -128,6 +128,8 @@ def associate_flowpaths_polygon_outlet(
         Flowpath linestrings
     search_radius_m : int | float
         Buffer radius for matching flowpaths
+    polygon_id : str
+        Column name for ID in lakes gdf
     flowpath_id : str
         Column name for ID in flowpath gdf
     flowpath_id_out_field: str
@@ -151,27 +153,11 @@ def associate_flowpaths_polygon_outlet(
     )
 
     gdf_source = (
-        (
-            gpd.read_file(attrib_src_path, layer=attrib_src_layer)
-            if attrib_src_layer is not None
-            else gpd.read_file(attrib_src_path)
-        )
-        if attrib_src_path is not None
+        gpd.read_file(attrib_source_files)
+        if attrib_source_files is not None
         else None
     )
-    attrib_src_key = attrib_src_key if attrib_src_key is not None else "lake_id"
-
-    merge = True if gdf_source is not None and attrib_src_fields is not None else False
-
-    # make sure things are as we expect them to be
-    if merge and polygon_id != attrib_src_key:
-        gdf_poly = gdf_poly.rename(columns={polygon_id: attrib_src_key})
-        gdf_source.drop("geometry", axis=1)
-        print(gdf_poly.columns)
-        polygon_id = attrib_src_key
-        if attrib_src_key in attrib_src_fields:
-            attrib_src_fields.remove(attrib_src_key)
-        print(attrib_src_fields)
+    if 
 
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
@@ -179,13 +165,11 @@ def associate_flowpaths_polygon_outlet(
 
     # change to reference flowpath CRS if not matching
     if gdf_poly.crs != gdf_flowpaths.crs:
-        gdf_poly = gdf_poly.to_crs(gdf_flowpaths.crs)
-        assert gdf_poly.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
+        gdf_points = gdf_poly.to_crs(gdf_flowpaths.crs)
+        assert gdf_points.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
 
-    # iterates through buffers, intersects, chooses minimum hydrosequence
     for idx, _lake in gdf_poly.iterrows():
-        print(idx)
-        for search_radius in range(0, search_radius_m, int(search_radius_m / 10)):  # type: ignore[arg-type]
+        for search_radius in range(0, search_radius_m, search_radius_m / 10):
             buffered = (
                 gdf_poly["geometry"][idx]
                 if search_radius == 0
@@ -199,11 +183,5 @@ def associate_flowpaths_polygon_outlet(
             gdf_poly.loc[idx, flowpath_id_out_field] = candidates[flowpath_id][min_idx]
             gdf_poly.loc[idx, "buffer_radius"] = search_radius
             break
-    if merge:
-        # i do it this way because otherwise it gets coerced into a pd.DataFrame?
-        gdf_poly_merged = gdf_poly.merge(gdf_source, how="left", on=polygon_id)
-        for col in attrib_src_fields:
-            gdf_poly.loc[:, col] = gdf_poly_merged[col]
 
-    gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     return gdf_poly
