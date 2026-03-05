@@ -184,7 +184,7 @@ def associate_flowpaths_polygon_outlet(
 
     # iterates through buffers, intersects, chooses minimum hydrosequence
     for idx, _lake in gdf_poly.iterrows():
-        print(idx)
+        # print(idx)
         for search_radius in range(0, search_radius_m, int(search_radius_m / 10)):  # type: ignore[arg-type]
             buffered = (
                 gdf_poly["geometry"][idx]
