@@ -304,6 +304,7 @@ def _build_hydrofabric(
         fp_data.append(
             {
                 "fp_id": int(unit_id),
+                "fp_to_id": int(downstream_unit_id) if downstream_unit_id is not None else None,
                 "dn_nex_id": int(nexus_id),
                 "up_nex_id": None,  # Will fix later
                 "div_id": int(unit_id),
@@ -358,79 +359,6 @@ def _build_hydrofabric(
     # Continue using the same nhf_id counter for virtual flowpaths
     # Virtual nexuses will also reuse virtual flowpath IDs
 
-    # Process virtual_flowpaths (routing_segment = True)
-    sorted_virtual_flowpaths = sorted(aggregate_data.virtual_flowpaths, key=lambda unit: unit["hydroseq"])
-    for unit in sorted_virtual_flowpaths:
-        ref_ids = unit["ref_ids"]
-        dn_ref_id = unit.get("dn_id")
-
-        # Assign virtual flowpath ID from nhf_id
-        virtual_fp_id = nhf_id
-        nhf_id += 1
-
-        ref_id = ref_ids[0] if ref_ids else None
-        if not ref_id:
-            raise ValueError(f"no reference ID found for {unit}")
-
-        ref_id_to_virtual_fp_id[ref_id] = virtual_fp_id
-        if ref_id in ref_fp_id_to_index:
-            idx = ref_fp_id_to_index[ref_id]
-            reference_flowpaths_data[idx]["virtual_fp_id"] = virtual_fp_id
-        else:
-            raise ValueError(f"Cannot find reference fp_id for: {ref_id}")
-            # idx = len(reference_flowpaths_data)
-            # reference_flowpaths_data.append(
-            #     {
-            #         "ref_fp_id": int(ref_id),
-            #         "fp_id": None,
-            #         "virtual_fp_id": virtual_fp_id,
-            #     }
-            # )
-            # ref_fp_id_to_index[ref_id] = idx
-
-        try:
-            percentage = ref_fp_id_to_percentage[ref_id]
-        except KeyError as e:
-            raise KeyError(f"Cannot find ref ID: {ref_id} in ref_fp_id_to_percentage") from e
-
-        downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(dn_ref_id) if dn_ref_id else None
-
-        line_geom = unit["line_geometry"]
-        if line_geom.geom_type == "MultiLineString":
-            endpoint = Point(list(line_geom.geoms)[-1].coords[-1])
-        else:
-            endpoint = Point(line_geom.coords[-1])
-
-        if dn_ref_id and dn_ref_id in ref_id_to_nexus:
-            virtual_nexus_id = ref_id_to_nexus[dn_ref_id]
-        else:
-            # Virtual nexus reuses the virtual_fp_id (no new ID allocation)
-            virtual_nexus_id = virtual_fp_id
-
-            virtual_nexus_data_dict[virtual_nexus_id] = {
-                "virtual_nex_id": virtual_nexus_id,
-                "dn_virtual_fp_id": downstream_virtual_fp_id,
-                "vpu_id": unit["vpu_id"],
-                "geometry": endpoint,
-            }
-
-            if dn_ref_id:
-                ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
-
-        virtual_fp_data.append(
-            {
-                "virtual_fp_id": int(virtual_fp_id),
-                "dn_virtual_nex_id": int(virtual_nexus_id),
-                "up_virtual_nex_id": None,
-                "routing_segment": True,
-                "length_km": unit["length_km"],
-                "area_sqkm": unit["area_sqkm"],
-                "percentage_area_contribution": percentage,
-                "vpu_id": unit["vpu_id"],
-                "geometry": line_geom,
-            }
-        )
-
     # Process non_nextgen_virtual_flowpaths
     sorted_non_nextgen_virtual = sorted(
         aggregate_data.non_nextgen_virtual_flowpaths, key=lambda unit: unit["hydroseq"]
@@ -476,11 +404,8 @@ def _build_hydrofabric(
             # Virtual nexus reuses the virtual_fp_id (no new ID allocation)
             virtual_nexus_id = virtual_fp_id
 
-            downstream_virtual_fp_id = ref_id_to_virtual_fp_id.get(ds_id) if ds_id else None
-
             virtual_nexus_data_dict[virtual_nexus_id] = {
                 "virtual_nex_id": virtual_nexus_id,
-                "dn_virtual_fp_id": downstream_virtual_fp_id,
                 "vpu_id": unit["vpu_id"],
                 "geometry": endpoint,
             }
@@ -492,8 +417,6 @@ def _build_hydrofabric(
             {
                 "virtual_fp_id": int(virtual_fp_id),
                 "dn_virtual_nex_id": int(virtual_nexus_id),
-                "up_virtual_nex_id": None,
-                "routing_segment": False,
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
@@ -504,23 +427,13 @@ def _build_hydrofabric(
 
     # Convert nexus dict to list
     virtual_nexus_data = list(virtual_nexus_data_dict.values())
-    nexus_pointing_to_virtual_fp: dict[int, int] = {}
-
-    for nexus_entry in virtual_nexus_data:
-        dn_virtual_fp_id = nexus_entry.get("dn_virtual_fp_id")
-        if dn_virtual_fp_id is not None:
-            nexus_pointing_to_virtual_fp[dn_virtual_fp_id] = nexus_entry["virtual_nex_id"]
-
-    for vfp_entry in virtual_fp_data:
-        virtual_fp_id = vfp_entry["virtual_fp_id"]
-        if virtual_fp_id in nexus_pointing_to_virtual_fp:
-            vfp_entry["up_virtual_nex_id"] = nexus_pointing_to_virtual_fp[virtual_fp_id]
 
     logger.debug(f"Built hydrofabric using ID range: {1 + id_offset} to {nhf_id - 1}")
     # Create GeoDataFrames
     try:
         flowpaths_gdf = gpd.GeoDataFrame(fp_data, crs=cfg.crs)
         flowpaths_gdf["fp_id"] = flowpaths_gdf["fp_id"].astype("Int64")
+        flowpaths_gdf["fp_to_id"] = flowpaths_gdf["fp_to_id"].astype("Int64")
         flowpaths_gdf["dn_nex_id"] = flowpaths_gdf["dn_nex_id"].astype("Int64")
         flowpaths_gdf["up_nex_id"] = flowpaths_gdf["up_nex_id"].astype("Int64")
 
@@ -538,16 +451,12 @@ def _build_hydrofabric(
             virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
                 "Int64"
             )
-            virtual_flowpaths_gdf["up_virtual_nex_id"] = virtual_flowpaths_gdf["up_virtual_nex_id"].astype(
-                "Int64"
-            )
         else:
             virtual_flowpaths_gdf = None
 
         if virtual_nexus_data:
             virtual_nexus_gdf = gpd.GeoDataFrame(virtual_nexus_data, crs=cfg.crs)
             virtual_nexus_gdf["virtual_nex_id"] = virtual_nexus_gdf["virtual_nex_id"].astype("Int64")
-            virtual_nexus_gdf["dn_virtual_fp_id"] = virtual_nexus_gdf["dn_virtual_fp_id"].astype("Int64")
         else:
             virtual_nexus_gdf = None
 

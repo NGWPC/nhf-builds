@@ -40,23 +40,9 @@ class Classifications(BaseModel):
             "Small flowpaths (areasqkm < threshold) that connect two higher-order streams. These have two upstream flowpaths where both have streamorder > 1. They remain independent despite being small because they serve as connectors between large stream branches, and aggregation would present inconsistencies within routing"
         ),
     )
-    virtual_flowpath_pairs: list[tuple[str, ...]] = Field(
-        default_factory=list,
-        description=(
-            "List of virtual flowpath groups. Each tuple contains flowpath IDs "
-            "that form a connected chain (upstream → downstream). "
-            "Multiple tuples can have the same downstream target. "
-            "Example: [('A', 'B', 'C'), ('D', 'E'), ('F',)] where A→B→C, D→E, and F "
-            "are three separate virtual flowpaths."
-        ),
-    )
     non_nextgen_virtual_flowpath_pairs: list[tuple[str, ...]] = Field(
         default_factory=list,
-        description=(
-            "List of non-NextGen virtual flowpath groups. Same structure as "
-            "virtual_flowpath_pairs but for flowpaths that don't connect to "
-            "routing segments."
-        ),
+        description="List of non-NextGen virtual flowpath pairs (source_id, target_id).",
     )
     processed_flowpaths: set[str] = Field(
         default_factory=set,
@@ -92,9 +78,6 @@ class Aggregations(BaseModel):
     connectors: list[dict] = Field(
         description=("A list of connection segments and their geometries"),
     )
-    virtual_flowpaths: list[dict] = Field(
-        description=("A list of all virtual flowpaths and their geometries"),
-    )
     non_nextgen_virtual_flowpaths: list[dict] = Field(
         description=("A list of all non_nextgen virtual flowpaths and their geometries"),
     )
@@ -114,6 +97,7 @@ class Flowpaths:
         """
         return [
             "fp_id",
+            "fp_to_id",
             "dn_nex_id",
             "up_nex_id",
             "div_id",
@@ -132,6 +116,7 @@ class Flowpaths:
         return pa.schema(
             [
                 pa.field("fp_id", pa.int32(), nullable=False),
+                pa.field("fp_to_id", pa.int32(), nullable=True),
                 pa.field("dn_nex_id", pa.int32(), nullable=False),
                 pa.field("up_nex_id", pa.int32(), nullable=True),
                 pa.field("div_id", pa.int32(), nullable=False),
@@ -441,19 +426,19 @@ class FlowpathAttributesModelConfig(BaseModel):
         default=here() / Path("data/usgs_250m_dem_5070.tif"), title="DEM Path", description="Path to DEM"
     )
     tw_path: Path = Field(
-        default=here() / Path("data/TW_bf_predictions.parquet"),
+        default=None,
         title="Topwidth Path",
-        description="Path to RiverML topwidth predictions",
+        description="Path to RiverML topwidth predictions. If None, it will be skipped.",
     )
     y_path: Path = Field(
-        default=here() / Path("data/Y_bf_predictions.parquet"),
+        default=None,
         title="Y Path",
-        description="Path to RiverML Y predictions",
+        description="Path to RiverML Y predictions. If None, it will be skipped.",
     )
     r_path: Path = Field(
-        default=here() / Path("data/r_predictions.parquet"),
+        default=None,
         title="R Path",
-        description="Path to RiverML R predictions",
+        description="Path to RiverML R predictions. If None, it will be skipped.",
     )
 
 
@@ -637,10 +622,8 @@ class GagesInputs(BaseModel):
     txdot_gages: GageInput = Field(
         default_factory=lambda: GageInput(path=Path("TXDOT_gages/TXDOT_gages.txt"))
     )
-    CADWR_ENVCA: GageInput = Field(
-        default_factory=lambda: GageInput(
-            path=Path("CADWR_ENVCA/gage_xy.csv"), x_col_name="lon", y_col_name="lat"
-        )
+    other: GageInput = Field(
+        default_factory=lambda: GageInput(path=Path("other/gage_xy.csv"), x_col_name="lon", y_col_name="lat")
     )
     CIROH_UA: GageInput = Field(
         default_factory=lambda: GageInput(
@@ -669,6 +652,14 @@ class GagesBlock(BaseModel):
     input_dir: Path = Path("data/gages")
     inputs: GagesInputs = Field(default_factory=GagesInputs)
     target: GagesTarget = Field(default_factory=GagesTarget)
+    prebuilt_gages: Path | None = Field(
+        default=None,
+        description="Path to a pre-built gages gpkg. If set, skip gage collection (steps 1-8) and use this table for assignment.",
+    )
+    prebuilt_gages_layer: str = Field(
+        default="gages",
+        description="Layer name in the pre-built gages gpkg.",
+    )
 
 
 class NLDIUpstreamBasins(BaseModel):
@@ -716,7 +707,7 @@ class GagesConfig(BaseModel):
             self.gages.inputs.usgs_discontinued,
             self.gages.inputs.usgs_active,
             self.gages.inputs.txdot_gages,
-            self.gages.inputs.CADWR_ENVCA,
+            self.gages.inputs.other,
             self.gages.inputs.nwm_calib_gages,
         ]:
             if inp.dir is not None:

@@ -109,7 +109,7 @@ def divide_attributes_aspect() -> dict[str, Any]:
     vpu_path = here() / "tests/data/divide_attributes/vpu_03N.gpkg"
     results = pd.DataFrame(
         data={
-            "aspect_circmean": [2.6788329323693696, 1.4929676850304032],
+            "aspect_circmean": [153.48582104541916, 85.54074730165893],
         }
     )
     return {"config": cfg, "vpu_path": vpu_path, "results": results}
@@ -196,11 +196,11 @@ def pipeline_results() -> dict[str, Any]:
                 6.724186897277832,
             ],
             "aspect_circmean": [
-                2.6788329323693696,
-                1.4929676850304032,
-                2.949461597005031,
-                -2.211277378349467,
-                0.6647588929701888,
+                153.48582104541916,
+                85.54074730165893,
+                168.99170134430392,
+                233.30313888782223,
+                38.087878960980625,
             ],
             "lon": [-81.347576, -81.357058, -81.401389, -81.384266, -81.376746],
             "lat": [36.351394, 36.327656, 36.368095, 36.324204, 36.351550],
@@ -720,7 +720,10 @@ class TestDivideAttributesStats:
         values = [0, 1, 2]
         weights = [0, 0, 1]
 
-        assert weighted_circular_mean(values, weights) == circmean(np.radians(values), weights=weights)
+        assert (
+            weighted_circular_mean(values, weights)
+            == np.degrees(circmean(np.radians(values), weights=weights)) % 360
+        )
 
     def test_weighted_circular_mean__bad_weights(self) -> None:
         """Value error for incorrect weights shape"""

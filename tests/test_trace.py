@@ -80,11 +80,14 @@ def _check_hydroseq_decreases_downstream(
         raise AssertionError(f"Found {len(violations)} flowpaths where hydroseq does not decrease downstream")
 
 
-def _check_area_percentages_sum_to_one(
+def _check_virtual_flowpath_area_contributions(
     virtual_fp_pl: pl.DataFrame,
     reference_fp_pl: pl.DataFrame,
 ) -> None:
-    """Check that area percentages sum to 1.0 within each divide.
+    """Check that non-nextgen virtual flowpath area contributions are valid.
+
+    Each percentage must be in [0, 1], and per-divide sums must not exceed 1.0.
+    Zero percentage should only occur for flowpaths with zero area (no-divide).
 
     Parameters
     ----------
@@ -93,37 +96,108 @@ def _check_area_percentages_sum_to_one(
     reference_fp_pl : pl.DataFrame
         Reference flowpath mapping table with div_id
     """
+    pct = virtual_fp_pl["percentage_area_contribution"]
 
-    # Join virtual flowpaths with reference table to get div_id
-    virtual_with_div = virtual_fp_pl.join(
+    # No nulls
+    assert not pct.is_null().any(), "Found null percentage_area_contribution values"
+
+    # Each percentage in [0, 1]
+    assert (pct >= 0).all(), "Found negative percentage_area_contribution"
+    assert (pct <= 1.0).all(), "Found percentage_area_contribution > 1.0"
+
+    # Zero percentage iff zero area (no-divide flowpaths)
+    area = virtual_fp_pl["area_sqkm"]
+    zero_pct_ids = set(virtual_fp_pl.filter(pct == 0)["virtual_fp_id"].to_list())
+    zero_area_ids = set(virtual_fp_pl.filter(area == 0)["virtual_fp_id"].to_list())
+    assert zero_pct_ids == zero_area_ids, (
+        "Mismatch between zero-percentage and zero-area virtual flowpaths: "
+        f"zero pct only: {zero_pct_ids - zero_area_ids}, zero area only: {zero_area_ids - zero_pct_ids}"
+    )
+
+    # Per-divide sums must not exceed 1.0
+    joined = virtual_fp_pl.join(
         reference_fp_pl.select(["virtual_fp_id", "div_id"]).filter(pl.col("virtual_fp_id").is_not_null()),
         on="virtual_fp_id",
         how="left",
     )
-
-    # Sum percentages by divide
-    div_percentage_sums = (
-        virtual_with_div.filter(pl.col("div_id").is_not_null())
+    per_div = (
+        joined.filter(pl.col("div_id").is_not_null())
         .group_by("div_id")
-        .agg(
-            [
-                pl.col("percentage_area_contribution").sum().alias("total_percentage"),
-                pl.col("virtual_fp_id").count().alias("num_virtual_fps"),
-            ]
-        )
-        .sort("div_id")
+        .agg(pl.col("percentage_area_contribution").sum().alias("total_pct"))
     )
 
-    # Check for divides where sum is not ~1.0 (allow small floating point error)
     tolerance = 1e-6
-    violations = div_percentage_sums.filter(
-        (pl.col("total_percentage") < 1.0 - tolerance) | (pl.col("total_percentage") > 1.0 + tolerance)
-    )
-
+    violations = per_div.filter(pl.col("total_pct") > 1.0 + tolerance)
     if len(violations) > 0:
         raise AssertionError(
-            f"Found {len(violations)} divides where virtual flowpath percentages don't sum to 1.0"
+            f"Found {len(violations)} divides where virtual flowpath area percentages exceed 1.0"
         )
+
+
+def _check_fp_to_id(fp_pl: pl.DataFrame) -> None:
+    """Check that fp_to_id is present and points to valid fp_ids or null (for outlets)."""
+    assert "fp_to_id" in fp_pl.columns, "fp_to_id column missing from flowpaths"
+    valid_fp_ids = set(fp_pl["fp_id"].to_list())
+    non_null = fp_pl.filter(pl.col("fp_to_id").is_not_null())
+    invalid = [row for row in non_null["fp_to_id"].to_list() if row not in valid_fp_ids]
+    assert len(invalid) == 0, f"fp_to_id references non-existent fp_ids: {invalid}"
+
+    # At least one outlet should have null fp_to_id
+    null_count = fp_pl.filter(pl.col("fp_to_id").is_null()).height
+    assert null_count >= 1, "Expected at least one outlet flowpath with null fp_to_id"
+
+
+def _check_virtual_nexus_meets_flowpath(
+    virtual_nex_pl: pl.DataFrame,
+    virtual_fp_pl: pl.DataFrame,
+    reference_fp_pl: pl.DataFrame,
+    fp_pl: pl.DataFrame,
+) -> None:
+    """Check that every virtual nexus connects back to a real flowpath.
+
+    The crosswalk path is:
+    Virtual Nexus -> Virtual Flowpath -> reference_flowpaths -> Flowpath.
+
+    Parameters
+    ----------
+    virtual_nex_pl : pl.DataFrame
+        Virtual nexus dataframe
+    virtual_fp_pl : pl.DataFrame
+        Virtual flowpath dataframe
+    reference_fp_pl : pl.DataFrame
+        Reference flowpath crosswalk table
+    fp_pl : pl.DataFrame
+        Flowpath dataframe
+    """
+    if len(virtual_nex_pl) == 0:
+        return
+
+    # Virtual Nexus -> Virtual Flowpath (via dn_virtual_nex_id)
+    hop1 = virtual_nex_pl.join(
+        virtual_fp_pl.select("virtual_fp_id", "dn_virtual_nex_id"),
+        left_on="virtual_nex_id",
+        right_on="dn_virtual_nex_id",
+        how="left",
+    )
+    orphans = hop1.filter(pl.col("virtual_fp_id").is_null())
+    assert len(orphans) == 0, f"Found {len(orphans)} virtual nexuses with no draining virtual flowpath"
+
+    # Virtual Flowpath -> reference_flowpaths (via virtual_fp_id); div_id links
+    # to the regular flowpath the virtual chain connects to.
+    ref_vfp = reference_fp_pl.filter(pl.col("virtual_fp_id").is_not_null()).select("virtual_fp_id", "div_id")
+    hop2 = hop1.join(ref_vfp, on="virtual_fp_id", how="left")
+    missing_ref = hop2.filter(pl.col("div_id").is_null())
+    assert len(missing_ref) == 0, (
+        f"Found {len(missing_ref)} terminal virtual flowpaths with no reference_flowpaths entry"
+    )
+
+    # div_id must exist in the flowpaths table
+    valid_fp_ids = set(fp_pl["fp_id"].to_list())
+    matched_fp_ids = set(hop2["div_id"].drop_nulls().to_list())
+    dangling = matched_fp_ids - valid_fp_ids
+    assert len(dangling) == 0, (
+        f"Found {len(dangling)} div_id values from terminal virtual nexus crosswalk not in flowpaths: {dangling}"
+    )
 
 
 def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: HFConfig) -> None:
@@ -159,7 +233,6 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 8, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 50, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -185,19 +258,6 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_nexus.csv",
@@ -207,12 +267,15 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
@@ -248,7 +311,6 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 3, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 11, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -274,19 +336,6 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     df = pd.DataFrame(
         {
@@ -299,17 +348,17 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], dtype="Int64"),
-            "dn_virtual_fp_id": pd.Series([pd.NA, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], dtype="Int64"),
-            "vpu_id": pd.Series(
-                ["02", "02", "02", "02", "02", "02", "02", "02", "02", "02", "02"], dtype="object"
-            ),
+            "virtual_nex_id": pd.Series([3, 4, 5], dtype="Int64"),
+            "vpu_id": pd.Series(["02", "02", "02"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
@@ -345,7 +394,6 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 3, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 6, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -371,19 +419,6 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     df = pd.DataFrame(
         {
@@ -396,15 +431,17 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 5, 7, 8, 9, 10, 11], dtype="Int64"),
-            "dn_virtual_fp_id": pd.Series([pd.NA, 4, 6, 7, 8, 5, 5], dtype="Int64"),
-            "vpu_id": pd.Series(["01", "01", "01", "01", "01", "01", "01"], dtype="object"),
+            "virtual_nex_id": pd.Series([4, 5, 6], dtype="Int64"),
+            "vpu_id": pd.Series(["01", "01", "01"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
@@ -440,7 +477,6 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 1907, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 9048, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -466,19 +502,6 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_nexus.csv",
@@ -488,12 +511,15 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
@@ -529,7 +555,6 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2254, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 7266, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -555,19 +580,6 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_nexus.csv",
@@ -577,12 +589,15 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
@@ -618,7 +633,6 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 7877, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 27437, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
 
@@ -644,19 +658,6 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_nexus.csv",
@@ -666,12 +667,15 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
 
 
 def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
@@ -707,7 +711,6 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2395, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
-    assert len(aggregate_data.virtual_flowpaths) == 10983, "Incorrect number of virtual flowpaths"
 
     runner.run_task(task_id="map_flowpaths", python_callable=map_trace_and_aggregate, op_kwargs={})
     runner.run_task(task_id="map_build_base", python_callable=map_build_hydrofabric, op_kwargs={})
@@ -732,19 +735,6 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     assert len(strong_components) == graph.num_nodes(), "Each node should be its own SCC in a DAG"
 
     virtual_fp_pl = pl.from_pandas(final_virtual_flowpaths.to_wkb())
-    virtual_upstream_dict = _build_upstream_dict_from_nexus(
-        virtual_fp_pl, edge_id="virtual_fp_id", node_id="virtual_nex_id"
-    )
-    virtual_graph, _ = _build_rustworkx_object(virtual_upstream_dict)
-    assert rx.is_directed_acyclic_graph(virtual_graph), "Virtual graph must be acyclic"
-    assert rx.is_weakly_connected(virtual_graph), "All virtual flowpaths should connect to single outlet"
-    assert not rx.is_strongly_connected(virtual_graph), "Virtual DAG cannot be strongly connected"
-    virtual_outlets = [node for node in virtual_graph.node_indices() if virtual_graph.out_degree(node) == 0]
-    assert len(virtual_outlets) == 1, f"Should have exactly 1 virtual outlet, found {len(virtual_outlets)}"
-    virtual_strong_components = rx.strongly_connected_components(virtual_graph)
-    assert len(virtual_strong_components) == virtual_graph.num_nodes(), (
-        "Each virtual node should be its own SCC"
-    )
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_nexus.csv",
@@ -754,9 +744,12 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
-    )
+        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
+    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_area_percentages_sum_to_one(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_fp_to_id(fp_pl)
+    virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
+    _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
