@@ -7,6 +7,7 @@ from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import (
     associate_flowpaths_nearest_point,
     associate_flowpaths_polygon_outlet,
+    join_attributes,
 )
 from hydrofabric_builds.hydrofabric.nwm_lakes import complete_nwm_lakes
 from hydrofabric_builds.reservoirs.data_prep.hydraulics import populate_nwm_hydaulics
@@ -58,11 +59,17 @@ def build_nwm_lakes(**context: dict[str, Any]) -> dict[str, Any]:
                 flowpath_id="fp_id",
                 flowpath_id_out_field="fp_id",
                 polygon_layer=cfg.nwm_lakes.input_layer,
-                attrib_src_path=cfg.nwm_lakes.attrib_src_path,
-                attrib_src_layer=cfg.nwm_lakes.attrib_src_layer,
-                attrib_src_key=cfg.nwm_lakes.attrib_src_key,
-                attrib_src_fields=cfg.nwm_lakes.fields,
             )
+            if cfg.nwm_lakes.attrib_src_path:
+                gdf = join_attributes(
+                    gdf,
+                    attrib_dst_key=cfg.nwm_lakes.id_field,
+                    attrib_src_path=cfg.nwm_lakes.attrib_src_path,
+                    attrib_src_layer=cfg.nwm_lakes.attrib_src_layer,
+                    attrib_src_key=cfg.nwm_lakes.attrib_src_key,
+                    attrib_src_fields=cfg.nwm_lakes.fields,
+                    rename=True,
+                )
 
         # invalid method
         else:

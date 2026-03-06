@@ -102,6 +102,56 @@ def associate_flowpaths_nearest_point(
     return gdf_points
 
 
+def join_attributes(
+    gdf: gpd.GeoDataFrame,
+    attrib_dst_key: str,
+    attrib_src_path: Path,
+    attrib_src_layer: str | None = None,
+    attrib_src_key: str = "lake_id",
+    attrib_src_fields: list[str] | None = None,
+    rename: bool = True,
+) -> gpd.GeoDataFrame:
+    """Join attributes from source file to given dataframe on given key(s)
+
+    Parameters
+    ----------
+    gdf: GeoDataFrame
+        Dataframe to join attributes into
+    attrib_src_path: Path,
+        Path to attribute source file
+    attrib_src_layer: str,
+        Name of attribute source layer
+    attrib_src_key: str,
+        Key to perform join with
+    attrib_src_fields: list[str],
+        Fields from attribute source to preserve
+    rename : bool
+        Whether to rename attrib_dst_key to attrib_src_key in returned GDF
+
+    """
+    gdf_attrib_src = (
+        (
+            gpd.read_file(attrib_src_path, layer=attrib_src_layer)
+            if attrib_src_layer
+            else gpd.read_file(attrib_src_path)
+        )
+        if attrib_src_path
+        else None
+    )
+    if attrib_src_key != attrib_dst_key:
+        gdf_attrib_src.drop("geometry", axis=1)
+        if rename:
+            gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
+            attrib_dst_key = attrib_src_key
+        if attrib_src_key in attrib_src_fields:
+            attrib_src_fields.remove(attrib_src_key)
+    # Pandas complains about no "geometry" in index if we don't do this mess
+    gdf_merged = gdf.merge(gdf_attrib_src, how="left", left_on=attrib_dst_key, right_on=attrib_src_key)
+    for col in attrib_src_fields:
+        gdf.loc[:, col] = gdf_merged[col]
+    return gdf
+
+
 def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
@@ -111,10 +161,6 @@ def associate_flowpaths_polygon_outlet(
     polygon_id: str = "newID",
     polygon_layer: str | None = None,
     flowpath_layer: str | None = None,
-    attrib_src_path: Path | None = None,
-    attrib_src_layer: str | None = None,
-    attrib_src_key: str | None = None,
-    attrib_src_fields: list[str] | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate the intersection of waterbody polygons and their flowpath outlets
 
@@ -150,29 +196,6 @@ def associate_flowpaths_polygon_outlet(
         gpd.read_file(polygon_path, layer=polygon_layer) if polygon_layer else gpd.read_file(polygon_path)
     )
 
-    gdf_source = (
-        (
-            gpd.read_file(attrib_src_path, layer=attrib_src_layer)
-            if attrib_src_layer is not None
-            else gpd.read_file(attrib_src_path)
-        )
-        if attrib_src_path is not None
-        else None
-    )
-    attrib_src_key = attrib_src_key if attrib_src_key is not None else "lake_id"
-
-    merge = True if gdf_source is not None and attrib_src_fields is not None else False
-
-    # make sure things are as we expect them to be
-    if merge and polygon_id != attrib_src_key:
-        gdf_poly = gdf_poly.rename(columns={polygon_id: attrib_src_key})
-        gdf_source.drop("geometry", axis=1)
-        print(gdf_poly.columns)
-        polygon_id = attrib_src_key
-        if attrib_src_key in attrib_src_fields:
-            attrib_src_fields.remove(attrib_src_key)
-        print(attrib_src_fields)
-
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].force_2d()
@@ -184,7 +207,6 @@ def associate_flowpaths_polygon_outlet(
 
     # iterates through buffers, intersects, chooses minimum hydrosequence
     for idx, _lake in gdf_poly.iterrows():
-        # print(idx)
         for search_radius in range(0, search_radius_m, int(search_radius_m / 10)):  # type: ignore[arg-type]
             buffered = (
                 gdf_poly["geometry"][idx]
@@ -199,11 +221,6 @@ def associate_flowpaths_polygon_outlet(
             gdf_poly.loc[idx, flowpath_id_out_field] = candidates[flowpath_id][min_idx]
             gdf_poly.loc[idx, "buffer_radius"] = search_radius
             break
-    if merge:
-        # i do it this way because otherwise it gets coerced into a pd.DataFrame?
-        gdf_poly_merged = gdf_poly.merge(gdf_source, how="left", on=polygon_id)
-        for col in attrib_src_fields:
-            gdf_poly.loc[:, col] = gdf_poly_merged[col]
 
     gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     return gdf_poly
