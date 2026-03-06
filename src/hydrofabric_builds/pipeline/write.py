@@ -43,8 +43,11 @@ def write_base_hydrofabric(**context: dict[str, Any]) -> dict:
     final_divides.to_file(file_name, layer="divides", driver="GPKG")
     final_flowpaths.to_file(file_name, layer="flowpaths", driver="GPKG")
     final_nexus.to_file(file_name, layer="nexus", driver="GPKG")
-    final_virtual_flowpaths.to_file(file_name, layer="virtual_flowpaths", driver="GPKG")
-    final_virtual_nexus.to_file(file_name, layer="virtual_nexus", driver="GPKG")
+    try:
+        final_virtual_flowpaths.to_file(file_name, layer="virtual_flowpaths", driver="GPKG")
+        final_virtual_nexus.to_file(file_name, layer="virtual_nexus", driver="GPKG")
+    except:
+        pass
 
     conn = sqlite3.connect(file_name)
     final_reference_flowpaths.to_sql("reference_flowpaths", conn, index=False)
