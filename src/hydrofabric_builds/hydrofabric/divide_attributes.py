@@ -103,8 +103,6 @@ def _calculate_attribute(
     else:
         df = df.rename(columns={attribute_cfg.agg_type.value: attribute_cfg.field_name})
 
-    df[attribute_cfg.field_name] = df[attribute_cfg.field_name].round(3)
-
     df.to_parquet(
         attribute_cfg.tmp,
         compression="snappy",
