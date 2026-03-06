@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:3338
-output_name: ak_nhf_0.1.52.gpkg # If not specified, will default to version
+output_name: ak_nhf_0.1.53.gpkg # If not specified, will default to version
 
 # hf builds
 build:
