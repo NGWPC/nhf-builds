@@ -19,7 +19,7 @@ tasks:
   hydrolocations: False
   gages: True
   fp_crosswalk: False
-  nwm_lakes: True
+  lakes: True
 
 # flowpaths
 flowpath_attributes:
@@ -183,7 +183,7 @@ gages:
 lakes:
   input_path: "data/lakes/input/nwm_lakes_hi_input.gpkg"
   input_layer: "nwm_lakes"
-  processed_path: "data/lakes/output/hawaii_lakes_associated.gpkg"
+  processed_path: "data/lakes/output/hawaii_lakes_fp_associated.gpkg"
   associate_flowpaths: True
   flowpath_association_method: "polygon_outlet"
   populate_nwm_hydaulics: True

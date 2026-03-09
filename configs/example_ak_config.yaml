@@ -12,12 +12,12 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: False
-  divide_attributes: False
-  flowpath_attributes: False
+  build_hydrofabric: True
+  divide_attributes: True
+  flowpath_attributes: True
   waterbodies: False
   hydrolocations: False
-  gages: False
+  gages: True
   lakes: True
   fp_crosswalk: False
 
@@ -245,9 +245,9 @@ gages:
    work_crs: EPSG:3338          # an area-equal crs to calculate buffers and distances
 
 # nwm lakes
-nwm_lakes:
-  input_path: "data/lakes/ak_lakeparm.gpkg"
-  processed_path: "data/lakes/ak_nwm_lakes.gpkg"
+lakes:
+  input_path: "data/lakes/input/ak_lakeparm.gpkg"
+  processed_path: "data/lakes/output/ak_lakes_fp_associated.gpkg"
   associate_flowpaths: True
   flowpath_association_method: "nearest_point"
   populate_nwm_hydaulics: False
