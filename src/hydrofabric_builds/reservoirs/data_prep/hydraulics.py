@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -390,6 +391,25 @@ def populate_hydraulics(
     return out
 
 
-def populate_nwm_hydaulics(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def populate_nwm_hydaulics(gdf_path: Path) -> gpd.GeoDataFrame:
     """Populate hydaulics for NWM lakes"""
-    return
+    gdf = gpd.read_file(gdf_path)
+
+    default_WeirC: float = 0.4
+    default_WeirL: float = 10.0  # m
+    default_OrficeC: float = 0.1
+    default_OrficeA: float = 1.0  # m²
+    default_ifd: float = 0.899
+
+    gdf["WeirC"] = gdf["WeirC"].fillna(default_WeirC)
+    gdf["WeirL"] = gdf["WeirL"].fillna(default_WeirL)
+
+    gdf["OrificeC"] = gdf["OrificeC"].fillna(default_OrficeC)
+    gdf["OrificeA"] = gdf["OrificeA"].fillna(default_OrficeA)
+
+    gdf["Dam_Length"] = gdf["Dam_Length"].fillna(default_WeirL)
+    gdf["ifd"] = gdf["ifd"].fillna(default_ifd)
+
+    gdf["LkArea"] = np.where(gdf["LkArea"].isna(), gdf["Shape_Area"] / (1000 * 1000), gdf["LkArea"])
+
+    return gdf
