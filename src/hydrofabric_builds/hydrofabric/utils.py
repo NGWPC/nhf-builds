@@ -175,6 +175,7 @@ def _combine_hydrofabrics(
         elif final_virtual_flowpaths.crs is None:
             final_virtual_flowpaths = final_virtual_flowpaths.set_crs(crs)
     else:
+        # Some areas (e.g. Alaska) produce no virtual flowpaths; create empty GeoDataFrame with expected schema
         final_virtual_flowpaths = gpd.GeoDataFrame(
             columns=[
                 "virtual_fp_id",
