@@ -886,17 +886,17 @@ class WaterbodiesConfig(BaseModel):
         return self
 
 
-class NWMLakesConfig(BaseModel):
+class LakesConfig(BaseModel):
     """Config for NWM Lakes"""
 
     input_path: Path = Field(
-        default=here() / "data/nwm_lakes/nwm_lakes.gpkg", description="File name of source waterbodies"
+        default=here() / "data/lakes/nwm_lakes.gpkg", description="File name of source lakes"
     )
     input_layer: str | None = Field(
         default=None, description="Layer name of lakes if input file is a GPKG with mutliple layers"
     )
     processed_path: Path = Field(
-        default=here() / "data/nwm_lakes/nwm_lakes_process.gpkg",
+        default=here() / "data/lakes/nwm_lakes_process.gpkg",
         description="File name of source waterbodies with flowpath associations and hydraulics",
     )
     associate_flowpaths: bool = Field(
@@ -905,9 +905,7 @@ class NWMLakesConfig(BaseModel):
     flowpath_association_method: str = Field(
         default="point", description="Specify the method used to associate flowpaths"
     )
-    populate_nwm_hydaulics: bool = Field(
-        default=False, description="Flag to populate NWM hydaulics fields if True"
-    )
+    populate_hydaulics: bool = Field(default=False, description="Flag to populate hydraulics fields if True")
     id_field: str = Field(default="lake_id", description="ID field in input lakes file")
     search_radius_m: float | int = Field(
         default=25000, description="Radius in meters to buffer points for nearest flowpath method"
@@ -933,12 +931,12 @@ class NWMLakesConfig(BaseModel):
         ],
         description="Fields to retain in final layer. IDs and geometry will be kept by default.",
     )
-    attrib_src_path: Path | None = (Field(default=None, description="Source file for importing attributes"),)
-    attrib_src_layer: str | None = (
-        Field(default=None, description="Source file layer for importing attributes"),
+    attrib_src_path: Path | None = Field(default=None, description="Source file for importing attributes")
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
     )
-    attrib_src_key: str | None = (
-        Field(default=None, description="Source file key to match when importing attributes"),
+    attrib_src_key: str | None = Field(
+        default=None, description="Source file key to match when importing attributes"
     )
 
 
@@ -1012,8 +1010,8 @@ class FPCrosswalkConfig(BaseModel):
 class NWMDefaultHydraulics(Enum):
     """Default values for NWM hydraulic params"""
 
-    WeirC: float = 0.4
-    WeirL: float = 10.0  # m
-    OrficeC: float = 0.1
-    OrficeA: float = 1.0  # m²
-    ifd: float = 0.899
+    WeirC = 0.4
+    WeirL = 10.0  # m
+    OrficeC = 0.1
+    OrficeA = 1.0  # m²
+    ifd = 0.899

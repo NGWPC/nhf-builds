@@ -129,29 +129,30 @@ def join_attributes(
         Whether to rename attrib_dst_key to attrib_src_key in returned GDF
 
     """
-    gdf_attrib_src = (
-        (
+    if not attrib_src_path:
+        return gdf
+
+    else:
+        gdf_attrib_src = (
             gpd.read_file(attrib_src_path, layer=attrib_src_layer)
             if attrib_src_layer
             else gpd.read_file(attrib_src_path)
         )
-        if attrib_src_path
-        else None
-    )
-    if attrib_src_key != attrib_dst_key:
-        gdf_attrib_src.drop("geometry", axis=1, inplace=True)
-        if rename:
-            gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
-            attrib_dst_key = attrib_src_key
-        if attrib_src_key in attrib_src_fields:
-            attrib_src_fields.remove(attrib_src_key)
 
-    gdf_merged = gdf.merge(
-        gdf_attrib_src[[attrib_src_key] + attrib_src_fields],
-        how="left",
-        left_on=attrib_dst_key,
-        right_on=attrib_src_key,
-    )
+        if attrib_src_key != attrib_dst_key:
+            gdf_attrib_src.drop("geometry", axis=1, inplace=True)
+            if rename:
+                gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
+                attrib_dst_key = attrib_src_key
+            if attrib_src_key in attrib_src_fields:
+                attrib_src_fields.remove(attrib_src_key)
+
+        gdf_merged = gdf.merge(
+            gdf_attrib_src[[attrib_src_key] + attrib_src_fields],
+            how="left",
+            left_on=attrib_dst_key,
+            right_on=attrib_src_key,
+        )
 
     return gdf_merged
 

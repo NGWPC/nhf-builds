@@ -14,7 +14,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     FlowpathAttributesModelConfig,
     FPCrosswalkConfig,
     GagesConfig,
-    NWMLakesConfig,
+    LakesConfig,
     WaterbodiesConfig,
 )
 
@@ -89,7 +89,7 @@ class HFConfig(BaseModel):
         default=WaterbodiesConfig(), description="Settings for building waterbodies"
     )
 
-    nwm_lakes: NWMLakesConfig = Field(default=NWMLakesConfig(), description="Settings for building NWM lakes")
+    lakes: LakesConfig = Field(default=LakesConfig(), description="Settings for building NWM lakes")
 
     gages: GagesConfig = Field(default=GagesConfig(), description="Settings for building gages")
 

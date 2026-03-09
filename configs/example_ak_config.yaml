@@ -12,13 +12,13 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: True
+  build_hydrofabric: False
   divide_attributes: False
   flowpath_attributes: False
   waterbodies: False
   hydrolocations: False
   gages: False
-  nwm_lakes: True
+  lakes: True
   fp_crosswalk: False
 
 flowpath_attributes:
@@ -246,8 +246,8 @@ gages:
 
 # nwm lakes
 nwm_lakes:
-  input_path: "data/nwm_lakes/ak_lakeparm.gpkg"
-  processed_path: "data/nwm_lakes/ak_nwm_lakes.gpkg"
+  input_path: "data/lakes/ak_lakeparm.gpkg"
+  processed_path: "data/lakes/ak_nwm_lakes.gpkg"
   associate_flowpaths: True
   flowpath_association_method: "nearest_point"
   populate_nwm_hydaulics: False

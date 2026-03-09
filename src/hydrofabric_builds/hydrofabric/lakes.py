@@ -8,7 +8,7 @@ import geopandas as gpd
 logger = logging.getLogger(__name__)
 
 
-def complete_nwm_lakes(nwm_lakes_path: Path, fields: list[str]) -> gpd.GeoDataFrame:
+def complete_lakes(nwm_lakes_path: Path, fields: list[str]) -> gpd.GeoDataFrame:
     """Complete requested columns
 
     Parameters
