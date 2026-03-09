@@ -139,17 +139,17 @@ def join_attributes(
         else None
     )
     if attrib_src_key != attrib_dst_key:
-        gdf_attrib_src.drop("geometry", axis=1)
+        gdf_attrib_src.drop("geometry", axis=1, inplace=True)
         if rename:
             gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
             attrib_dst_key = attrib_src_key
         if attrib_src_key in attrib_src_fields:
             attrib_src_fields.remove(attrib_src_key)
     # Pandas complains about no "geometry" in index if we don't do this mess
-    gdf_merged = gdf.merge(gdf_attrib_src, how="left", left_on=attrib_dst_key, right_on=attrib_src_key)
+    gdf_merged = gdf.merge(gdf_attrib_src[[attrib_src_key]+attrib_src_fields], how="left", left_on=attrib_dst_key, right_on=attrib_src_key)
     for col in attrib_src_fields:
         gdf.loc[:, col] = gdf_merged[col]
-    return gdf
+    return gdf_merged
 
 
 def associate_flowpaths_polygon_outlet(
