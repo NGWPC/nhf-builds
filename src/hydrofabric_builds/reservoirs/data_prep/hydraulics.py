@@ -397,14 +397,14 @@ def populate_nwm_hydaulics(gdf_path: Path) -> gpd.GeoDataFrame:
     """Populate hydaulics for NWM lakes"""
     gdf = gpd.read_file(gdf_path)
 
-    gdf["WeirC"] = gdf["WeirC"].fillna(NWMDefaultHydraulics.WeirC)
-    gdf["WeirL"] = gdf["WeirL"].fillna(NWMDefaultHydraulics.WeirL)
+    gdf["WeirC"] = gdf["WeirC"].fillna(NWMDefaultHydraulics.WeirC.value)
+    gdf["WeirL"] = gdf["WeirL"].fillna(NWMDefaultHydraulics.WeirL.value)
 
-    gdf["OrificeC"] = gdf["OrificeC"].fillna(NWMDefaultHydraulics.OrficeC)
-    gdf["OrificeA"] = gdf["OrificeA"].fillna(NWMDefaultHydraulics.OrficeA)
+    gdf["OrificeC"] = gdf["OrificeC"].fillna(NWMDefaultHydraulics.OrficeC.value)
+    gdf["OrificeA"] = gdf["OrificeA"].fillna(NWMDefaultHydraulics.OrficeA.value)
 
-    gdf["Dam_Length"] = gdf["Dam_Length"].fillna(NWMDefaultHydraulics.WeirL)
-    gdf["ifd"] = gdf["ifd"].fillna(NWMDefaultHydraulics.ifd)
+    gdf["Dam_Length"] = gdf["Dam_Length"].fillna(NWMDefaultHydraulics.WeirL.value)
+    gdf["ifd"] = gdf["ifd"].fillna(NWMDefaultHydraulics.ifd.value)
 
     gdf["LkArea"] = np.where(gdf["LkArea"].isna(), gdf["Shape_Area"] / (1000 * 1000), gdf["LkArea"])
 
