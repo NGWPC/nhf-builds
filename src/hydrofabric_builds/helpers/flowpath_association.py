@@ -50,7 +50,9 @@ def associate_flowpaths_nearest_point(
         else gpd.read_file(flowpaths_path, layer=flowpath_layer)
     )
     gdf_points = (
-        gpd.read_file(points_path, layer=points_layer) if points_layer else gpd.read_file(points_path)
+        gpd.read_file(points_path, layer=points_layer)
+        if points_layer is not None
+        else gpd.read_file(points_path)
     )
 
     # coerce geometry to 2D linestings
@@ -100,14 +102,69 @@ def associate_flowpaths_nearest_point(
     return gdf_points
 
 
+def join_attributes(
+    gdf: gpd.GeoDataFrame,
+    attrib_dst_key: str,
+    attrib_src_path: Path,
+    attrib_src_layer: str | None = None,
+    attrib_src_key: str = "lake_id",
+    attrib_src_fields: list[str] | None = None,
+    rename: bool = True,
+) -> gpd.GeoDataFrame:
+    """Join attributes from source file to given dataframe on given key(s)
+
+    Parameters
+    ----------
+    gdf: GeoDataFrame
+        Dataframe to join attributes into
+    attrib_src_path: Path,
+        Path to attribute source file
+    attrib_src_layer: str,
+        Name of attribute source layer
+    attrib_src_key: str,
+        Key to perform join with
+    attrib_src_fields: list[str],
+        Fields from attribute source to preserve
+    rename : bool
+        Whether to rename attrib_dst_key to attrib_src_key in returned GDF
+
+    """
+    gdf_attrib_src = (
+        (
+            gpd.read_file(attrib_src_path, layer=attrib_src_layer)
+            if attrib_src_layer
+            else gpd.read_file(attrib_src_path)
+        )
+        if attrib_src_path
+        else None
+    )
+    if attrib_src_key != attrib_dst_key:
+        gdf_attrib_src.drop("geometry", axis=1, inplace=True)
+        if rename:
+            gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
+            attrib_dst_key = attrib_src_key
+        if attrib_src_key in attrib_src_fields:
+            attrib_src_fields.remove(attrib_src_key)
+
+    gdf_merged = gdf.merge(
+        gdf_attrib_src[[attrib_src_key] + attrib_src_fields],
+        how="left",
+        left_on=attrib_dst_key,
+        right_on=attrib_src_key,
+    )
+
+    return gdf_merged
+
+
 def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
     search_radius_m: int | float,
     flowpath_id: str,
     flowpath_id_out_field: str = "fp_id",
-    flowpath_layer: str | None = None,
+    polygon_id: str = "newID",
     polygon_layer: str | None = None,
+    flowpath_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate the intersection of waterbody polygons and their flowpath outlets
 
@@ -170,5 +227,4 @@ def associate_flowpaths_polygon_outlet(
             break
 
     gdf_poly["geometry"] = gdf_poly["geometry"].centroid
-
     return gdf_poly

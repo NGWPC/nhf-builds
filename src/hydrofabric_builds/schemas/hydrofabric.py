@@ -916,7 +916,6 @@ class NWMLakesConfig(BaseModel):
         default=[
             "lake_id",
             "LkArea",
-            "temp",
             "LkMxE",
             "WeirC",
             "WeirL",
@@ -933,6 +932,13 @@ class NWMLakesConfig(BaseModel):
             "reservoir_index_Short_Range",
         ],
         description="Fields to retain in final layer. IDs and geometry will be kept by default.",
+    )
+    attrib_src_path: Path | None = (Field(default=None, description="Source file for importing attributes"),)
+    attrib_src_layer: str | None = (
+        Field(default=None, description="Source file layer for importing attributes"),
+    )
+    attrib_src_key: str | None = (
+        Field(default=None, description="Source file key to match when importing attributes"),
     )
 
 
@@ -1001,3 +1007,13 @@ class FPCrosswalkConfig(BaseModel):
         self.outputs.matches_gpkg = _resolve(self.outputs.matches_gpkg, base)
 
         return self
+
+
+class NWMDefaultHydraulics(Enum):
+    """Default values for NWM hydraulic params"""
+
+    WeirC: float = 0.4
+    WeirL: float = 10.0  # m
+    OrficeC: float = 0.1
+    OrficeA: float = 1.0  # m²
+    ifd: float = 0.899

@@ -19,7 +19,7 @@ tasks:
   hydrolocations: True
   gages: True
   fp_crosswalk: True
-
+  nwm_lakes: True
 
 # flowpaths
 flowpath_attributes:
@@ -376,11 +376,14 @@ fp_crosswalk:
 
 # nwm lakes
 nwm_lakes:
-  input_path: "data/nwm_lakes/nwm_lakes_sconus_input.gpkg"
+  input_path: "data/reservoirs/reference_reservoirs/nwm_lakes.gpkg"
   input_layer: "nwm_lakes"
   processed_path: "data/nwm_lakes/nwm_lakes_sconus_flowpaths.gpkg"
   associate_flowpaths: True
   flowpath_association_method: "polygon_outlet"
   populate_nwm_hydaulics: False
-  id_field: "lake_id"
+  id_field: "newID"
   search_radius_m: 25000
+  attrib_src_path: "data/reservoirs/source_files/nwm_patch_conus_nextgen.gpkg"
+  attrib_src_layer: "lakes"
+  attrib_src_key: "lake_id"
