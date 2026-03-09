@@ -145,10 +145,14 @@ def join_attributes(
             attrib_dst_key = attrib_src_key
         if attrib_src_key in attrib_src_fields:
             attrib_src_fields.remove(attrib_src_key)
-    # Pandas complains about no "geometry" in index if we don't do this mess
-    gdf_merged = gdf.merge(gdf_attrib_src[[attrib_src_key]+attrib_src_fields], how="left", left_on=attrib_dst_key, right_on=attrib_src_key)
-    for col in attrib_src_fields:
-        gdf.loc[:, col] = gdf_merged[col]
+
+    gdf_merged = gdf.merge(
+        gdf_attrib_src[[attrib_src_key] + attrib_src_fields],
+        how="left",
+        left_on=attrib_dst_key,
+        right_on=attrib_src_key,
+    )
+
     return gdf_merged
 
 
