@@ -189,36 +189,11 @@ def _combine_hydrofabrics(
             crs=crs,
         )
 
-    else:
-        final_virtual_flowpaths = gpd.GeoDataFrame(
-            columns=[
-                "virtual_fp_id",
-                "dn_virtual_nex_id",
-                "length_km",
-                "area_sqkm",
-                "percentage_area_contribution",
-                "vpu_id",
-                "geometry",
-            ],
-            crs=crs,
-        )
-
     if final_virtual_nexus is not None:
         if final_virtual_nexus.crs is not None and final_virtual_nexus.crs != crs:
             final_virtual_nexus = final_virtual_nexus.to_crs(crs)
         elif final_virtual_nexus.crs is None:
             final_virtual_nexus = final_virtual_nexus.set_crs(crs)
-    else:
-        final_virtual_nexus = gpd.GeoDataFrame(
-            columns=[
-                "virtual_nex_id",
-                "dn_virtual_fp_id",
-                "vpu_id",
-                "geometry",
-            ],
-            crs=crs,
-        )
-
     else:
         final_virtual_nexus = gpd.GeoDataFrame(
             columns=[
