@@ -186,7 +186,6 @@ def main() -> int:
                 task_id="trace_attributes", python_callable=trace_hydrofabric_attributes, op_kwargs={}
             )
             runner.run_task(task_id="write_base", python_callable=write_base_hydrofabric, op_kwargs={})
-            runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
 
         if config.tasks.gages:
             runner.run_task("gages", python_callable=build_gages, op_kwargs={})
@@ -207,6 +206,8 @@ def main() -> int:
             )
         if config.tasks.fp_crosswalk:
             runner.run_task(task_id="fp_crosswalk", python_callable=build_fp_crosswalk, op_kwargs={})
+
+        runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
 
         print("\n" + "=" * 60)
         print("Pipeline completed")

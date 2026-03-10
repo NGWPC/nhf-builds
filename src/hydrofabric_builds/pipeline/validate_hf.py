@@ -1,4 +1,3 @@
-import argparse
 import logging
 from pathlib import Path
 from typing import Any, cast
@@ -9,7 +8,14 @@ from pandantic import Pandantic
 from pydantic import ValidationError
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.schemas.validate_hydrofabric import Divides, Flowpaths
+from hydrofabric_builds.schemas.validate_hydrofabric import (
+    Divides,
+    Flowpaths,
+    Gages_AK,
+    Gages_CONUS,
+    Gages_HI,
+    Gages_PRVI,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +32,14 @@ def validate_divides(gpkg_path_filename: Path) -> None:
     -------
     None
     """
-    divides = gpd.read_file(gpkg_path_filename, layer="divides")
+    try:
+        divides = gpd.read_file(gpkg_path_filename, layer="divides")
+    except FileNotFoundError:
+        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
+
     divides = pd.DataFrame(divides)
 
+    logger.info("Validate divide attributes")
     logger.info(f"Total number of rows: {len(divides)}\n")
 
     rows_with_nan = divides[divides.isna().any(axis=1)]
@@ -46,12 +57,13 @@ def validate_divides(gpkg_path_filename: Path) -> None:
 
     validator = Pandantic(schema=Divides)
 
+    logger.info("Validate divide attributes format")
     try:
         validator.validate(dataframe=divides, errors="raise")
     except ValidationError as e:
         error_details = e.errors()
         for error in error_details:
-            print(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
+            logger.info(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
 
 
 def validate_flowpaths(gpkg_path_filename: Path) -> None:
@@ -66,35 +78,79 @@ def validate_flowpaths(gpkg_path_filename: Path) -> None:
     -------
     None
     """
-    flowpaths = gpd.read_file(gpkg_path_filename, layer="flowpaths")
+    try:
+        flowpaths = gpd.read_file(gpkg_path_filename, layer="flowpaths")
+    except FileNotFoundError:
+        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
     flowpaths = pd.DataFrame(flowpaths)
 
+    logger.info("Validate flowpaths attributes")
     rows_with_nan = flowpaths[flowpaths.isna().any(axis=1)]
-    print(f"Total number of rows with NaNs: {len(rows_with_nan)}")
+    logger.info(f"Total number of rows with NaNs: {len(rows_with_nan)}")
 
     nan_counts = flowpaths.isna().sum().to_dict()
-    print("Number of NaNs per attribute")
+    logger.info("Number of NaNs per attribute")
     for key, value in nan_counts.items():
-        print(f"{key}: {value}")
-        print("\n")
+        logger.info(f"{key}: {value}")
 
-    print("Number of NaNs by VPU")
+    logger.info("Number of NaNs by VPU")
     nan_by_vpu = flowpaths.isna().groupby(flowpaths["vpu_id"]).sum()
     with pd.option_context("display.max_columns", None):
-        print(nan_by_vpu)
-    print("\n")
+        logger.info(nan_by_vpu)
 
     validator = Pandantic(schema=Flowpaths)
 
+    logger.info("Validate Flowpath Attributes format")
     try:
         validator.validate(dataframe=flowpaths, errors="raise")
     except ValidationError as e:
         error_details = e.errors()
         for error in error_details:
-            print(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
+            logger.info(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
 
 
-def validate_hf(**context: dict[str, Any]) -> dict[str]:
+def validate_gages(gpkg_path_filename: Path, crs: str) -> None:
+    """Check NHF gages against the list of ~1600 gages
+
+    Parameters
+    ----------
+    gpkg_path_filename : Path
+        full path and filename of the NHF geopackage
+    crs: str
+         CRS EPSG string
+
+    Returns
+    -------
+    None
+    """
+    try:
+        gages_layer = gpd.read_file(gpkg_path_filename, layer="Gages")
+    except FileNotFoundError:
+        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
+    gages_layer = pd.DataFrame(gages_layer)
+
+    gages_nwm = gages_layer["site_no"].to_list()
+
+    if crs == "EPSG:5070":
+        gages_calibratable = Gages_CONUS.gages
+    elif crs == "EPSG:3338":
+        gages_calibratable = Gages_AK.gages
+    elif crs == "EPSG:32604":
+        gages_calibratable = Gages_HI.gages
+    elif crs == "EPSG:6566":
+        gages_calibratable = Gages_PRVI.gages
+
+    diff = set(gages_calibratable) - set(gages_nwm)
+
+    if not diff:
+        logger.info("All calibratable gages are in NHF")
+    else:
+        logger.info("The following gages are missing from NHF: \n")
+        for gage in diff:
+            logger.info(gage)
+
+
+def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
     """Validates the divides and flowpath layers
 
     Parameters
@@ -115,6 +171,8 @@ def validate_hf(**context: dict[str, Any]) -> dict[str]:
     """
     cfg = cast(HFConfig, context["config"])
     file_name = cfg.output_file_path
+    crs = cfg.crs
     validate_divides(file_name)
     validate_flowpaths(file_name)
-    return {"validation":"done"}
+    validate_gages(file_name, crs)
+    return {"validation": "done"}
