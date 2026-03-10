@@ -75,6 +75,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Config contained invalid Lakes flowpath association method")
 
         # Save pre-processed file
+        cfg.lakes.processed_path.parent.mkdir(parents=True, exist_ok=True)
         gdf.to_file(cfg.lakes.processed_path, overwrite=True, driver="GPKG")
         del gdf
 
