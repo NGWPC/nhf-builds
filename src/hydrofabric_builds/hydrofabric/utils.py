@@ -174,6 +174,20 @@ def _combine_hydrofabrics(
             final_virtual_flowpaths = final_virtual_flowpaths.to_crs(crs)
         elif final_virtual_flowpaths.crs is None:
             final_virtual_flowpaths = final_virtual_flowpaths.set_crs(crs)
+    else:
+        # Some areas (e.g. Alaska) produce no virtual flowpaths; create empty GeoDataFrame with expected schema
+        final_virtual_flowpaths = gpd.GeoDataFrame(
+            columns=[
+                "virtual_fp_id",
+                "dn_virtual_nex_id",
+                "length_km",
+                "area_sqkm",
+                "percentage_area_contribution",
+                "vpu_id",
+                "geometry",
+            ],
+            crs=crs,
+        )
 
     else:
         final_virtual_flowpaths = gpd.GeoDataFrame(
@@ -194,6 +208,17 @@ def _combine_hydrofabrics(
             final_virtual_nexus = final_virtual_nexus.to_crs(crs)
         elif final_virtual_nexus.crs is None:
             final_virtual_nexus = final_virtual_nexus.set_crs(crs)
+    else:
+        final_virtual_nexus = gpd.GeoDataFrame(
+            columns=[
+                "virtual_nex_id",
+                "dn_virtual_fp_id",
+                "vpu_id",
+                "geometry",
+            ],
+            crs=crs,
+        )
+
     else:
         final_virtual_nexus = gpd.GeoDataFrame(
             columns=[

@@ -161,7 +161,7 @@ def _merge_divide_attributes_parallel(model_cfg: DivideAttributesModelConfig) ->
             [model_cfg.tmp_dir / f"tmp_{attr.field_name}_{i}.parquet" for i in range(n_divides)]
         )
 
-    # itterate through each divides file and join the corresponding attribute parquet
+    # iterate through each divides file and join the corresponding attribute parquet
     for i, divides in enumerate(model_cfg.divides_path_list):  # type: ignore[arg-type]
         gdf = gpd.read_file(divides, layer="divides")
         for list_f in list_files:
@@ -416,7 +416,10 @@ def divide_attributes_pipeline_single(model_cfg: DivideAttributesModelConfig) ->
 
     tif_attributes = [cfg for cfg in model_cfg.attributes if ".tif" in cfg.file_name.name]
     for cfg in tif_attributes:
-        _calculate_attribute(model_cfg, cfg)
+        # if there is a divide mask file provided, use it as an alternate divides file
+        _calculate_attribute(model_cfg, cfg) if not model_cfg.divides_masked else _calculate_attribute(
+            model_cfg, cfg, alt_divides_path=model_cfg.divides_masked
+        )
 
     _concatenate_attributes(model_cfg)
 

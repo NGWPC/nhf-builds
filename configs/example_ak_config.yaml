@@ -33,8 +33,12 @@ divide_attributes:
   data_dir: data/ak/divide-attributes
   divide_id: div_id
   tmp_dir: data/ak/tmp/divide-attributes
+  alt_divides_path: data/ak/divide-attributes/ak_domain.gpkg
   split_vpu: False
   debug: False
+  domain_mask: data/ak/divide-attributes/domain/ak_nextgen.gpkg
+  domain_mask_layer: divides
+  divides_masked: data/ak/divide-attributes/domain/ak_divides_masked.gpkg
   attributes: # attributes must be specified - there are no defaults
     bexp1:
       file_name: nwm/bexp_0.tif

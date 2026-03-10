@@ -400,11 +400,24 @@ class DivideAttributesModelConfig(BaseModel):
         description="Setting debug to true will save all temporary files. Setting to false will delete files if run fails.",
         default=False,
     )
+    domain_mask: Path | None = Field(
+        default=None,
+        description="Mask a domain to only calculate attributes for a subset. Built to accommodate AK domain being smaller than full state.",
+    )
+    domain_mask_layer: str | None = Field(default=None, description="GPKG layer to use for mask")
+    divides_masked: Path | None = Field(default=None, description="Path to saved masked divides to")
 
     @model_validator(mode="after")
     def make_tmp_dir(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Model validator to create a temp directory if it does not exist"""
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        return self
+
+    @model_validator(mode="after")
+    def make_divides_mask(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Model validator to create a path to save the divides mask if none input"""
+        if self.domain_mask and not self.divides_masked:
+            self.divides_masked = self.data_dir / "divides_mask.gpkg"
         return self
 
 
