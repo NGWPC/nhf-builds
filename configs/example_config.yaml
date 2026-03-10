@@ -12,13 +12,13 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: False
-  divide_attributes: False
-  flowpath_attributes: False
+  build_hydrofabric: True
+  divide_attributes: True
+  flowpath_attributes: True
   waterbodies: False
   hydrolocations: False
-  gages: False
-  fp_crosswalk: False
+  gages: True
+  fp_crosswalk: True
   lakes: True
 
 # flowpaths
