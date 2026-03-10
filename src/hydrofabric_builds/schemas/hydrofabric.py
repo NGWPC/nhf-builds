@@ -935,8 +935,8 @@ class LakesConfig(BaseModel):
     attrib_src_layer: str | None = Field(
         default=None, description="Source file layer for importing attributes"
     )
-    attrib_src_key: str | None = Field(
-        default=None, description="Source file key to match when importing attributes"
+    attrib_src_key: str = Field(
+        default="lake_id", description="Source file key to match when importing attributes"
     )
 
 
