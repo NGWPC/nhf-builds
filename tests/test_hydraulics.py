@@ -24,57 +24,58 @@ def test_populate_nwm_hydraulics_single_row_example(tmp_path: Path) -> None:
                 "lake_id": [491],
                 "Shape_Le_1": [7696.213134],
                 "Shape_Area": [1480298.47499],
-                "OBJECTID": [float("nan")],
+                "OBJECTID": [np.nan],
                 "fp_id": [220076.0],
                 "buffer_radius": [0.0],
-                "LkArea": [float("nan")],
-                "LkMxE": [float("nan")],
-                "WeirC": [float("nan")],
-                "WeirL": [float("nan")],
-                "WeirE": [float("nan")],
-                "OrificeC": [float("nan")],
-                "OrificeA": [float("nan")],
-                "OrificeE": [float("nan")],
-                "Dam_Length": [float("nan")],
-                "ifd": [float("nan")],
-                "reservoir_index_AnA": [float("nan")],
-                "reservoir_index_Extended_AnA": [float("nan")],
-                "reservoir_index_GDL_AK": [float("nan")],
-                "reservoir_index_Medium_Range": [float("nan")],
-                "reservoir_index_Short_Range": [float("nan")],
+                "LkArea": [np.nan],
+                "LkMxE": [np.nan],
+                "WeirC": [np.nan],
+                "WeirL": [np.nan],
+                "WeirE": [np.nan],
+                "OrificeC": [np.nan],
+                "OrificeA": [np.nan],
+                "OrificeE": [np.nan],
+                "Dam_Length": [np.nan],
+                "ifd": [np.nan],
+                "reservoir_index_AnA": [np.nan],
+                "reservoir_index_Extended_AnA": [np.nan],
+                "reservoir_index_GDL_AK": [np.nan],
+                "reservoir_index_Medium_Range": [np.nan],
+                "reservoir_index_Short_Range": [np.nan],
                 "geometry": "POINT (2106785.561567098 2885482.6341993436)",
             }
         )
     )
-    reference_gdf = gpd.GeoDataFrame(
+    expected_gdf = gpd.GeoDataFrame(
         pd.DataFrame(
             {
                 "Shape_Leng": [7696.213134],
                 "lake_id": [491],
                 "Shape_Le_1": [7696.213134],
                 "Shape_Area": [1480298.47499],
-                "OBJECTID": [float("nan")],
+                "OBJECTID": [np.nan],
                 "fp_id": [220076.0],
                 "buffer_radius": [0.0],
                 "LkArea": [1.48029847499],
-                "LkMxE": [float("nan")],
+                "LkMxE": [np.nan],
                 "WeirC": [NWMDefaultHydraulics.WeirC.value],
                 "WeirL": [NWMDefaultHydraulics.WeirL.value],
-                "WeirE": [float("nan")],
+                "WeirE": [np.nan],
                 "OrificeC": [NWMDefaultHydraulics.OrificeC.value],
                 "OrificeA": [NWMDefaultHydraulics.OrificeA.value],
-                "OrificeE": [float("nan")],
+                "OrificeE": [np.nan],
                 "Dam_Length": [NWMDefaultHydraulics.WeirL.value],
                 "ifd": [NWMDefaultHydraulics.ifd.value],
-                "reservoir_index_AnA": [float("nan")],
-                "reservoir_index_Extended_AnA": [float("nan")],
-                "reservoir_index_GDL_AK": [float("nan")],
-                "reservoir_index_Medium_Range": [float("nan")],
-                "reservoir_index_Short_Range": [float("nan")],
+                "reservoir_index_AnA": [np.nan],
+                "reservoir_index_Extended_AnA": [np.nan],
+                "reservoir_index_GDL_AK": [np.nan],
+                "reservoir_index_Medium_Range": [np.nan],
+                "reservoir_index_Short_Range": [np.nan],
                 "geometry": "POINT (2106785.561567098 2885482.6341993436)",
             }
         )
     )
+
     tmp_gpkg_path = tmp_path / "nwm_hydraulics.gpkg"
     input_gdf.to_file(tmp_gpkg_path)
 
@@ -82,13 +83,13 @@ def test_populate_nwm_hydraulics_single_row_example(tmp_path: Path) -> None:
 
     for col in result_gdf.columns:
         if pd.isna(result_gdf[col][0]):
-            assert pd.isna(reference_gdf[col][0])
-        elif pd.isna(reference_gdf[col][0]):
+            assert pd.isna(expected_gdf[col][0])
+        elif pd.isna(expected_gdf[col][0]):
             assert pd.isna(result_gdf[col][0])
         elif isinstance(result_gdf[col][0], float):
-            assert pytest.approx(result_gdf[col][0], rel=1e-6) == reference_gdf[col][0]
+            assert pytest.approx(result_gdf[col][0], rel=1e-6) == expected_gdf[col][0]
         else:
-            assert reference_gdf[col][0] == result_gdf[col][0]
+            assert expected_gdf[col][0] == result_gdf[col][0]
 
 
 def test_populate_hydraulics_single_row_example() -> None:
