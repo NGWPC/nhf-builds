@@ -66,7 +66,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
                     attrib_src_path=cfg.lakes.attrib_src_path,
                     attrib_src_layer=cfg.lakes.attrib_src_layer,
                     attrib_src_key=cfg.lakes.attrib_src_key,
-                    attrib_src_fields=cfg.lakes.fields,
+                    attrib_src_fields=cfg.lakes.fields.copy(),
                     rename=True,
                 )
 

@@ -144,7 +144,6 @@ def join_attributes(
             if attrib_src_layer
             else gpd.read_file(attrib_src_path)
         )
-
         if attrib_src_key != attrib_dst_key:
             gdf_attrib_src.drop("geometry", axis=1, inplace=True)
             if rename:
