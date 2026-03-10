@@ -27,6 +27,9 @@ Below are the data files needed for running a full build of the NHF dataset and 
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
 - `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
+
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
 uv sync --all-extras
@@ -55,6 +58,9 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 6. NHD
 - TBD
 
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
+
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
 uv sync --all-extras
@@ -82,6 +88,9 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 6. NHD
 - TBD
 
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
+
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
 uv sync --all-extras
@@ -108,6 +117,9 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 
 6. NHD
 - TBD
+
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
 
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
