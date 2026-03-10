@@ -11,7 +11,84 @@ from rasterio.transform import from_origin
 from shapely.geometry import Point, Polygon
 
 from hydrofabric_builds.reservoirs.data_prep.DEM_helper import extract_elev_at_points, mean_dem_over_polygon
-from hydrofabric_builds.reservoirs.data_prep.hydraulics import populate_hydraulics
+from hydrofabric_builds.reservoirs.data_prep.hydraulics import populate_hydraulics, populate_nwm_hydaulics
+from hydrofabric_builds.schemas.hydrofabric import NWMDefaultHydraulics
+
+
+def test_populate_nwm_hydraulics_single_row_example(tmp_path: Path) -> None:
+    """Replicate a single row of post-association output."""
+    input_gdf = gpd.GeoDataFrame(
+        pd.DataFrame(
+            {
+                "Shape_Leng": [7696.213134],
+                "lake_id": [491],
+                "Shape_Le_1": [7696.213134],
+                "Shape_Area": [1480298.47499],
+                "OBJECTID": [float("nan")],
+                "fp_id": [220076.0],
+                "buffer_radius": [0.0],
+                "LkArea": [float("nan")],
+                "LkMxE": [float("nan")],
+                "WeirC": [float("nan")],
+                "WeirL": [float("nan")],
+                "WeirE": [float("nan")],
+                "OrificeC": [float("nan")],
+                "OrificeA": [float("nan")],
+                "OrificeE": [float("nan")],
+                "Dam_Length": [float("nan")],
+                "ifd": [float("nan")],
+                "reservoir_index_AnA": [float("nan")],
+                "reservoir_index_Extended_AnA": [float("nan")],
+                "reservoir_index_GDL_AK": [float("nan")],
+                "reservoir_index_Medium_Range": [float("nan")],
+                "reservoir_index_Short_Range": [float("nan")],
+                "geometry": "POINT (2106785.561567098 2885482.6341993436)",
+            }
+        )
+    )
+    reference_gdf = gpd.GeoDataFrame(
+        pd.DataFrame(
+            {
+                "Shape_Leng": [7696.213134],
+                "lake_id": [491],
+                "Shape_Le_1": [7696.213134],
+                "Shape_Area": [1480298.47499],
+                "OBJECTID": [float("nan")],
+                "fp_id": [220076.0],
+                "buffer_radius": [0.0],
+                "LkArea": [1.48029847499],
+                "LkMxE": [float("nan")],
+                "WeirC": [NWMDefaultHydraulics.WeirC.value],
+                "WeirL": [NWMDefaultHydraulics.WeirL.value],
+                "WeirE": [float("nan")],
+                "OrificeC": [NWMDefaultHydraulics.OrificeC.value],
+                "OrificeA": [NWMDefaultHydraulics.OrificeA.value],
+                "OrificeE": [float("nan")],
+                "Dam_Length": [NWMDefaultHydraulics.WeirL.value],
+                "ifd": [NWMDefaultHydraulics.ifd.value],
+                "reservoir_index_AnA": [float("nan")],
+                "reservoir_index_Extended_AnA": [float("nan")],
+                "reservoir_index_GDL_AK": [float("nan")],
+                "reservoir_index_Medium_Range": [float("nan")],
+                "reservoir_index_Short_Range": [float("nan")],
+                "geometry": "POINT (2106785.561567098 2885482.6341993436)",
+            }
+        )
+    )
+    tmp_gpkg_path = tmp_path / "nwm_hydraulics.gpkg"
+    input_gdf.to_file(tmp_gpkg_path)
+
+    result_gdf = populate_nwm_hydaulics(tmp_gpkg_path)
+
+    for col in result_gdf.columns:
+        if pd.isna(result_gdf[col][0]):
+            assert pd.isna(reference_gdf[col][0])
+        elif pd.isna(reference_gdf[col][0]):
+            assert pd.isna(result_gdf[col][0])
+        elif isinstance(result_gdf[col][0], float):
+            assert pytest.approx(result_gdf[col][0], rel=1e-6) == reference_gdf[col][0]
+        else:
+            assert reference_gdf[col][0] == result_gdf[col][0]
 
 
 def test_populate_hydraulics_single_row_example() -> None:

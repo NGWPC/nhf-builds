@@ -1012,6 +1012,6 @@ class NWMDefaultHydraulics(Enum):
 
     WeirC = 0.4
     WeirL = 10.0  # m
-    OrficeC = 0.1
-    OrficeA = 1.0  # m²
+    OrificeC = 0.1
+    OrificeA = 1.0  # m²
     ifd = 0.899

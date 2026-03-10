@@ -186,7 +186,7 @@ lakes:
   processed_path: "data/lakes/output/hawaii_lakes_fp_associated.gpkg"
   associate_flowpaths: True
   flowpath_association_method: "polygon_outlet"
-  populate_nwm_hydaulics: True
+  populate_hydaulics: True
   id_field: "newID"
   search_radius_m: 25000
   attrib_src_path: "data/lakes/input/hi_nextgen_workaround.gpkg" # file to get attributes from

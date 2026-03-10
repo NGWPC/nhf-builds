@@ -400,8 +400,8 @@ def populate_nwm_hydaulics(gdf_path: Path) -> gpd.GeoDataFrame:
     gdf["WeirC"] = gdf["WeirC"].fillna(NWMDefaultHydraulics.WeirC.value)
     gdf["WeirL"] = gdf["WeirL"].fillna(NWMDefaultHydraulics.WeirL.value)
 
-    gdf["OrificeC"] = gdf["OrificeC"].fillna(NWMDefaultHydraulics.OrficeC.value)
-    gdf["OrificeA"] = gdf["OrificeA"].fillna(NWMDefaultHydraulics.OrficeA.value)
+    gdf["OrificeC"] = gdf["OrificeC"].fillna(NWMDefaultHydraulics.OrificeC.value)
+    gdf["OrificeA"] = gdf["OrificeA"].fillna(NWMDefaultHydraulics.OrificeA.value)
 
     gdf["Dam_Length"] = gdf["Dam_Length"].fillna(NWMDefaultHydraulics.WeirL.value)
     gdf["ifd"] = gdf["ifd"].fillna(NWMDefaultHydraulics.ifd.value)
