@@ -131,8 +131,15 @@ def join_attributes(
     """
     if not attrib_src_path:
         return gdf
-
+    elif (
+        attrib_src_path and not attrib_src_fields
+    ):  # It is illegal behavior to define only one of these fields. We enforce that here
+        raise Exception(
+            "flowpath_association: `attrib_src_path` was provided but `attrib_src_fields` was `None`, attribute source fields must be specified in order to merge"
+        )
     else:
+        # Makes mypy happy
+        attrib_src_fields_valid: list[str] = attrib_src_fields if attrib_src_fields else list[str]()
         gdf_attrib_src = (
             gpd.read_file(attrib_src_path, layer=attrib_src_layer)
             if attrib_src_layer
@@ -144,11 +151,11 @@ def join_attributes(
             if rename:
                 gdf = gdf.rename(columns={attrib_dst_key: attrib_src_key})
                 attrib_dst_key = attrib_src_key
-            if attrib_src_key in attrib_src_fields:
-                attrib_src_fields.remove(attrib_src_key)
+            if attrib_src_key in attrib_src_fields_valid:
+                attrib_src_fields_valid.remove(attrib_src_key)
 
         gdf_merged = gdf.merge(
-            gdf_attrib_src[[attrib_src_key] + attrib_src_fields],
+            gdf_attrib_src[[attrib_src_key] + attrib_src_fields_valid],
             how="left",
             left_on=attrib_dst_key,
             right_on=attrib_src_key,
@@ -200,7 +207,7 @@ def associate_flowpaths_polygon_outlet(
     gdf_poly = (
         gpd.read_file(polygon_path, layer=polygon_layer) if polygon_layer else gpd.read_file(polygon_path)
     )
-
+    #
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].force_2d()
