@@ -194,7 +194,6 @@ def _combine_hydrofabrics(
             final_virtual_nexus = final_virtual_nexus.to_crs(crs)
         elif final_virtual_nexus.crs is None:
             final_virtual_nexus = final_virtual_nexus.set_crs(crs)
-
     else:
         final_virtual_nexus = gpd.GeoDataFrame(
             columns=[

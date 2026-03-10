@@ -15,11 +15,11 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: True
-  hydrolocations: True
+  waterbodies: False
+  hydrolocations: False
   gages: True
   fp_crosswalk: True
-
+  lakes: True
 
 # flowpaths
 flowpath_attributes:
@@ -372,3 +372,18 @@ fp_crosswalk:
   outputs:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
+
+
+# lakes
+lakes:
+  associate_flowpaths: True # this will run the flowpath association
+  input_path: "data/lakes/input/nwm_lakes_sconus_input.gpkg"
+  input_layer: "nwm_lakes"
+  processed_path: "data/lakes/output/sconus_lakes_fp_associated.gpkg" # can be empty or populated
+  flowpath_association_method: "polygon_outlet" # "nearest_point" or "polygon_outlet"
+  populate_hydaulics: True
+  id_field: "newID"
+  search_radius_m: 25000
+  attrib_src_path: "data/lakes/input/nwm_patch_conus_nextgen.gpkg" # file to get attributes from
+  attrib_src_layer: "lakes"
+  attrib_src_key: "lake_id"
