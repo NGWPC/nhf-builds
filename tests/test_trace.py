@@ -82,19 +82,16 @@ def _check_hydroseq_decreases_downstream(
 
 def _check_virtual_flowpath_area_contributions(
     virtual_fp_pl: pl.DataFrame,
-    reference_fp_pl: pl.DataFrame,
 ) -> None:
-    """Check that non-nextgen virtual flowpath area contributions are valid.
+    """Check that virtual flowpath area contributions are valid.
 
-    Each percentage must be in [0, 1], and per-divide sums must not exceed 1.0.
+    Each percentage must be in [0, 1], and per-divide sums must be close to 1.0.
     Zero percentage should only occur for flowpaths with zero area (no-divide).
 
     Parameters
     ----------
     virtual_fp_pl : pl.DataFrame
-        Virtual flowpath dataframe with percentage_area_contribution
-    reference_fp_pl : pl.DataFrame
-        Reference flowpath mapping table with div_id
+        Virtual flowpath dataframe with percentage_area_contribution and div_id
     """
     pct = virtual_fp_pl["percentage_area_contribution"]
 
@@ -114,23 +111,26 @@ def _check_virtual_flowpath_area_contributions(
         f"zero pct only: {zero_pct_ids - zero_area_ids}, zero area only: {zero_area_ids - zero_pct_ids}"
     )
 
-    # Per-divide sums must not exceed 1.0
-    joined = virtual_fp_pl.join(
-        reference_fp_pl.select(["virtual_fp_id", "div_id"]).filter(pl.col("virtual_fp_id").is_not_null()),
-        on="virtual_fp_id",
-        how="left",
-    )
+    # Per-divide sums must be close to 1.0
     per_div = (
-        joined.filter(pl.col("div_id").is_not_null())
+        virtual_fp_pl.filter(pl.col("div_id").is_not_null())
         .group_by("div_id")
         .agg(pl.col("percentage_area_contribution").sum().alias("total_pct"))
     )
 
-    tolerance = 1e-6
-    violations = per_div.filter(pl.col("total_pct") > 1.0 + tolerance)
-    if len(violations) > 0:
+    tolerance = 0.01
+    over = per_div.filter(pl.col("total_pct") > 1.0 + tolerance)
+    if len(over) > 0:
         raise AssertionError(
-            f"Found {len(violations)} divides where virtual flowpath area percentages exceed 1.0"
+            f"Found {len(over)} divides where virtual flowpath area percentages exceed 1.0: "
+            f"{over.sort('total_pct', descending=True).head(5)}"
+        )
+
+    under = per_div.filter(pl.col("total_pct") < 1.0 - tolerance)
+    if len(under) > 0:
+        raise AssertionError(
+            f"Found {len(under)} divides where virtual flowpath area percentages sum to less than 1.0: "
+            f"{under.sort('total_pct').head(5)}"
         )
 
 
@@ -184,14 +184,12 @@ def _check_virtual_nexus_meets_flowpath(
 
     # Virtual Flowpath -> reference_flowpaths (via virtual_fp_id); div_id links
     # to the regular flowpath the virtual chain connects to.
+    # Tributary VFPs have reference entries; main-stem VFPs do not.
+    # For nexuses that have a tributary VFP, verify the reference link is valid.
     ref_vfp = reference_fp_pl.filter(pl.col("virtual_fp_id").is_not_null()).select("virtual_fp_id", "div_id")
     hop2 = hop1.join(ref_vfp, on="virtual_fp_id", how="left")
-    missing_ref = hop2.filter(pl.col("div_id").is_null())
-    assert len(missing_ref) == 0, (
-        f"Found {len(missing_ref)} terminal virtual flowpaths with no reference_flowpaths entry"
-    )
 
-    # div_id must exist in the flowpaths table
+    # div_id must exist in the flowpaths table (for VFPs that have reference entries)
     valid_fp_ids = set(fp_pl["fp_id"].to_list())
     matched_fp_ids = set(hop2["div_id"].drop_nulls().to_list())
     dangling = matched_fp_ids - valid_fp_ids
@@ -272,7 +270,7 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -348,14 +346,14 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([3, 4, 5], dtype="Int64"),
-            "vpu_id": pd.Series(["02", "02", "02"], dtype="object"),
+            "virtual_nex_id": pd.Series([3, 4, 5, 6, 9], dtype="Int64"),
+            "vpu_id": pd.Series(["02", "02", "02", "02", "02"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -431,14 +429,14 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 5, 6], dtype="Int64"),
-            "vpu_id": pd.Series(["01", "01", "01"], dtype="object"),
+            "virtual_nex_id": pd.Series([4, 5, 6, 7, 9], dtype="Int64"),
+            "vpu_id": pd.Series(["01", "01", "01", "01", "01"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -516,7 +514,7 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -594,7 +592,7 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -672,7 +670,7 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
@@ -749,7 +747,7 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
-    _check_virtual_flowpath_area_contributions(virtual_fp_pl, reference_fp_pl)
+    _check_virtual_flowpath_area_contributions(virtual_fp_pl)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)

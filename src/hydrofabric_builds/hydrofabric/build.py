@@ -1,14 +1,16 @@
 """A file to contain any hydrofabric building functions"""
 
 import logging
-from collections import deque
+from collections import defaultdict, deque
 from typing import Any
 
 import geopandas as gpd
 import pandas as pd
 import rustworkx as rx
 from shapely import Point
+from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import linemerge, substring
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.schemas.hydrofabric import Aggregations, Classifications
@@ -133,6 +135,220 @@ def _queue_all_unit_upstreams(
             current_idx = node_indices[current_ref_id]
             upstream_ids = [graph[idx] for idx in graph.predecessor_indices(current_idx)]
             to_process.extend(upstream_ids)
+
+
+def _create_mainstem_virtual_flowpaths(
+    nhf_fp_to_vnexuses: dict[int, list[tuple[int, Point]]],
+    nhf_fp_to_ref_ids: dict[int, list[str]],
+    nhf_fp_tributary_pct: dict[int, float],
+    fp_data: list[dict[str, Any]],
+    fp_lookup: dict[str, dict[str, Any]],
+    div_lookup: dict[str, dict[str, Any]] | None,
+    nhf_id: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Create main-stem virtual flowpath segments along NHF flowpaths at virtual nexuses.
+
+    For each NHF flowpath that has virtual nexuses on it (from tributary virtual chains),
+    creates segments between consecutive virtual nexuses and from the upstream/downstream
+    ends to the nearest virtual nexus.
+
+    Area is computed using a hybrid approach: first, actual divide areas are assigned to
+    segments via reference FP projection overlap.  Any remaining area (mainstem share
+    minus overlap-assigned area) is then distributed proportionally by segment length.
+    This ensures mainstem + tributary percentages sum to 1.0 per divide.
+
+    Parameters
+    ----------
+    nhf_fp_to_vnexuses : dict[int, list[tuple[int, Point]]]
+        Mapping of NHF fp_id to list of (virtual_nex_id, nexus_point) tuples
+    nhf_fp_to_ref_ids : dict[int, list[str]]
+        Mapping of NHF fp_id to list of reference FP IDs
+    nhf_fp_tributary_pct : dict[int, float]
+        Accumulated tributary VFP percentage per NHF fp_id (div_id)
+    fp_data : list[dict[str, Any]]
+        List of NHF flowpath records
+    fp_lookup : dict[str, dict[str, Any]]
+        Reference flowpath lookup
+    div_lookup : dict[str, dict[str, Any]] | None
+        Divide lookup for area calculation
+    nhf_id : int
+        Current ID counter
+
+    Returns
+    -------
+    tuple[list[dict[str, Any]], list[dict[str, Any]], int]
+        Main-stem virtual flowpath records, new virtual nexus records, and updated ID counter
+    """
+    mainstem_vfp_data: list[dict[str, Any]] = []
+    new_virtual_nexus_data: list[dict[str, Any]] = []
+    fp_data_by_id: dict[int, dict[str, Any]] = {fp["fp_id"]: fp for fp in fp_data}
+
+    for nhf_fp_id, vnexuses in nhf_fp_to_vnexuses.items():
+        if nhf_fp_id not in fp_data_by_id:
+            continue
+
+        fp_entry = fp_data_by_id[nhf_fp_id]
+        line_geom = fp_entry["geometry"]
+        nhf_fp_vpu_id = fp_entry["vpu_id"]
+
+        # Handle MultiLineString
+        if line_geom.geom_type == "MultiLineString":
+            merged = linemerge(line_geom)
+            if merged.geom_type == "LineString":
+                line = merged
+            else:
+                coords: list[tuple[float, ...]] = []
+                for part in line_geom.geoms:
+                    coords.extend(list(part.coords))
+                line = LineString(coords)
+        else:
+            line = line_geom
+
+        total_length = line.length
+        if total_length == 0:
+            continue
+
+        # Project virtual nexus points onto the line and sort upstream to downstream
+        projected_nexuses: list[tuple[int, float]] = []
+        for vnex_id, vnex_point in vnexuses:
+            dist = line.project(vnex_point)
+            projected_nexuses.append((vnex_id, dist))
+        projected_nexuses.sort(key=lambda x: x[1])
+
+        # Remaining area/percentage after tributary contributions
+        total_nhf_area = float(fp_entry["area_sqkm"])
+        tributary_pct = nhf_fp_tributary_pct.get(nhf_fp_id, 0.0)
+        remaining_pct = max(1.0 - tributary_pct, 0.0)
+        remaining_area = total_nhf_area * remaining_pct
+
+        # Build reference FP ranges for overlap-based area calculation
+        ref_ids = nhf_fp_to_ref_ids.get(nhf_fp_id, [])
+        ref_fp_ranges: list[tuple[float, float, float]] = []  # (start_dist, end_dist, area_km2)
+
+        for ref_id in ref_ids:
+            if ref_id not in fp_lookup:
+                continue
+            ref_fp = fp_lookup[ref_id]
+            ref_geom = ref_fp.get("shapely_geometry")
+            if ref_geom is None or ref_geom.is_empty:
+                continue
+
+            # Get area from div_lookup geometry or fp_lookup areasqkm
+            ref_area = 0.0
+            if div_lookup and ref_id in div_lookup:
+                ref_area = div_lookup[ref_id]["shapely_geometry"].area / 1e6
+            else:
+                ref_area = float(ref_fp.get("areasqkm", 0.0))
+
+            # Project reference FP endpoints onto NHF line
+            if ref_geom.geom_type == "MultiLineString":
+                ref_merged = linemerge(ref_geom)
+                if ref_merged.geom_type == "LineString":
+                    ref_line = ref_merged
+                else:
+                    ref_coords: list[tuple[float, ...]] = []
+                    for part in ref_geom.geoms:
+                        ref_coords.extend(list(part.coords))
+                    ref_line = LineString(ref_coords)
+            else:
+                ref_line = ref_geom
+
+            start_point = Point(ref_line.coords[0])
+            end_point = Point(ref_line.coords[-1])
+            ref_start_dist = line.project(start_point)
+            ref_end_dist = line.project(end_point)
+
+            if ref_start_dist > ref_end_dist:
+                ref_start_dist, ref_end_dist = ref_end_dist, ref_start_dist
+
+            ref_fp_ranges.append((ref_start_dist, ref_end_dist, ref_area))
+
+        # Build all segment boundaries: upstream end, each virtual nexus, downstream end
+        segment_boundaries: list[tuple[float, float, int]] = []  # (start_dist, end_dist, dn_vnex_id)
+
+        prev_dist = 0.0
+        for vnex_id, vnex_dist in projected_nexuses:
+            if (vnex_dist - prev_dist) >= 1.0:
+                segment_boundaries.append((prev_dist, vnex_dist, vnex_id))
+            prev_dist = vnex_dist
+
+        # Downstream tail: from last virtual nexus to downstream end of line
+        if (total_length - prev_dist) >= 1.0:
+            tail_vnex_id = nhf_id
+            nhf_id += 1
+
+            if line_geom.geom_type == "MultiLineString":
+                end_coord = list(line_geom.geoms)[-1].coords[-1]
+            else:
+                end_coord = line.coords[-1]
+
+            new_virtual_nexus_data.append(
+                {
+                    "virtual_nex_id": tail_vnex_id,
+                    "vpu_id": nhf_fp_vpu_id,
+                    "geometry": Point(end_coord),
+                }
+            )
+            segment_boundaries.append((prev_dist, total_length, tail_vnex_id))
+
+        # Phase 1: compute overlap-based area for each segment from divide geometries
+        segment_overlap_areas: list[float] = []
+        segment_lengths: list[float] = []
+        for seg_start_dist, seg_end_dist, _ in segment_boundaries:
+            segment = substring(line, seg_start_dist, seg_end_dist)
+            seg_len = segment.length if not segment.is_empty else 0.0
+            segment_lengths.append(seg_len)
+
+            seg_area = 0.0
+            for ref_start, ref_end, ref_area in ref_fp_ranges:
+                ref_length = ref_end - ref_start
+                if ref_length <= 0:
+                    continue
+                overlap_start = max(seg_start_dist, ref_start)
+                overlap_end = min(seg_end_dist, ref_end)
+                overlap_length = max(0.0, overlap_end - overlap_start)
+                if overlap_length > 0:
+                    fraction = min(overlap_length / ref_length, 1.0)
+                    seg_area += ref_area * fraction
+            segment_overlap_areas.append(seg_area)
+
+        # Phase 2: distribute any remaining area by segment length
+        # If overlap areas exceed the budget (e.g. braided projections), scale down
+        total_overlap_area = sum(segment_overlap_areas)
+        if total_overlap_area > remaining_area and total_overlap_area > 0:
+            scale = remaining_area / total_overlap_area
+            segment_overlap_areas = [a * scale for a in segment_overlap_areas]
+            total_overlap_area = remaining_area
+        deficit_area = max(remaining_area - total_overlap_area, 0.0)
+        total_seg_length = sum(segment_lengths)
+
+        for i, (seg_start_dist, seg_end_dist, dn_vnex_id) in enumerate(segment_boundaries):
+            seg_len = segment_lengths[i]
+            if seg_len == 0:
+                continue
+
+            segment = substring(line, seg_start_dist, seg_end_dist)
+
+            # Overlap area + proportional share of the deficit
+            length_fraction = seg_len / total_seg_length if total_seg_length > 0 else 0.0
+            segment_area = segment_overlap_areas[i] + deficit_area * length_fraction
+            percentage = segment_area / total_nhf_area if total_nhf_area > 0 else 0.0
+
+            mainstem_vfp_data.append(
+                {
+                    "virtual_fp_id": nhf_id,
+                    "dn_virtual_nex_id": dn_vnex_id,
+                    "div_id": nhf_fp_id,
+                    "length_km": seg_len / 1e3,
+                    "area_sqkm": segment_area,
+                    "percentage_area_contribution": percentage,
+                    "vpu_id": nhf_fp_vpu_id,
+                    "geometry": segment,
+                }
+            )
+            nhf_id += 1
+
+    return mainstem_vfp_data, new_virtual_nexus_data, nhf_id
 
 
 def _build_hydrofabric(
@@ -355,6 +571,7 @@ def _build_hydrofabric(
     virtual_nexus_data_dict: dict[int, dict[str, Any]] = {}
     ref_id_to_virtual_fp_id: dict[str, int] = {}
     ref_id_to_nexus: dict[str, int] = {}
+    virtual_nex_to_nhf_fp: dict[int, int] = {}  # virtual_nex_id -> NHF fp_id
 
     # Continue using the same nhf_id counter for virtual flowpaths
     # Virtual nexuses will also reuse virtual flowpath IDs
@@ -413,10 +630,15 @@ def _build_hydrofabric(
             if dn_ref_id:
                 ref_id_to_nexus[dn_ref_id] = virtual_nexus_id
 
+        # Track which NHF flowpath this virtual nexus sits on
+        if ds_id in ref_id_to_new_id:
+            virtual_nex_to_nhf_fp[virtual_nexus_id] = ref_id_to_new_id[ds_id]
+
         virtual_fp_data.append(
             {
                 "virtual_fp_id": int(virtual_fp_id),
                 "dn_virtual_nex_id": int(virtual_nexus_id),
+                "div_id": int(ref_id_to_new_id[ds_id]),
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
@@ -427,6 +649,35 @@ def _build_hydrofabric(
 
     # Convert nexus dict to list
     virtual_nexus_data = list(virtual_nexus_data_dict.values())
+
+    # Create main-stem virtual flowpath segments along NHF flowpaths
+    nhf_fp_to_vnexuses: dict[int, list[tuple[int, Point]]] = defaultdict(list)
+    for vnex_id, nhf_fp_id in virtual_nex_to_nhf_fp.items():
+        vnex_point = virtual_nexus_data_dict[vnex_id]["geometry"]
+        nhf_fp_to_vnexuses[nhf_fp_id].append((vnex_id, vnex_point))
+
+    # Accumulate tributary VFP percentages per NHF flowpath (div_id)
+    nhf_fp_tributary_pct: dict[int, float] = defaultdict(float)
+    for vfp_entry in virtual_fp_data:
+        nhf_fp_tributary_pct[vfp_entry["div_id"]] += vfp_entry["percentage_area_contribution"]
+
+    nhf_fp_to_ref_ids: dict[int, list[str]] = defaultdict(list)
+    for ref_id, nhf_id_val in ref_id_to_new_id.items():
+        nhf_fp_to_ref_ids[nhf_id_val].append(ref_id)
+
+    div_lookup: dict[str, dict[str, Any]] | None = partition_data.get("div_lookup")
+
+    mainstem_vfp_data, mainstem_vnex_data, nhf_id = _create_mainstem_virtual_flowpaths(
+        nhf_fp_to_vnexuses=nhf_fp_to_vnexuses,
+        nhf_fp_to_ref_ids=nhf_fp_to_ref_ids,
+        nhf_fp_tributary_pct=nhf_fp_tributary_pct,
+        fp_data=fp_data,
+        fp_lookup=fp_lookup,
+        div_lookup=div_lookup,
+        nhf_id=nhf_id,
+    )
+    virtual_fp_data.extend(mainstem_vfp_data)
+    virtual_nexus_data.extend(mainstem_vnex_data)
 
     logger.debug(f"Built hydrofabric using ID range: {1 + id_offset} to {nhf_id - 1}")
     # Create GeoDataFrames
@@ -451,6 +702,7 @@ def _build_hydrofabric(
             virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
                 "Int64"
             )
+            virtual_flowpaths_gdf["div_id"] = virtual_flowpaths_gdf["div_id"].astype("Int64")
         else:
             virtual_flowpaths_gdf = None
 
