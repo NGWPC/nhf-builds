@@ -8,10 +8,11 @@ import pandas as pd
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig
+from hydrofabric_builds.hydrofabric.utils import _crosswalk_reference
 from hydrofabric_builds.streamflow_gauges.append_from_routelink import (
     append_from_routelink,
 )
-from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import _crosswalk_fp_id, run_assignment
+from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import run_assignment
 from hydrofabric_builds.streamflow_gauges.CIROH_UA_gages_upstream_area import fill_usgs_basin_from_csv
 from hydrofabric_builds.streamflow_gauges.NLDI_upstream_area_builder import (
     attach_nldi_cache,
@@ -268,7 +269,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     # 12) Crosswalk ref_fp_id to fp_id
     # ---------------------------------------------------------------------
-    gages = _crosswalk_fp_id(gages, cfg.output_file_path)
+    gages = _crosswalk_reference(cfg.output_file_path, gages)
 
     # ---------------------------------------------------------------------
     # 13) Write final output and return
