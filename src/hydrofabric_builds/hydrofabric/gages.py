@@ -244,7 +244,6 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # 10) Assign flowpath to gages
     # ---------------------------------------------------------------------
     buffer_gage = gage_cfg.assign_fp_to_gages.buffer_m
-    print(buffer_gage)
     parallel = gage_cfg.assign_fp_to_gages.parallel
     max_workers = gage_cfg.assign_fp_to_gages.max_workers
     gages = run_assignment(

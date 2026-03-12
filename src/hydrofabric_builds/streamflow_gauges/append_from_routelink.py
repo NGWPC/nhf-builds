@@ -42,8 +42,8 @@ def append_from_routelink(
 
     gages = gpd.GeoDataFrame(gages[["geometry", "site_no"]][~gages["site_no"].isin(gdf["site_no"])].copy())
     logger.info(f"gages: added {len(gages)} gages from RouteLink not already present in dataset")
+    gages["status"] = gages["status"].fillna("routelink")
     gages = pd.concat([gdf, gages])
     gages["geometry"] = gages["geometry"].force_2d()
-    gages["status"] = gages["status"].fillna("routelink")
 
     return gages
