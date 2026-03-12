@@ -145,7 +145,7 @@ def _create_mainstem_virtual_flowpaths(
     fp_lookup: dict[str, dict[str, Any]],
     div_lookup: dict[str, dict[str, Any]] | None,
     nhf_id: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, int], int]:
     """Create main-stem virtual flowpath segments along NHF flowpaths at virtual nexuses.
 
     For each NHF flowpath that has virtual nexuses on it (from tributary virtual chains),
@@ -176,11 +176,13 @@ def _create_mainstem_virtual_flowpaths(
 
     Returns
     -------
-    tuple[list[dict[str, Any]], list[dict[str, Any]], int]
-        Main-stem virtual flowpath records, new virtual nexus records, and updated ID counter
+    tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, int], int]
+        Main-stem virtual flowpath records, new virtual nexus records,
+        mapping of virtual_nex_id to downstream virtual_fp_id, and updated ID counter
     """
     mainstem_vfp_data: list[dict[str, Any]] = []
     new_virtual_nexus_data: list[dict[str, Any]] = []
+    vnex_to_dn_vfp: dict[int, int] = {}
     fp_data_by_id: dict[int, dict[str, Any]] = {fp["fp_id"]: fp for fp in fp_data}
 
     for nhf_fp_id, vnexuses in nhf_fp_to_vnexuses.items():
@@ -322,6 +324,9 @@ def _create_mainstem_virtual_flowpaths(
         deficit_area = max(remaining_area - total_overlap_area, 0.0)
         total_seg_length = sum(segment_lengths)
 
+        # Emit segments and track vnex -> downstream VFP mapping
+        emitted_segments: list[tuple[int, int]] = []  # (dn_vnex_id, virtual_fp_id)
+        prev_dn_vnex_id: int | None = None
         for i, (seg_start_dist, seg_end_dist, dn_vnex_id) in enumerate(segment_boundaries):
             seg_len = segment_lengths[i]
             if seg_len == 0:
@@ -334,10 +339,12 @@ def _create_mainstem_virtual_flowpaths(
             segment_area = segment_overlap_areas[i] + deficit_area * length_fraction
             percentage = segment_area / total_nhf_area if total_nhf_area > 0 else 0.0
 
+            vfp_id = nhf_id
             mainstem_vfp_data.append(
                 {
-                    "virtual_fp_id": nhf_id,
+                    "virtual_fp_id": vfp_id,
                     "dn_virtual_nex_id": dn_vnex_id,
+                    "up_virtual_nex_id": prev_dn_vnex_id,
                     "div_id": nhf_fp_id,
                     "length_km": seg_len / 1e3,
                     "area_sqkm": segment_area,
@@ -346,9 +353,17 @@ def _create_mainstem_virtual_flowpaths(
                     "geometry": segment,
                 }
             )
+            emitted_segments.append((dn_vnex_id, vfp_id))
+            prev_dn_vnex_id = dn_vnex_id
             nhf_id += 1
 
-    return mainstem_vfp_data, new_virtual_nexus_data, nhf_id
+        # Each vnex between consecutive segments points to the next segment's VFP
+        for j in range(len(emitted_segments) - 1):
+            upstream_vnex_id = emitted_segments[j][0]
+            downstream_vfp_id = emitted_segments[j + 1][1]
+            vnex_to_dn_vfp[upstream_vnex_id] = downstream_vfp_id
+
+    return mainstem_vfp_data, new_virtual_nexus_data, vnex_to_dn_vfp, nhf_id
 
 
 def _build_hydrofabric(
@@ -638,6 +653,7 @@ def _build_hydrofabric(
             {
                 "virtual_fp_id": int(virtual_fp_id),
                 "dn_virtual_nex_id": int(virtual_nexus_id),
+                "up_virtual_nex_id": None,
                 "div_id": int(ref_id_to_new_id[ds_id]),
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
@@ -667,7 +683,7 @@ def _build_hydrofabric(
 
     div_lookup: dict[str, dict[str, Any]] | None = partition_data.get("div_lookup")
 
-    mainstem_vfp_data, mainstem_vnex_data, nhf_id = _create_mainstem_virtual_flowpaths(
+    mainstem_vfp_data, mainstem_vnex_data, vnex_to_dn_vfp, nhf_id = _create_mainstem_virtual_flowpaths(
         nhf_fp_to_vnexuses=nhf_fp_to_vnexuses,
         nhf_fp_to_ref_ids=nhf_fp_to_ref_ids,
         nhf_fp_tributary_pct=nhf_fp_tributary_pct,
@@ -678,6 +694,53 @@ def _build_hydrofabric(
     )
     virtual_fp_data.extend(mainstem_vfp_data)
     virtual_nexus_data.extend(mainstem_vnex_data)
+
+    # Create a single virtual flowpath for divides that have no VFPs yet
+    divs_with_vfps: set[int] = {vfp["div_id"] for vfp in virtual_fp_data}
+    for fp_entry in fp_data:
+        fp_id = fp_entry["fp_id"]
+        if fp_id in divs_with_vfps:
+            continue
+
+        line_geom = fp_entry["geometry"]
+        if line_geom is None or line_geom.is_empty:
+            continue
+
+        # Create virtual nexus at downstream end of flowpath
+        if line_geom.geom_type == "MultiLineString":
+            end_coord = list(line_geom.geoms)[-1].coords[-1]
+        else:
+            end_coord = line_geom.coords[-1]
+
+        vnex_id = nhf_id
+        nhf_id += 1
+
+        virtual_nexus_data.append(
+            {
+                "virtual_nex_id": vnex_id,
+                "vpu_id": fp_entry["vpu_id"],
+                "geometry": Point(end_coord),
+            }
+        )
+
+        virtual_fp_data.append(
+            {
+                "virtual_fp_id": nhf_id,
+                "dn_virtual_nex_id": vnex_id,
+                "up_virtual_nex_id": None,
+                "div_id": fp_id,
+                "length_km": fp_entry["length_km"],
+                "area_sqkm": fp_entry["area_sqkm"],
+                "percentage_area_contribution": 1.0,
+                "vpu_id": fp_entry["vpu_id"],
+                "geometry": line_geom,
+            }
+        )
+        nhf_id += 1
+
+    # Set dn_virtual_fp_id on all virtual nexus records
+    for vnex_entry in virtual_nexus_data:
+        vnex_entry["dn_virtual_fp_id"] = vnex_to_dn_vfp.get(vnex_entry["virtual_nex_id"])
 
     logger.debug(f"Built hydrofabric using ID range: {1 + id_offset} to {nhf_id - 1}")
     # Create GeoDataFrames
@@ -702,6 +765,9 @@ def _build_hydrofabric(
             virtual_flowpaths_gdf["dn_virtual_nex_id"] = virtual_flowpaths_gdf["dn_virtual_nex_id"].astype(
                 "Int64"
             )
+            virtual_flowpaths_gdf["up_virtual_nex_id"] = virtual_flowpaths_gdf["up_virtual_nex_id"].astype(
+                "Int64"
+            )
             virtual_flowpaths_gdf["div_id"] = virtual_flowpaths_gdf["div_id"].astype("Int64")
         else:
             virtual_flowpaths_gdf = None
@@ -709,6 +775,7 @@ def _build_hydrofabric(
         if virtual_nexus_data:
             virtual_nexus_gdf = gpd.GeoDataFrame(virtual_nexus_data, crs=cfg.crs)
             virtual_nexus_gdf["virtual_nex_id"] = virtual_nexus_gdf["virtual_nex_id"].astype("Int64")
+            virtual_nexus_gdf["dn_virtual_fp_id"] = virtual_nexus_gdf["dn_virtual_fp_id"].astype("Int64")
         else:
             virtual_nexus_gdf = None
 

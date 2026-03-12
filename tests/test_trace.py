@@ -265,8 +265,8 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
-    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+    )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
@@ -350,7 +350,7 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
             "vpu_id": pd.Series(["02", "02", "02", "02", "02"], dtype="object"),
         }
     )
-    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl)
@@ -429,11 +429,11 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 5, 6, 7, 9], dtype="Int64"),
-            "vpu_id": pd.Series(["01", "01", "01", "01", "01"], dtype="object"),
+            "virtual_nex_id": pd.Series([4, 5, 6, 7, 9, 12], dtype="Int64"),
+            "vpu_id": pd.Series(["01", "01", "01", "01", "01", "01"], dtype="object"),
         }
     )
-    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), df)
+    pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
     _check_virtual_flowpath_area_contributions(virtual_fp_pl)
@@ -509,8 +509,8 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
-    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+    )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
@@ -587,8 +587,8 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
-    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+    )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
@@ -665,8 +665,8 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
-    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+    )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
@@ -742,8 +742,8 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "vpu_id": "object"},
-    ).drop(columns=["dn_virtual_fp_id"], errors="ignore")
+        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+    )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
     _check_hydroseq_decreases_downstream(fp_pl, graph, fp_id_col="fp_id")
