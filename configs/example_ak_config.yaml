@@ -19,6 +19,7 @@ tasks:
   hydrolocations: False
   gages: True
   fp_crosswalk: False
+  validate_hf: True
 
 flowpath_attributes:
   flowpath_id: fp_id

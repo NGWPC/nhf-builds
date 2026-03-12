@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 from typing import Any, cast
@@ -20,7 +21,7 @@ from hydrofabric_builds.schemas.validate_hydrofabric import (
 logger = logging.getLogger(__name__)
 
 
-def validate_divides(gpkg_path_filename: Path) -> None:
+def validate_divides(gpkg_path_filename: Path) -> list[dict[Any, Any]]:
     """Validate the divides layer using Pydantic and check for NaNs
 
     Parameters
@@ -30,7 +31,8 @@ def validate_divides(gpkg_path_filename: Path) -> None:
 
     Returns
     -------
-    None
+    list
+        list of dictionaries containing divide validation
     """
     try:
         divides = gpd.read_file(gpkg_path_filename, layer="divides")
@@ -39,34 +41,31 @@ def validate_divides(gpkg_path_filename: Path) -> None:
 
     divides = pd.DataFrame(divides)
 
-    logger.info("Validate divide attributes")
-    logger.info(f"Total number of rows: {len(divides)}\n")
+    divides_out: list[dict[str, int | list[str]]] = []
+
+    divides_out.append({"Total number of divide rows": len(divides)})
 
     rows_with_nan = divides[divides.isna().any(axis=1)]
-    logger.info(f"Total number of rows with NaNs: {len(rows_with_nan)}\n")
+    divides_out.append({"Total number of rows with NaNs": len(rows_with_nan)})
 
     nan_counts = divides.isna().sum().to_dict()
-    logger.info("Number of NaNs per attribute")
-    for key, value in nan_counts.items():
-        logger.info(f"{key}: {value}")
-
-    logger.info("Number of NaNs by VPU")
-    nan_by_vpu = divides.isna().groupby(divides["vpu_id"]).sum()
-    with pd.option_context("display.max_columns", None):
-        logger.info(nan_by_vpu)
+    divides_out.append({"Number of NaNs per attribute": nan_counts})
 
     validator = Pandantic(schema=Divides)
 
     logger.info("Validate divide attributes format")
+    validation_errors = []
     try:
         validator.validate(dataframe=divides, errors="raise")
     except ValidationError as e:
         error_details = e.errors()
         for error in error_details:
-            logger.info(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
+            validation_errors.append(f"{error['loc']}: {error['msg']}; value is {error['input']}")
+    divides_out.append({"Validate divide attributes format": validation_errors})
+    return divides_out
 
 
-def validate_flowpaths(gpkg_path_filename: Path) -> None:
+def validate_flowpaths(gpkg_path_filename: Path) -> list[dict[Any, Any]]:
     """Validate the flowpath layer using Pydantic and check for NaNs
 
     Parameters
@@ -76,7 +75,8 @@ def validate_flowpaths(gpkg_path_filename: Path) -> None:
 
     Returns
     -------
-    None
+    list
+        list of dictionaries containing divide validation
     """
     try:
         flowpaths = gpd.read_file(gpkg_path_filename, layer="flowpaths")
@@ -84,32 +84,31 @@ def validate_flowpaths(gpkg_path_filename: Path) -> None:
         logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
     flowpaths = pd.DataFrame(flowpaths)
 
-    logger.info("Validate flowpaths attributes")
+    flowpaths_out: list[dict[str, int | list[str]]] = []
+
+    flowpaths_out.append({"Total number of flowpaths rows": len(flowpaths)})
+
     rows_with_nan = flowpaths[flowpaths.isna().any(axis=1)]
-    logger.info(f"Total number of rows with NaNs: {len(rows_with_nan)}")
+    flowpaths_out.append({"Total number of flowpaths rows with NaNs": len(rows_with_nan)})
 
     nan_counts = flowpaths.isna().sum().to_dict()
-    logger.info("Number of NaNs per attribute")
-    for key, value in nan_counts.items():
-        logger.info(f"{key}: {value}")
-
-    logger.info("Number of NaNs by VPU")
-    nan_by_vpu = flowpaths.isna().groupby(flowpaths["vpu_id"]).sum()
-    with pd.option_context("display.max_columns", None):
-        logger.info(nan_by_vpu)
+    flowpaths_out.append({"Number of NaNs per attribute": nan_counts})
 
     validator = Pandantic(schema=Flowpaths)
 
-    logger.info("Validate Flowpath Attributes format")
+    validation_errors = []
     try:
         validator.validate(dataframe=flowpaths, errors="raise")
     except ValidationError as e:
         error_details = e.errors()
         for error in error_details:
-            logger.info(f"{error['loc']}: {error['msg']}; value is {error['input']} ")
+            validation_errors.append(f"{error['loc']}:{error['msg']}; value is {error['input']}")
+
+    flowpaths_out.append({"Validate flowpaths attributes format": validation_errors})
+    return flowpaths_out
 
 
-def validate_gages(gpkg_path_filename: Path, crs: str) -> None:
+def validate_gages(gpkg_path_filename: Path, crs: str) -> list:
     """Check NHF gages against the list of ~1600 gages
 
     Parameters
@@ -117,11 +116,12 @@ def validate_gages(gpkg_path_filename: Path, crs: str) -> None:
     gpkg_path_filename : Path
         full path and filename of the NHF geopackage
     crs: str
-         CRS EPSG string
+        CRS EPSG string
 
     Returns
     -------
-    None
+    list
+        a list of missing gages
     """
     try:
         gages_layer = gpd.read_file(gpkg_path_filename, layer="Gages")
@@ -141,13 +141,8 @@ def validate_gages(gpkg_path_filename: Path, crs: str) -> None:
         gages_calibratable = Gages_PRVI.gages
 
     diff = set(gages_calibratable) - set(gages_nwm)
-
-    if not diff:
-        logger.info("All calibratable gages are in NHF")
-    else:
-        logger.info("The following gages are missing from NHF: \n")
-        for gage in diff:
-            logger.info(gage)
+    diffs_list = list(diff)
+    return diffs_list
 
 
 def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
@@ -171,8 +166,16 @@ def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
     """
     cfg = cast(HFConfig, context["config"])
     file_name = cfg.output_file_path
+    path = cfg.output_dir
+    gpkg_file_root = cfg.output_name.stem
     crs = cfg.crs
-    validate_divides(file_name)
-    validate_flowpaths(file_name)
-    validate_gages(file_name, crs)
+
+    divides = validate_divides(file_name)
+    flowpaths = validate_flowpaths(file_name)
+    gages = validate_gages(file_name, crs)
+    output_items = {"Divides": divides, "Flowpaths": flowpaths, "Missing Gages": gages}
+
+    with open(f"{path}/{gpkg_file_root}_validation.json", "w") as file:
+        json.dump(output_items, file, indent=4)
+
     return {"validation": "done"}
