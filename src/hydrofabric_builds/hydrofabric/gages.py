@@ -195,10 +195,10 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # 6) Append RouteLink gages not already in set
         # ---------------------------------------------------------------------
         gages = append_from_routelink(
-            gages,
-            local_root / gage_cfg.gages.inputs.routelink.path,
-            gage_cfg.gages.inputs.routelink.id_col_name,
-            None,
+            gdf=gages,
+            routelink=local_root / gage_cfg.gages.inputs.routelink.path,
+            id_col_name=gage_cfg.gages.inputs.routelink.id_col_name,
+            shape=None,
         )
 
         # ---------------------------------------------------------------------
@@ -244,6 +244,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # 10) Assign flowpath to gages
     # ---------------------------------------------------------------------
     buffer_gage = gage_cfg.assign_fp_to_gages.buffer_m
+    print(buffer_gage)
     parallel = gage_cfg.assign_fp_to_gages.parallel
     max_workers = gage_cfg.assign_fp_to_gages.max_workers
     gages = run_assignment(

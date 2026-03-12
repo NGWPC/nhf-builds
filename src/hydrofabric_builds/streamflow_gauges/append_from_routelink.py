@@ -16,10 +16,12 @@ def append_from_routelink(
 
     Parameters
     ----------
+    gdf: GeoDataFrame
+        Input dataframe to append to
     routelink : Path
         RouteLink file to extract from
-    output_csv: Path
-        Path to write gage list CSV
+    id_col_name: str
+        Column to pull from for site_no in RouteLink
     shape: Path | None
         Shapefile to use for clipping
     """
@@ -39,8 +41,9 @@ def append_from_routelink(
     gages["site_no"] = gages["site_no"].str.strip()
 
     gages = gpd.GeoDataFrame(gages[["geometry", "site_no"]][~gages["site_no"].isin(gdf["site_no"])].copy())
+    logger.info(f"gages: added {len(gages)} gages from RouteLink not already present in dataset")
     gages = pd.concat([gdf, gages])
     gages["geometry"] = gages["geometry"].force_2d()
-    gages["status"] = gages["status"].fillna("-")
-    logger.info("gages: added gages from RouteLink not already present in dataset")
+    gages["status"] = gages["status"].fillna("routelink")
+
     return gages
