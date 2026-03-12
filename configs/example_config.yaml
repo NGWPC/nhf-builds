@@ -323,6 +323,10 @@ gages:
         path: nwm_calib/nwm_calib_gages_07112025.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
+      routelink:
+        path: RouteLink_CONUS_EPSG4326.gpkg
+        gage_source_crs: EPSG:4326
+        id_col_name: gages
     target:
       crs: EPSG:5070
       snap_tolerance_m: 100.0

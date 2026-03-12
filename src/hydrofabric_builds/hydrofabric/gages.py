@@ -8,6 +8,9 @@ import pandas as pd
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig
+from hydrofabric_builds.streamflow_gauges.append_from_routelink import (
+    append_from_routelink,
+)
 from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import _crosswalk_fp_id, run_assignment
 from hydrofabric_builds.streamflow_gauges.CIROH_UA_gages_upstream_area import fill_usgs_basin_from_csv
 from hydrofabric_builds.streamflow_gauges.NLDI_upstream_area_builder import (
@@ -188,7 +191,17 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.warning(f"gages: NWM calibration list not found, skipping: {usgs_cal_gages_path}")
 
         # ---------------------------------------------------------------------
-        # 6) Finding upstream area for USGS gages using API
+        # 6) Append RouteLink gages not already in set
+        # ---------------------------------------------------------------------
+        gages = append_from_routelink(
+            gages,
+            local_root / gage_cfg.gages.inputs.routelink.path,
+            gage_cfg.gages.inputs.routelink.id_col_name,
+            None,
+        )
+
+        # ---------------------------------------------------------------------
+        # 7) Finding upstream area for USGS gages using API
         # ---------------------------------------------------------------------
         run_NLDI_upstream_basins = gage_cfg.NLDI_upstream_basins.run_NLDI_upstream_basins
         nldi_file_path = local_root / gage_cfg.NLDI_upstream_basins.path
@@ -208,7 +221,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             )
 
         # ---------------------------------------------------------------------
-        # 7) Assign NLDI basins column to gages
+        # 8) Assign NLDI basins column to gages
         # ---------------------------------------------------------------------
         if nldi_file_path.exists():
             gages = attach_nldi_cache(gages, nldi_file_path, layer_polys=layer_polys)
@@ -216,7 +229,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             gages["basin_area_km2"] = "none"
 
         # ---------------------------------------------------------------------
-        # 8) Add upstream basin area from CIROH-UA csv file to gages
+        # 9) Add upstream basin area from CIROH-UA csv file to gages
         # ---------------------------------------------------------------------
         cfg_CIROH_UA = gage_cfg.gages.inputs.CIROH_UA
         gages = fill_usgs_basin_from_csv(
@@ -227,7 +240,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         )
 
     # ---------------------------------------------------------------------
-    # 9) Assign flowpath to gages
+    # 10) Assign flowpath to gages
     # ---------------------------------------------------------------------
     buffer_gage = gage_cfg.assign_fp_to_gages.buffer_m
     parallel = gage_cfg.assign_fp_to_gages.parallel
@@ -244,7 +257,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         tol=gage_cfg.assign_fp_to_gages.rel_err,
     )
     # ---------------------------------------------------------------------
-    # 10) drop the columns we don't need
+    # 11) drop the columns we don't need
     # ---------------------------------------------------------------------
     keep_cols = ["site_no", "geometry", "status", "USGS_basin_km2", "ref_fp_id", "method_fp_to_gage"]
     gages = gages[keep_cols]
@@ -253,12 +266,12 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     gages["ref_fp_id"] = pd.to_numeric(gages["ref_fp_id"])
 
     # ---------------------------------------------------------------------
-    # 11) Crosswalk ref_fp_id to fp_id
+    # 12) Crosswalk ref_fp_id to fp_id
     # ---------------------------------------------------------------------
     gages = _crosswalk_fp_id(gages, cfg.output_file_path)
 
     # ---------------------------------------------------------------------
-    # 12) Write final output and return
+    # 13) Write final output and return
     # ---------------------------------------------------------------------
     output = cfg.output_dir / gage_cfg.gages.target.out_gpkg
     gpkg_layer_name = gage_cfg.gages.target.gpkg_layer_name
