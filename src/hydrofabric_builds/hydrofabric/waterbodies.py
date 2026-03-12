@@ -54,22 +54,28 @@ def crosswalk_waterbodies(hf_path: Path, rfcda_path: Path) -> gpd.GeoDataFrame:
     # read HF ref ID cross walk table
     hf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
     hf_fp = gpd.read_file(hf_path, layer="flowpaths")
+    hf_vfp = gpd.read_file(hf_path, layer="virtual_flowpaths")
 
     # join on cross walk table
     logger.info("Crosswalking reference flowpath IDs")
     gdf_res = gdf_res.loc[~gdf_res["ref_fab_fp"].isnull(), :].copy()
     gdf_res["ref_fab_fp"] = pd.to_numeric(gdf_res["ref_fab_fp"]).astype(np.int64)
     gdf_res = gdf_res.merge(hf_ref, left_on="ref_fab_fp", right_on="ref_fp_id", how="left")
-    gdf_res = gdf_res.merge(hf_fp[["fp_id"]], on="fp_id", how="left")
-    gdf_res = gdf_res.loc[~gdf_res["fp_id"].isnull(), :].copy()
+    gdf_res = gdf_res.merge(hf_fp[["fp_id", "dn_nex_id"]], on="fp_id", how="left")
+    gdf_res = gdf_res.merge(hf_vfp[["virtual_fp_id", "dn_virtual_nex_id"]], on="virtual_fp_id", how="left")
+    gdf_res = gdf_res.loc[~gdf_res["fp_id"].isnull() | ~gdf_res["virtual_fp_id"].isnull(), :].copy()
     gdf_res["wb_id"] = range(1, gdf_res.shape[0] + 1)
 
     # select final attribute list
     gdf_res = gdf_res[
         [
             "wb_id",
-            "fp_id",
             "ref_fp_id",
+            "fp_id",
+            "virtual_fp_id",
+            "dn_nex_id",
+            "dn_virtual_nex_id",
+            "div_id",
             "dam_id",
             "dam_name",
             "dam_type",
