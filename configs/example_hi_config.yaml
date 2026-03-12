@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_0.1.54.gpkg # If not specified, will default to version
+output_name: hi_nhf_0.1.55.gpkg # If not specified, will default to version
 
 # hf builds
 build:
