@@ -41,8 +41,6 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             gdf = associate_flowpaths_nearest_point(
                 points_path=cfg.lakes.input_path,
                 flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-                # flowpaths_path=cfg.output_file_path,
-                # flowpath_layer="flowpaths",
                 search_radius_m=cfg.lakes.search_radius_m,
                 point_id=cfg.lakes.id_field,
                 flowpath_id="flowpath_id",
@@ -55,8 +53,6 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.lakes.input_path,
                 flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-                # flowpaths_path=cfg.output_file_path,
-                # flowpath_layer="flowpaths",
                 search_radius_m=cfg.lakes.search_radius_m,
                 flowpath_id="flowpath_id",
                 flowpath_id_out_field="ref_fp_id",
@@ -88,7 +84,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         gdf = populate_nwm_hydaulics(cfg.lakes.processed_path)
         gdf.to_file(cfg.lakes.processed_path, overwrite=True, driver="GPKG")
 
-    # Complete the nwm_lakes file with requested columns
+    # Complete the nwm_lakes file with requested columns and crosswalk to fps/virtual fp/nexus/vnexus
     gdf = complete_lakes(
         hf_path=cfg.output_file_path, nwm_lakes_path=cfg.lakes.processed_path, fields=cfg.lakes.fields
     )
