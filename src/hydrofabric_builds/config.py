@@ -14,6 +14,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     FlowpathAttributesModelConfig,
     FPCrosswalkConfig,
     GagesConfig,
+    LakesConfig,
     WaterbodiesConfig,
 )
 
@@ -34,6 +35,8 @@ class TaskSelection(BaseModel):
     )
 
     waterbodies: bool = Field(default=True, description="Decides if we want to run the waterbodies task")
+
+    nwm_lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
 
     gages: bool = Field(default=True, description="Decides if we want to run the gages task")
 
@@ -87,6 +90,8 @@ class HFConfig(BaseModel):
     waterbodies: WaterbodiesConfig = Field(
         default=WaterbodiesConfig(), description="Settings for building waterbodies"
     )
+
+    lakes: LakesConfig = Field(default=LakesConfig(), description="Settings for building NWM lakes")
 
     gages: GagesConfig = Field(default=GagesConfig(), description="Settings for building gages")
 

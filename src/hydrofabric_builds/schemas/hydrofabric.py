@@ -400,11 +400,24 @@ class DivideAttributesModelConfig(BaseModel):
         description="Setting debug to true will save all temporary files. Setting to false will delete files if run fails.",
         default=False,
     )
+    domain_mask: Path | None = Field(
+        default=None,
+        description="Mask a domain to only calculate attributes for a subset. Built to accommodate AK domain being smaller than full state.",
+    )
+    domain_mask_layer: str | None = Field(default=None, description="GPKG layer to use for mask")
+    divides_masked: Path | None = Field(default=None, description="Path to saved masked divides to")
 
     @model_validator(mode="after")
     def make_tmp_dir(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Model validator to create a temp directory if it does not exist"""
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        return self
+
+    @model_validator(mode="after")
+    def make_divides_mask(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Model validator to create a path to save the divides mask if none input"""
+        if self.domain_mask and not self.divides_masked:
+            self.divides_masked = self.data_dir / "divides_mask.gpkg"
         return self
 
 
@@ -632,6 +645,9 @@ class GagesInputs(BaseModel):
     )
     nwm_calib_gages: GageInput = Field(
         default_factory=lambda: GageInput(path=Path("nwm_calib/nwm_calib_gages_07112025.csv"))
+    )
+    routelink: GageInput = Field(
+        default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"))
     )
 
 
@@ -886,6 +902,60 @@ class WaterbodiesConfig(BaseModel):
         return self
 
 
+class LakesConfig(BaseModel):
+    """Config for NWM Lakes"""
+
+    input_path: Path = Field(
+        default=here() / "data/lakes/nwm_lakes.gpkg", description="File name of source lakes"
+    )
+    input_layer: str | None = Field(
+        default=None, description="Layer name of lakes if input file is a GPKG with mutliple layers"
+    )
+    processed_path: Path = Field(
+        default=here() / "data/lakes/nwm_lakes_process.gpkg",
+        description="File name of source waterbodies with flowpath associations and hydraulics",
+    )
+    associate_flowpaths: bool = Field(
+        default=False, description="Flag to associate waterbodies with reference flowpaths if True"
+    )
+    flowpath_association_method: str = Field(
+        default="point", description="Specify the method used to associate flowpaths"
+    )
+    populate_hydaulics: bool = Field(default=False, description="Flag to populate hydraulics fields if True")
+    id_field: str = Field(default="lake_id", description="ID field in input lakes file")
+    search_radius_m: float | int = Field(
+        default=25000, description="Radius in meters to buffer points for nearest flowpath method"
+    )
+    fields: list[str] = Field(
+        default=[
+            "lake_id",
+            "LkArea",
+            "LkMxE",
+            "WeirC",
+            "WeirL",
+            "WeirE",
+            "OrificeC",
+            "OrificeA",
+            "OrificeE",
+            "Dam_Length",
+            "ifd",
+            "reservoir_index_AnA",
+            "reservoir_index_Extended_AnA",
+            "reservoir_index_GDL_AK",
+            "reservoir_index_Medium_Range",
+            "reservoir_index_Short_Range",
+        ],
+        description="Fields to retain in final layer. IDs and geometry will be kept by default.",
+    )
+    attrib_src_path: Path | None = Field(default=None, description="Source file for importing attributes")
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
+    )
+    attrib_src_key: str = Field(
+        default="lake_id", description="Source file key to match when importing attributes"
+    )
+
+
 ### fp_crosswalk  ###
 class FPCrosswalkReference(BaseModel):
     """fp_crosswalk: reference (file1) network"""
@@ -951,3 +1021,13 @@ class FPCrosswalkConfig(BaseModel):
         self.outputs.matches_gpkg = _resolve(self.outputs.matches_gpkg, base)
 
         return self
+
+
+class NWMDefaultHydraulics(Enum):
+    """Default values for NWM hydraulic params"""
+
+    WeirC = 0.4
+    WeirL = 10.0  # m
+    OrificeC = 0.1
+    OrificeA = 1.0  # m²
+    ifd = 0.899

@@ -19,6 +19,7 @@ tasks:
   hydrolocations: False
   gages: True
   fp_crosswalk: True
+  lakes: True
   validate_hf: True
 
 # flowpaths
@@ -323,6 +324,10 @@ gages:
         path: nwm_calib/nwm_calib_gages_07112025.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
+      routelink:
+        path: RouteLink_CONUS_EPSG4326.gpkg
+        gage_source_crs: EPSG:4326
+        id_col_name: gages
     target:
       crs: EPSG:5070
       snap_tolerance_m: 100.0
@@ -345,7 +350,7 @@ gages:
   ###--------------------------------------------
   assign_fp_to_gages:
    rel_err: 0.25                    # relative acceptable error between total upstream area and USGS upstream area.
-   buffer_m: 1000.0                 # Buffering around point gages to find flowpaths. in meters
+   buffer_m: 2500.0                 # Buffering around point gages to find flowpaths. in meters
    parallel: False                  # serial (False) or parallel (True)
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
@@ -372,3 +377,18 @@ fp_crosswalk:
   outputs:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
+
+
+# lakes
+lakes:
+  associate_flowpaths: True # this will run the flowpath association
+  input_path: "data/lakes/input/nwm_lakes_sconus_input.gpkg"
+  input_layer: "nwm_lakes"
+  processed_path: "data/lakes/output/sconus_lakes_fp_associated.gpkg" # can be empty or populated
+  flowpath_association_method: "polygon_outlet" # "nearest_point" or "polygon_outlet"
+  populate_hydaulics: True
+  id_field: "newID"
+  search_radius_m: 25000
+  attrib_src_path: "data/lakes/input/nwm_patch_conus_nextgen.gpkg" # file to get attributes from
+  attrib_src_layer: "lakes"
+  attrib_src_key: "lake_id"

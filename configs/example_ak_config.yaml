@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:3338
-output_name: ak_nhf_0.1.52.gpkg # If not specified, will default to version
+output_name: ak_nhf_0.1.54.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -18,7 +18,8 @@ tasks:
   waterbodies: False
   hydrolocations: False
   gages: True
-  fp_crosswalk: False
+  lakes: True
+  fp_crosswalk: True
   validate_hf: True
 
 flowpath_attributes:
@@ -33,8 +34,12 @@ divide_attributes:
   data_dir: data/ak/divide-attributes
   divide_id: div_id
   tmp_dir: data/ak/tmp/divide-attributes
+  alt_divides_path: data/ak/divide-attributes/ak_domain.gpkg
   split_vpu: False
   debug: False
+  domain_mask: data/ak/divide-attributes/domain/ak_nextgen.gpkg
+  domain_mask_layer: divides
+  divides_masked: data/ak/divide-attributes/domain/ak_divides_masked.gpkg
   attributes: # attributes must be specified - there are no defaults
     bexp1:
       file_name: nwm/bexp_0.tif
@@ -243,3 +248,35 @@ gages:
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
    work_crs: EPSG:3338          # an area-equal crs to calculate buffers and distances
+
+# --------------------------------------------------
+# flowpath crosswalk (fp_crosswalk)
+# --------------------------------------------------
+fp_crosswalk:
+  # reference (file1) – usually hydrofabric reference flowpaths
+  reference:
+    id_col: flowpath_id                     # id1_col in code
+
+  # target network (file2) – e.g., NWM or NHDPlus
+  target:
+    path: data/reference/nwm_flows_alaska_nwmv3_ID_v2.gpkg               # <- file2
+    layer: nwm_flows_alaska_nwmv3_ID_v2                # layer2 in code
+    id_col: ID                             # id2_col in code
+
+  # geometric / matching parameters
+  search_radius_m: 10.0       # buffer radius around each reference flowline
+  percent_inside_min: 0.005    # min pct of matched path inside band for single-candidate shortcut
+
+  outputs:
+    # final full-table crosswalk output
+    path: data/nhd-crosswalk/nhd_crosswalk_ak.parquet
+
+
+# nwm lakes
+lakes:
+  input_path: "data/lakes/input/ak_lakeparm.gpkg"
+  processed_path: "data/lakes/output/ak_lakes_fp_associated.gpkg"
+  associate_flowpaths: True
+  flowpath_association_method: "nearest_point"
+  populate_hydaulics: False
+  id_field: "lake_id"
