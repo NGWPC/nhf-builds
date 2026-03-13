@@ -346,7 +346,7 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([3, 4, 5, 6, 9], dtype="Int64"),
+            "virtual_nex_id": pd.Series([3, 4, 5, 6, 7], dtype="Int64"),
             "vpu_id": pd.Series(["02", "02", "02", "02", "02"], dtype="object"),
         }
     )
