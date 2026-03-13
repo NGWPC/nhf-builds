@@ -8,7 +8,7 @@ import pandas as pd
 from pyprojroot import here
 
 from hydrofabric_builds import HFConfig
-from hydrofabric_builds.hydrofabric.utils import _crosswalk_reference
+from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_reference
 from hydrofabric_builds.streamflow_gauges.append_from_routelink import (
     append_from_routelink,
 )
@@ -270,6 +270,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # 12) Crosswalk ref_fp_id to fp_id
     # ---------------------------------------------------------------------
     gages = _crosswalk_reference(cfg.output_file_path, gages)
+    gages = _crosswalk_nexus(cfg.output_file_path, gages)
 
     # ---------------------------------------------------------------------
     # 13) Write final output and return
