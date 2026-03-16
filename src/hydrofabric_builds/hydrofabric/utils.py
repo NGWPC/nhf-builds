@@ -152,6 +152,30 @@ def _combine_hydrofabrics(
 
     if all_virtual_nexus:
         combined_virtual_nexus = pd.concat(all_virtual_nexus, ignore_index=True)
+        # Merge coincident nexuses from different outlets
+        combined_virtual_nexus["_coord"] = combined_virtual_nexus.geometry.apply(
+            lambda g: (round(g.x, 6), round(g.y, 6))
+        )
+        dupes = combined_virtual_nexus.duplicated(subset=["_coord"], keep="first")
+        if dupes.any():
+            # Build remap: duplicate nex_id -> surviving nex_id
+            nex_remap: dict[int, int] = {}
+            for _coord, group in combined_virtual_nexus.groupby("_coord"):
+                if len(group) <= 1:
+                    continue
+                keep_id = group["virtual_nex_id"].iloc[0]
+                for nex_id in group["virtual_nex_id"].iloc[1:]:
+                    nex_remap[nex_id] = keep_id
+            combined_virtual_nexus = combined_virtual_nexus[~dupes].copy()
+            # Rewrite VFP references in the combined virtual flowpaths
+            if final_virtual_flowpaths is not None and nex_remap:
+                final_virtual_flowpaths["dn_virtual_nex_id"] = final_virtual_flowpaths[
+                    "dn_virtual_nex_id"
+                ].map(lambda x: nex_remap.get(x, x))
+                final_virtual_flowpaths["up_virtual_nex_id"] = final_virtual_flowpaths[
+                    "up_virtual_nex_id"
+                ].map(lambda x: nex_remap.get(x, x) if pd.notna(x) else x)
+        combined_virtual_nexus = combined_virtual_nexus.drop(columns=["_coord"])
         final_virtual_nexus = gpd.GeoDataFrame(combined_virtual_nexus)
 
     # if all_reference_virtual_flowpaths:
