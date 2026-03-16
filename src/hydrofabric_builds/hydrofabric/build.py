@@ -189,7 +189,8 @@ def _create_mainstem_virtual_flowpaths(
     Returns
     -------
     tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, int], dict[int, int], dict[str, int], dict[str, int], int]
-        Main-stem virtual flowpath records, new virtual nexus records,
+        Main-stem virtual flowpath records (with ref_fp_id populated),
+        new virtual nexus records,
         mapping of virtual_nex_id to downstream virtual_fp_id,
         mapping of nhf_fp_id to upstream virtual_nex_id,
         mapping of mainstem ref_fp_id to virtual_fp_id,
@@ -200,6 +201,7 @@ def _create_mainstem_virtual_flowpaths(
     vnex_to_dn_vfp: dict[int, int] = {}
     nhf_fp_to_upstream_vnex: dict[int, int] = {}  # nhf_fp_id -> upstream virtual_nex_id
     ref_to_vfp: dict[str, int] = {}  # mainstem ref_fp_id -> virtual_fp_id
+    vfp_to_ref: dict[int, str] = {}  # virtual_fp_id -> ref_fp_id (many VFPs can share one ref)
     all_ref_to_mainstem_vfp: dict[str, int] = {}  # all ref_fp_id -> mainstem virtual_fp_id
     fp_data_by_id: dict[int, dict[str, Any]] = {fp["fp_id"]: fp for fp in fp_data}
 
@@ -244,7 +246,6 @@ def _create_mainstem_virtual_flowpaths(
         # Build reference FP ranges for overlap-based area calculation
         ref_ids = nhf_fp_to_ref_ids.get(nhf_fp_id, [])
         ref_fp_ranges: list[tuple[float, float, float]] = []  # (start_dist, end_dist, area_km2)
-        ref_fp_midpoints: list[tuple[str, float]] = []  # (ref_id, midpoint_dist)
         ref_fp_projected_ranges: list[tuple[str, float, float]] = []  # (ref_id, start_dist, end_dist)
 
         for ref_id in ref_ids:
@@ -284,7 +285,6 @@ def _create_mainstem_virtual_flowpaths(
                 ref_start_dist, ref_end_dist = ref_end_dist, ref_start_dist
 
             ref_fp_ranges.append((ref_start_dist, ref_end_dist, ref_area))
-            ref_fp_midpoints.append((ref_id, (ref_start_dist + ref_end_dist) / 2.0))
             ref_fp_projected_ranges.append((ref_id, ref_start_dist, ref_end_dist))
 
         # Build all segment boundaries: upstream end, each virtual nexus, downstream end
@@ -311,9 +311,12 @@ def _create_mainstem_virtual_flowpaths(
             nhf_fp_to_upstream_vnex[nhf_fp_id] = upstream_vnex_id
 
         prev_dist = 0.0
+        skipped_nexuses: list[tuple[int, float]] = []
         for vnex_id, vnex_dist in projected_nexuses:
             if (vnex_dist - prev_dist) >= 1.0:
                 segment_boundaries.append((prev_dist, vnex_dist, vnex_id))
+            else:
+                skipped_nexuses.append((vnex_id, vnex_dist))
             prev_dist = vnex_dist
 
         # Downstream tail: from last virtual nexus to downstream end of line
@@ -336,10 +339,12 @@ def _create_mainstem_virtual_flowpaths(
             segment_boundaries.append((prev_dist, total_length, tail_vnex_id))
 
         # Phase 1: compute overlap-based area for each segment from divide geometries
+        segment_geometries: list[LineString] = []
         segment_overlap_areas: list[float] = []
         segment_lengths: list[float] = []
         for seg_start_dist, seg_end_dist, _ in segment_boundaries:
             segment = substring(line, seg_start_dist, seg_end_dist)
+            segment_geometries.append(segment)
             seg_len = segment.length if not segment.is_empty else 0.0
             segment_lengths.append(seg_len)
 
@@ -369,12 +374,12 @@ def _create_mainstem_virtual_flowpaths(
         # Emit segments and track vnex -> downstream VFP mapping
         emitted_segments: list[tuple[int, int]] = []  # (dn_vnex_id, virtual_fp_id)
         prev_dn_vnex_id = upstream_vnex_id  # None for headwaters
-        for i, (seg_start_dist, seg_end_dist, dn_vnex_id) in enumerate(segment_boundaries):
+        for i, (_seg_start_dist, _seg_end_dist, dn_vnex_id) in enumerate(segment_boundaries):
             seg_len = segment_lengths[i]
             if seg_len == 0:
                 continue
 
-            segment = substring(line, seg_start_dist, seg_end_dist)
+            segment = segment_geometries[i]
 
             # Overlap area + proportional share of the deficit
             length_fraction = seg_len / total_seg_length if total_seg_length > 0 else 0.0
@@ -412,44 +417,87 @@ def _create_mainstem_virtual_flowpaths(
         # Assign each reference FP to the mainstem segment containing its midpoint
         if emitted_segments:
             # Build list of (seg_start, seg_end, vfp_id) from emitted segments
+            emitted_by_vnex: dict[int, int] = dict(emitted_segments)
             emitted_ranges: list[tuple[float, float, int]] = []
-            for i, (seg_start_dist, seg_end_dist, _) in enumerate(segment_boundaries):
+            for i, (seg_start_dist, seg_end_dist, vnex_id) in enumerate(segment_boundaries):
                 if segment_lengths[i] == 0:
                     continue
-                # Find the matching vfp_id from emitted_segments
-                for dn_vnex_id, vfp_id in emitted_segments:
-                    if dn_vnex_id == segment_boundaries[i][2]:
-                        emitted_ranges.append((seg_start_dist, seg_end_dist, vfp_id))
-                        break
+                if vnex_id in emitted_by_vnex:
+                    emitted_ranges.append((seg_start_dist, seg_end_dist, emitted_by_vnex[vnex_id]))
 
-            for ref_id, midpoint in ref_fp_midpoints:
+            # Map skipped nexuses to the containing (or nearest) emitted segment
+            for skipped_vnex_id, skipped_dist in skipped_nexuses:
                 for seg_start, seg_end, vfp_id in emitted_ranges:
-                    if seg_start <= midpoint <= seg_end:
-                        ref_to_vfp[ref_id] = vfp_id
+                    if seg_start <= skipped_dist <= seg_end:
+                        vnex_to_dn_vfp[skipped_vnex_id] = vfp_id
                         break
                 else:
-                    # Midpoint didn't fall in any segment; assign to nearest
                     if emitted_ranges:
                         nearest = min(
                             emitted_ranges,
-                            key=lambda r: min(abs(midpoint - r[0]), abs(midpoint - r[1])),
+                            key=lambda r: min(abs(skipped_dist - r[0]), abs(skipped_dist - r[1])),
                         )
-                        ref_to_vfp[ref_id] = nearest[2]
+                        vnex_to_dn_vfp[skipped_vnex_id] = nearest[2]
 
-            # For segments with no ref FP assigned via midpoint, find ref FPs that overlap
-            assigned_vfps = set(ref_to_vfp.values())
+            # Phase 1: assign one ref FP per VFP segment (coverage guarantee)
+            assigned_refs: set[str] = set()
             for seg_start, seg_end, vfp_id in emitted_ranges:
-                if vfp_id in assigned_vfps:
-                    continue
                 best_ref_id: str | None = None
-                best_overlap = 0.0
+                best_score = float("-inf")
                 for ref_id, ref_start, ref_end in ref_fp_projected_ranges:
+                    if ref_id in assigned_refs:
+                        continue
                     overlap = max(0.0, min(seg_end, ref_end) - max(seg_start, ref_start))
-                    if overlap > best_overlap:
-                        best_overlap = overlap
+                    score = (
+                        overlap
+                        if overlap > 0
+                        else -abs((ref_start + ref_end) / 2 - (seg_start + seg_end) / 2)
+                    )
+                    if score > best_score:
+                        best_score = score
                         best_ref_id = ref_id
                 if best_ref_id is not None:
                     ref_to_vfp[best_ref_id] = vfp_id
+                    vfp_to_ref[vfp_id] = best_ref_id
+                    assigned_refs.add(best_ref_id)
+
+            # Phase 1b: VFPs that got nothing (more VFPs than refs) — share best ref
+            for seg_start, seg_end, vfp_id in emitted_ranges:
+                if vfp_id in vfp_to_ref:
+                    continue
+                best_ref_id = None
+                best_score = float("-inf")
+                for ref_id, ref_start, ref_end in ref_fp_projected_ranges:
+                    overlap = max(0.0, min(seg_end, ref_end) - max(seg_start, ref_start))
+                    score = (
+                        overlap
+                        if overlap > 0
+                        else -abs((ref_start + ref_end) / 2 - (seg_start + seg_end) / 2)
+                    )
+                    if score > best_score:
+                        best_score = score
+                        best_ref_id = ref_id
+                if best_ref_id is not None:
+                    vfp_to_ref[vfp_id] = best_ref_id
+
+            # Phase 2: assign remaining ref FPs to best-matching VFP
+            for ref_id, ref_start, ref_end in ref_fp_projected_ranges:
+                if ref_id in assigned_refs:
+                    continue
+                best_vfp_id: int | None = None
+                best_score = float("-inf")
+                for seg_start, seg_end, vfp_id in emitted_ranges:
+                    overlap = max(0.0, min(seg_end, ref_end) - max(seg_start, ref_start))
+                    score = (
+                        overlap
+                        if overlap > 0
+                        else -abs((ref_start + ref_end) / 2 - (seg_start + seg_end) / 2)
+                    )
+                    if score > best_score:
+                        best_score = score
+                        best_vfp_id = vfp_id
+                if best_vfp_id is not None:
+                    ref_to_vfp[ref_id] = best_vfp_id
 
             # Project ALL ref FPs (including tributaries) to assign mainstem_virtual_fp_id
             all_ref_ids = nhf_fp_to_all_ref_ids.get(nhf_fp_id, [])
@@ -486,6 +534,11 @@ def _create_mainstem_virtual_flowpaths(
                             key=lambda r: min(abs(ref_mid - r[0]), abs(ref_mid - r[1])),
                         )
                         all_ref_to_mainstem_vfp[ref_id] = nearest[2]
+
+    # Populate ref_fp_id on each VFP data dict
+    for vfp_entry in mainstem_vfp_data:
+        ref_id_str: str | None = vfp_to_ref.get(vfp_entry["virtual_fp_id"])
+        vfp_entry["ref_fp_id"] = int(ref_id_str) if ref_id_str is not None else None
 
     return (
         mainstem_vfp_data,
@@ -813,6 +866,7 @@ def _build_hydrofabric(
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
+                "ref_fp_id": int(dn_ref_id),
                 "vpu_id": unit["vpu_id"],
                 "geometry": line_geom,
             }
@@ -897,6 +951,25 @@ def _build_hydrofabric(
         if line_geom is None or line_geom.is_empty:
             continue
 
+        # Create upstream nexus for non-headwater fallback VFPs
+        upstream_vnex_id_fb: int | None = None
+        if fp_id in nhf_fps_with_upstream:
+            if line_geom.geom_type == "MultiLineString":
+                start_coord = list(line_geom.geoms)[0].coords[0]
+            else:
+                start_coord = line_geom.coords[0]
+
+            upstream_vnex_id_fb = nhf_id
+            nhf_id += 1
+            virtual_nexus_data.append(
+                {
+                    "virtual_nex_id": upstream_vnex_id_fb,
+                    "vpu_id": fp_entry["vpu_id"],
+                    "geometry": Point(start_coord),
+                }
+            )
+            nhf_fp_upstream_vnex[fp_id] = upstream_vnex_id_fb
+
         # Create virtual nexus at downstream end of flowpath
         if line_geom.geom_type == "MultiLineString":
             end_coord = list(line_geom.geoms)[-1].coords[-1]
@@ -920,7 +993,7 @@ def _build_hydrofabric(
             {
                 "virtual_fp_id": fallback_vfp_id,
                 "dn_virtual_nex_id": vnex_id,
-                "up_virtual_nex_id": None,
+                "up_virtual_nex_id": upstream_vnex_id_fb,
                 "div_id": fp_id,
                 "length_km": fp_entry["length_km"],
                 "area_sqkm": fp_entry["area_sqkm"],
@@ -930,6 +1003,9 @@ def _build_hydrofabric(
             }
         )
         nhf_id += 1
+
+        if upstream_vnex_id_fb is not None:
+            vnex_to_dn_vfp[upstream_vnex_id_fb] = fallback_vfp_id
 
         # Update reference_flowpaths entries for this divide with the fallback virtual_fp_id
         for ref_idx in div_id_to_ref_indices.get(fp_id, []):
@@ -944,6 +1020,7 @@ def _build_hydrofabric(
     for vfp_entry in virtual_fp_data:
         vfp_by_div[vfp_entry["div_id"]].append(vfp_entry)
     existing_vnex_ids = {vn["virtual_nex_id"] for vn in virtual_nexus_data}
+    removed_vnex_ids: set[int] = set()
 
     for fp_id, downstream_fp_id in fp_to_id_map.items():
         if downstream_fp_id is None:
@@ -956,9 +1033,7 @@ def _build_hydrofabric(
                 old_nex_id = vfp_entry["dn_virtual_nex_id"]
                 if old_nex_id not in vnex_to_dn_vfp and old_nex_id in existing_vnex_ids:
                     vfp_entry["dn_virtual_nex_id"] = upstream_vnex
-                    virtual_nexus_data[:] = [
-                        vn for vn in virtual_nexus_data if vn["virtual_nex_id"] != old_nex_id
-                    ]
+                    removed_vnex_ids.add(old_nex_id)
                     existing_vnex_ids.discard(old_nex_id)
 
         # Case 2: Downstream divide has a fallback VFP (no mainstem segments)
@@ -968,6 +1043,12 @@ def _build_hydrofabric(
                 old_nex_id = vfp_entry["dn_virtual_nex_id"]
                 if old_nex_id not in vnex_to_dn_vfp and old_nex_id in existing_vnex_ids:
                     vnex_to_dn_vfp[old_nex_id] = fallback_vfp_id
+
+    # Batch-remove replaced tail nexuses
+    if removed_vnex_ids:
+        virtual_nexus_data[:] = [
+            vn for vn in virtual_nexus_data if vn["virtual_nex_id"] not in removed_vnex_ids
+        ]
 
     # Set dn_virtual_fp_id on all virtual nexus records
     for vnex_entry in virtual_nexus_data:

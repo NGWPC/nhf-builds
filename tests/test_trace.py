@@ -429,8 +429,8 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 5, 6, 7, 9, 12], dtype="Int64"),
-            "vpu_id": pd.Series(["01", "01", "01", "01", "01", "01"], dtype="object"),
+            "virtual_nex_id": pd.Series([4, 5, 6, 12, 13], dtype="Int64"),
+            "vpu_id": pd.Series(["01", "01", "01", "01", "01"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
