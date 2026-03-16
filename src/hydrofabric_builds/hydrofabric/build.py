@@ -1027,6 +1027,51 @@ def _build_hydrofabric(
     for vnex_entry in virtual_nexus_data:
         vnex_entry["dn_virtual_fp_id"] = vnex_to_dn_vfp.get(vnex_entry["virtual_nex_id"])
 
+    # Merge coincident virtual nexuses: when multiple nexuses share the same
+    # location (e.g. a tributary self-nexus and a mainstem tail nexus), keep
+    # one and rewrite all VFP references to the survivor.
+    coord_to_nexuses: dict[tuple[float, float], list[int]] = defaultdict(list)
+    for vnex_entry in virtual_nexus_data:
+        g = vnex_entry["geometry"]
+        key = (round(g.x, 6), round(g.y, 6))
+        coord_to_nexuses[key].append(vnex_entry["virtual_nex_id"])
+
+    nex_remap: dict[int, int] = {}
+    merged_nex_ids: set[int] = set()
+    for _coord, nex_ids in coord_to_nexuses.items():
+        if len(nex_ids) <= 1:
+            continue
+        keep = min(nex_ids)
+        for nex_id in nex_ids:
+            if nex_id != keep:
+                nex_remap[nex_id] = keep
+                merged_nex_ids.add(nex_id)
+                # Merge dn_virtual_fp_id onto the survivor
+                if vnex_to_dn_vfp.get(nex_id) is not None and vnex_to_dn_vfp.get(keep) is None:
+                    vnex_to_dn_vfp[keep] = vnex_to_dn_vfp[nex_id]
+
+    if merged_nex_ids:
+        virtual_nexus_data[:] = [
+            vn for vn in virtual_nexus_data if vn["virtual_nex_id"] not in merged_nex_ids
+        ]
+        # Update dn_virtual_fp_id on surviving nexuses
+        for vnex_entry in virtual_nexus_data:
+            vnex_entry["dn_virtual_fp_id"] = vnex_to_dn_vfp.get(vnex_entry["virtual_nex_id"])
+        # Rewrite VFP nexus references
+        for vfp_entry in virtual_fp_data:
+            dn = vfp_entry["dn_virtual_nex_id"]
+            if dn in nex_remap:
+                vfp_entry["dn_virtual_nex_id"] = nex_remap[dn]
+            up = vfp_entry["up_virtual_nex_id"]
+            if up is not None and up in nex_remap:
+                vfp_entry["up_virtual_nex_id"] = nex_remap[up]
+
+    # Wire up_virtual_nex_id on VFPs that are missing it
+    dn_vfp_to_vnex: dict[int, int] = {vfp_id: vnex_id for vnex_id, vfp_id in vnex_to_dn_vfp.items()}
+    for vfp_entry in virtual_fp_data:
+        if vfp_entry["up_virtual_nex_id"] is None and vfp_entry["virtual_fp_id"] in dn_vfp_to_vnex:
+            vfp_entry["up_virtual_nex_id"] = dn_vfp_to_vnex[vfp_entry["virtual_fp_id"]]
+
     # Ensure every VFP appears in at least one ref FP's virtual_fp_id.
     # When a ref FP serves multiple VFPs (e.g. more VFPs than refs on an NHF
     # flowpath, or a tributary ref overwritten by mainstem processing),
