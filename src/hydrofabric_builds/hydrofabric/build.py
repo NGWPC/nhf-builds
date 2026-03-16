@@ -201,7 +201,6 @@ def _create_mainstem_virtual_flowpaths(
     vnex_to_dn_vfp: dict[int, int] = {}
     nhf_fp_to_upstream_vnex: dict[int, int] = {}  # nhf_fp_id -> upstream virtual_nex_id
     ref_to_vfp: dict[str, int] = {}  # mainstem ref_fp_id -> virtual_fp_id
-    vfp_to_ref: dict[int, str] = {}  # virtual_fp_id -> ref_fp_id (many VFPs can share one ref)
     all_ref_to_mainstem_vfp: dict[str, int] = {}  # all ref_fp_id -> mainstem virtual_fp_id
     fp_data_by_id: dict[int, dict[str, Any]] = {fp["fp_id"]: fp for fp in fp_data}
 
@@ -458,27 +457,7 @@ def _create_mainstem_virtual_flowpaths(
                         best_ref_id = ref_id
                 if best_ref_id is not None:
                     ref_to_vfp[best_ref_id] = vfp_id
-                    vfp_to_ref[vfp_id] = best_ref_id
                     assigned_refs.add(best_ref_id)
-
-            # Phase 1b: VFPs that got nothing (more VFPs than refs) — share best ref
-            for seg_start, seg_end, vfp_id in emitted_ranges:
-                if vfp_id in vfp_to_ref:
-                    continue
-                best_ref_id = None
-                best_score = float("-inf")
-                for ref_id, ref_start, ref_end in ref_fp_projected_ranges:
-                    overlap = max(0.0, min(seg_end, ref_end) - max(seg_start, ref_start))
-                    score = (
-                        overlap
-                        if overlap > 0
-                        else -abs((ref_start + ref_end) / 2 - (seg_start + seg_end) / 2)
-                    )
-                    if score > best_score:
-                        best_score = score
-                        best_ref_id = ref_id
-                if best_ref_id is not None:
-                    vfp_to_ref[vfp_id] = best_ref_id
 
             # Phase 2: assign remaining ref FPs to best-matching VFP
             for ref_id, ref_start, ref_end in ref_fp_projected_ranges:
@@ -534,11 +513,6 @@ def _create_mainstem_virtual_flowpaths(
                             key=lambda r: min(abs(ref_mid - r[0]), abs(ref_mid - r[1])),
                         )
                         all_ref_to_mainstem_vfp[ref_id] = nearest[2]
-
-    # Populate ref_fp_id on each VFP data dict
-    for vfp_entry in mainstem_vfp_data:
-        ref_id_str: str | None = vfp_to_ref.get(vfp_entry["virtual_fp_id"])
-        vfp_entry["ref_fp_id"] = int(ref_id_str) if ref_id_str is not None else None
 
     return (
         mainstem_vfp_data,
@@ -866,7 +840,6 @@ def _build_hydrofabric(
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
-                "ref_fp_id": int(dn_ref_id),
                 "vpu_id": unit["vpu_id"],
                 "geometry": line_geom,
             }
@@ -1054,6 +1027,32 @@ def _build_hydrofabric(
     for vnex_entry in virtual_nexus_data:
         vnex_entry["dn_virtual_fp_id"] = vnex_to_dn_vfp.get(vnex_entry["virtual_nex_id"])
 
+    # Ensure every VFP appears in at least one ref FP's virtual_fp_id.
+    # When a ref FP serves multiple VFPs (e.g. more VFPs than refs on an NHF
+    # flowpath, or a tributary ref overwritten by mainstem processing),
+    # duplicate the ref FP row so each VFP has its own entry.
+    covered_vfp_ids: set[int] = {
+        entry["virtual_fp_id"] for entry in reference_flowpaths_data if entry.get("virtual_fp_id") is not None
+    }
+    for vfp_entry in virtual_fp_data:
+        vfp_id = vfp_entry["virtual_fp_id"]
+        if vfp_id in covered_vfp_ids:
+            continue
+        div_id = vfp_entry["div_id"]
+        for ref_idx in div_id_to_ref_indices.get(div_id, []):
+            donor = reference_flowpaths_data[ref_idx]
+            reference_flowpaths_data.append(
+                {
+                    "ref_fp_id": donor["ref_fp_id"],
+                    "fp_id": donor["fp_id"],
+                    "virtual_fp_id": vfp_id,
+                    "mainstem_virtual_fp_id": donor.get("mainstem_virtual_fp_id"),
+                    "div_id": div_id,
+                }
+            )
+            covered_vfp_ids.add(vfp_id)
+            break
+
     logger.debug(f"Built hydrofabric using ID range: {1 + id_offset} to {nhf_id - 1}")
     # Create GeoDataFrames
     try:
@@ -1083,7 +1082,10 @@ def _build_hydrofabric(
             virtual_flowpaths_gdf["up_virtual_nex_id"] = virtual_flowpaths_gdf["up_virtual_nex_id"].astype(
                 "Int64"
             )
-            virtual_flowpaths_gdf["div_id"] = virtual_flowpaths_gdf["div_id"].astype("Int64")
+            virtual_flowpaths_gdf.drop(
+                columns=[c for c in ("div_id", "ref_fp_id") if c in virtual_flowpaths_gdf.columns],
+                inplace=True,
+            )
         else:
             virtual_flowpaths_gdf = None
 
