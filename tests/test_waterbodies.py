@@ -12,7 +12,7 @@ from hydrofabric_builds.hydrofabric.waterbodies import crosswalk_waterbodies
 @pytest.fixture
 def rfcda_path() -> Path:
     """Builds a sample RFCDA file with 3 dams. Two are on flowpaths and one is on virtual flowpath. We are only testing crosswalk so all other data is null"""
-    res_path = here() / "tests/data/waterbodies/sample_rfcda.gpkg"
+    res_path = here() / "tests/data/sample_rfcda.gpkg"
     res = gpd.GeoDataFrame(
         data={
             "dam_id": ["dam1", "dam2", "dam3"],
@@ -74,7 +74,7 @@ def rfcda_path() -> Path:
 @pytest.fixture
 def hf_path() -> Path:
     """Builds a hydrofabric with flowpaths, virtual flowpaths, and reference table. There are 3 flowpaths and 1 virtual flowpath"""
-    path = here() / "tests/data/waterbodies/sample_hf_wb.gpkg"
+    path = here() / "tests/data/sample_hf_wb.gpkg"
     fp = gpd.GeoDataFrame(
         data={"fp_id": [1, 2, 3], "dn_nex_id": [2, 2, 1]},
         geometry=gpd.GeoSeries.from_wkt(
