@@ -55,6 +55,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
                 flowpaths_path=cfg.output_file_path,
                 flowpath_layer="flowpaths",
                 search_radius_m=cfg.lakes.search_radius_m,
+                min_preferred_intersection_len_m=cfg.lakes.min_preferred_intersection_len_m,
                 flowpath_id="fp_id",
                 flowpath_id_out_field="fp_id",
                 polygon_layer=cfg.lakes.input_layer,

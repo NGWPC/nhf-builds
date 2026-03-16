@@ -166,6 +166,7 @@ def associate_flowpaths_polygon_outlet(
     polygon_path: Path,
     flowpaths_path: Path,
     search_radius_m: int | float,
+    min_preferred_intersection_len_m: float,
     flowpath_id: str,
     flowpath_id_out_field: str = "fp_id",
     polygon_layer: str | None = None,
@@ -224,10 +225,17 @@ def associate_flowpaths_polygon_outlet(
             )
             candidates = gdf_flowpaths["geometry"].intersects(buffered, [flowpath_id, "hydroseq"])
             candidates = gdf_flowpaths.loc[candidates]
-            if len(candidates["hydroseq"]) == 0:
+            num_candidates = len(candidates["hydroseq"])
+            if num_candidates == 0:
                 continue
-            min_idx = candidates["hydroseq"].idxmin()
-            gdf_poly.loc[idx, flowpath_id_out_field] = candidates[flowpath_id][min_idx]
+            candidates = candidates.sort_values("hydroseq")
+            # try to use a slightly better candidate if the intersection length is very small
+            intersection_len = candidates.iloc[0]["geometry"].intersection(buffered).length
+            gdf_poly.loc[idx, flowpath_id_out_field] = (
+                candidates.iloc[1][flowpath_id]
+                if intersection_len < min_preferred_intersection_len_m and num_candidates > 1
+                else candidates.iloc[0][flowpath_id]
+            )
             gdf_poly.loc[idx, "buffer_radius"] = search_radius
             break
 
