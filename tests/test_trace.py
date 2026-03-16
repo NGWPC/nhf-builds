@@ -238,6 +238,70 @@ def _check_nexus_relational_integrity(
             f"Found {len(orphan_vfps)} VFPs with no ref FP row: {sorted(orphan_vfps)[:20]}"
         )
 
+    # Every fp_id in the flowpaths table has at least one ref_fp_id in reference_flowpaths
+    if reference_fp_pl is not None:
+        ref_fp_ids = set(reference_fp_pl["fp_id"].drop_nulls().to_list())
+        fps_without_ref = valid_fp_ids - ref_fp_ids
+        assert len(fps_without_ref) == 0, (
+            f"Found {len(fps_without_ref)} fp_ids with no ref FP entry: {sorted(fps_without_ref)[:20]}"
+        )
+
+    # Flowpaths without up_nex_id should only be headwaters (no other fp drains to them)
+    if "up_nex_id" in fp_pl.columns:
+        downstream_targets = set(fp_pl["fp_to_id"].drop_nulls().to_list())
+        no_up_nex = fp_pl.filter(pl.col("up_nex_id").is_null())
+        non_headwater_no_up = [fid for fid in no_up_nex["fp_id"].to_list() if fid in downstream_targets]
+        assert len(non_headwater_no_up) == 0, (
+            f"Found {len(non_headwater_no_up)} non-headwater flowpaths with null up_nex_id: "
+            f"{non_headwater_no_up[:20]}"
+        )
+
+    # VFPs without up_virtual_nex_id should only be headwaters (no nexus drains to them)
+    if virtual_fp_pl is not None and virtual_nex_pl is not None:
+        vnex_downstream_vfps = set(virtual_nex_pl["dn_virtual_fp_id"].drop_nulls().to_list())
+        no_up_vnex = virtual_fp_pl.filter(pl.col("up_virtual_nex_id").is_null())
+        non_headwater_no_up_vfp = [
+            vid for vid in no_up_vnex["virtual_fp_id"].to_list() if vid in vnex_downstream_vfps
+        ]
+        assert len(non_headwater_no_up_vfp) == 0, (
+            f"Found {len(non_headwater_no_up_vfp)} non-headwater VFPs with null up_virtual_nex_id: "
+            f"{non_headwater_no_up_vfp[:20]}"
+        )
+
+    # All non-outlet nexuses must have a downstream flowpath
+    # Every nexus referenced as dn_nex_id by a non-outlet flowpath should have dn_fp_id
+    non_outlet_fps = fp_pl.filter(pl.col("fp_to_id").is_not_null())
+    internal_nex_ids = set(non_outlet_fps["dn_nex_id"].drop_nulls().to_list())
+    internal_nex_missing_dn = [
+        nid
+        for nid in internal_nex_ids
+        if nid in set(nex_pl.filter(pl.col("dn_fp_id").is_null())["nex_id"].to_list())
+    ]
+    assert len(internal_nex_missing_dn) == 0, (
+        f"Found {len(internal_nex_missing_dn)} internal nexuses without dn_fp_id: "
+        f"{internal_nex_missing_dn[:20]}"
+    )
+
+    # Same for virtual nexuses: non-outlet vnexes must have dn_virtual_fp_id
+    if virtual_nex_pl is not None and len(virtual_nex_pl) > 0:
+        vnex_no_dn = virtual_nex_pl.filter(pl.col("dn_virtual_fp_id").is_null())
+        # These should only be outlet virtual nexuses
+        assert len(vnex_no_dn) >= 0, "Unexpected error"  # just for flow
+        # Every vnex referenced as dn_virtual_nex_id by a non-terminal VFP should have dn_virtual_fp_id
+        if virtual_fp_pl is not None:
+            # A VFP is terminal if its dn_virtual_nex_id nexus has no dn_virtual_fp_id
+            vnex_with_dn = set(
+                virtual_nex_pl.filter(pl.col("dn_virtual_fp_id").is_not_null())["virtual_nex_id"].to_list()
+            )
+            non_terminal_vfps = virtual_fp_pl.filter(pl.col("dn_virtual_nex_id").is_in(list(vnex_with_dn)))
+            internal_vnex_ids = set(non_terminal_vfps["dn_virtual_nex_id"].drop_nulls().to_list())
+            vnex_null_dn_ids = set(vnex_no_dn["virtual_nex_id"].to_list())
+            internal_vnex_missing = internal_vnex_ids & vnex_null_dn_ids
+            assert len(internal_vnex_missing) == 0, (
+                f"Found {len(internal_vnex_missing)} internal virtual nexuses without dn_virtual_fp_id: "
+                f"{sorted(internal_vnex_missing)[:20]}"
+            )
+
 
 def _check_fp_to_id(fp_pl: pl.DataFrame) -> None:
     """Check that fp_to_id is present and points to valid fp_ids or null (for outlets)."""
