@@ -929,6 +929,7 @@ class LakesConfig(BaseModel):
     fields: list[str] = Field(
         default=[
             "lake_id",
+            "res_id",
             "LkArea",
             "LkMxE",
             "WeirC",

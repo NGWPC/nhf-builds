@@ -28,6 +28,7 @@ def hf_path() -> Path:
         1333008,
         1333082,
         1333152,
+        None,
     ]
     ref_fp_id = [
         7047639,
@@ -41,6 +42,7 @@ def hf_path() -> Path:
         7048009,
         7047983,
         7048917,
+        1,
     ]
     gdf = gpd.GeoDataFrame(
         data={"fp_id": fp_id, "ref_fp_id": ref_fp_id},

@@ -193,7 +193,7 @@ def main() -> int:
         if config.tasks.waterbodies:
             runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
 
-        if config.tasks.nwm_lakes:
+        if config.tasks.lakes:
             runner.run_task("lakes", python_callable=build_lakes, op_kwargs={})
 
         if config.tasks.hydrolocations:
