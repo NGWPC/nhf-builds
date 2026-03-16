@@ -926,6 +926,10 @@ class LakesConfig(BaseModel):
     search_radius_m: float | int = Field(
         default=25000, description="Radius in meters to buffer points for nearest flowpath method"
     )
+    min_preferred_intersection_len_m: float = Field(
+        default=10.0,
+        description="If associated FP intersection with lake is below this threshold, we will try to look for a better candidate",
+    )
     fields: list[str] = Field(
         default=[
             "lake_id",
