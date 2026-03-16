@@ -1017,11 +1017,19 @@ def _build_hydrofabric(
                 if old_nex_id not in vnex_to_dn_vfp and old_nex_id in existing_vnex_ids:
                     vnex_to_dn_vfp[old_nex_id] = fallback_vfp_id
 
-    # Batch-remove replaced tail nexuses
+    # Batch-remove replaced tail nexuses and rewrite any remaining dangling references
     if removed_vnex_ids:
         virtual_nexus_data[:] = [
             vn for vn in virtual_nexus_data if vn["virtual_nex_id"] not in removed_vnex_ids
         ]
+        surviving_vnex_ids = {vn["virtual_nex_id"] for vn in virtual_nexus_data}
+        for vfp_entry in virtual_fp_data:
+            dn = vfp_entry["dn_virtual_nex_id"]
+            if dn in removed_vnex_ids and dn not in surviving_vnex_ids:
+                # Find the upstream nexus of the downstream divide this was wired to
+                downstream_fp_id = fp_to_id_map.get(vfp_entry["div_id"])
+                if downstream_fp_id is not None and downstream_fp_id in nhf_fp_upstream_vnex:
+                    vfp_entry["dn_virtual_nex_id"] = nhf_fp_upstream_vnex[downstream_fp_id]
 
     # Set dn_virtual_fp_id on all virtual nexus records
     for vnex_entry in virtual_nexus_data:
@@ -1067,7 +1075,10 @@ def _build_hydrofabric(
                 vfp_entry["up_virtual_nex_id"] = nex_remap[up]
 
     # Wire up_virtual_nex_id on VFPs that are missing it
-    dn_vfp_to_vnex: dict[int, int] = {vfp_id: vnex_id for vnex_id, vfp_id in vnex_to_dn_vfp.items()}
+    # Use remapped nexus IDs so we don't wire to merged (removed) nexuses
+    dn_vfp_to_vnex: dict[int, int] = {
+        vfp_id: nex_remap.get(vnex_id, vnex_id) for vnex_id, vfp_id in vnex_to_dn_vfp.items()
+    }
     for vfp_entry in virtual_fp_data:
         if vfp_entry["up_virtual_nex_id"] is None and vfp_entry["virtual_fp_id"] in dn_vfp_to_vnex:
             vfp_entry["up_virtual_nex_id"] = dn_vfp_to_vnex[vfp_entry["virtual_fp_id"]]

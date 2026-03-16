@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import geopandas as gpd
 import pandas as pd
 import polars as pl
 import rustworkx as rx
@@ -148,6 +149,96 @@ def _check_virtual_flowpath_area_contributions(
         )
 
 
+def _check_no_coincident_nexuses(
+    nex_gdf: gpd.GeoDataFrame,
+    virtual_nex_gdf: gpd.GeoDataFrame | None = None,
+) -> None:
+    """Check that no two nexuses share the same location.
+
+    Parameters
+    ----------
+    nex_gdf : gpd.GeoDataFrame
+        Regular nexus GeoDataFrame
+    virtual_nex_gdf : gpd.GeoDataFrame, optional
+        Virtual nexus GeoDataFrame
+    """
+    for label, gdf, id_col in [
+        ("nexus", nex_gdf, "nex_id"),
+        ("virtual_nexus", virtual_nex_gdf, "virtual_nex_id"),
+    ]:
+        if gdf is None or len(gdf) == 0:
+            continue
+        coords = gdf.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
+        dupes = coords.duplicated(keep=False)
+        n_dupes = dupes.sum()
+        if n_dupes > 0:
+            dup_ids = gdf.loc[dupes, id_col].tolist()
+            raise AssertionError(f"Found {n_dupes} coincident {label} records. IDs: {dup_ids[:20]}")
+
+
+def _check_nexus_relational_integrity(
+    fp_pl: pl.DataFrame,
+    nex_pl: pl.DataFrame,
+    virtual_fp_pl: pl.DataFrame | None = None,
+    virtual_nex_pl: pl.DataFrame | None = None,
+    reference_fp_pl: pl.DataFrame | None = None,
+) -> None:
+    """Check relational integrity between nexuses and flowpaths.
+
+    Validates:
+    - Every nexus dn_fp_id points to a valid fp_id (or null for outlets)
+    - Every flowpath dn_nex_id points to a valid nex_id
+    - Every virtual nexus dn_virtual_fp_id points to a valid virtual_fp_id (or null for outlets)
+    - Every virtual flowpath dn_virtual_nex_id points to a valid virtual_nex_id
+    - Every VFP appears in at least one ref FP's virtual_fp_id
+    """
+    # Regular nexus -> flowpath
+    valid_fp_ids = set(fp_pl["fp_id"].to_list())
+    nex_refs = set(nex_pl["dn_fp_id"].drop_nulls().to_list())
+    dangling_nex = nex_refs - valid_fp_ids
+    assert len(dangling_nex) == 0, f"Nexus dn_fp_id references non-existent fp_ids: {dangling_nex}"
+
+    # Flowpath -> nexus
+    valid_nex_ids = set(nex_pl["nex_id"].to_list())
+    fp_dn_refs = set(fp_pl["dn_nex_id"].drop_nulls().to_list())
+    dangling_fp_dn = fp_dn_refs - valid_nex_ids
+    assert len(dangling_fp_dn) == 0, f"Flowpath dn_nex_id references non-existent nex_ids: {dangling_fp_dn}"
+
+    if virtual_fp_pl is None or virtual_nex_pl is None or len(virtual_nex_pl) == 0:
+        return
+
+    valid_vfp_ids = set(virtual_fp_pl["virtual_fp_id"].to_list())
+    valid_vnex_ids = set(virtual_nex_pl["virtual_nex_id"].to_list())
+
+    # Virtual nexus -> VFP
+    vnex_refs = set(virtual_nex_pl["dn_virtual_fp_id"].drop_nulls().to_list())
+    dangling_vnex = vnex_refs - valid_vfp_ids
+    assert len(dangling_vnex) == 0, (
+        f"Virtual nexus dn_virtual_fp_id references non-existent VFPs: {dangling_vnex}"
+    )
+
+    # VFP -> virtual nexus
+    vfp_dn_refs = set(virtual_fp_pl["dn_virtual_nex_id"].drop_nulls().to_list())
+    dangling_vfp_dn = vfp_dn_refs - valid_vnex_ids
+    assert len(dangling_vfp_dn) == 0, (
+        f"VFP dn_virtual_nex_id references non-existent vnex_ids: {dangling_vfp_dn}"
+    )
+
+    vfp_up_refs = set(virtual_fp_pl["up_virtual_nex_id"].drop_nulls().to_list())
+    dangling_vfp_up = vfp_up_refs - valid_vnex_ids
+    assert len(dangling_vfp_up) == 0, (
+        f"VFP up_virtual_nex_id references non-existent vnex_ids: {dangling_vfp_up}"
+    )
+
+    # Every VFP has at least one ref FP row with virtual_fp_id pointing to it
+    if reference_fp_pl is not None:
+        covered_vfp_ids = set(reference_fp_pl["virtual_fp_id"].drop_nulls().to_list())
+        orphan_vfps = valid_vfp_ids - covered_vfp_ids
+        assert len(orphan_vfps) == 0, (
+            f"Found {len(orphan_vfps)} VFPs with no ref FP row: {sorted(orphan_vfps)[:20]}"
+        )
+
+
 def _check_fp_to_id(fp_pl: pl.DataFrame) -> None:
     """Check that fp_to_id is present and points to valid fp_ids or null (for outlets)."""
     assert "fp_to_id" in fp_pl.columns, "fp_to_id column missing from flowpaths"
@@ -288,6 +379,9 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig) -> None:
@@ -371,6 +465,9 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config: HFConfig) -> None:
@@ -454,6 +551,9 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig) -> None:
@@ -532,6 +632,9 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
@@ -610,6 +713,9 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
@@ -688,6 +794,9 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
 def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
@@ -765,3 +874,6 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     _check_fp_to_id(fp_pl)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
+    nex_pl = pl.from_pandas(final_nexus.to_wkb())
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
