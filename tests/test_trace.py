@@ -341,15 +341,23 @@ def _check_virtual_nexus_meets_flowpath(
     if len(virtual_nex_pl) == 0:
         return
 
-    # Virtual Nexus -> Virtual Flowpath (via dn_virtual_nex_id)
+    # Virtual Nexus -> Virtual Flowpath (via dn_virtual_nex_id or up_virtual_nex_id)
+    # A nexus connects to a VFP either as its downstream end (dn_virtual_nex_id)
+    # or its upstream end (up_virtual_nex_id, for headwater nexuses)
+    via_dn = set(virtual_fp_pl["dn_virtual_nex_id"].drop_nulls().to_list())
+    via_up = set(virtual_fp_pl["up_virtual_nex_id"].drop_nulls().to_list())
+    connected = via_dn | via_up
+    all_vnex = set(virtual_nex_pl["virtual_nex_id"].to_list())
+    orphans = all_vnex - connected
+    assert len(orphans) == 0, f"Found {len(orphans)} virtual nexuses with no connected virtual flowpath"
+
+    # Use dn_virtual_nex_id for the crosswalk hop (most nexuses)
     hop1 = virtual_nex_pl.join(
         virtual_fp_pl.select("virtual_fp_id", "dn_virtual_nex_id"),
         left_on="virtual_nex_id",
         right_on="dn_virtual_nex_id",
         how="left",
     )
-    orphans = hop1.filter(pl.col("virtual_fp_id").is_null())
-    assert len(orphans) == 0, f"Found {len(orphans)} virtual nexuses with no draining virtual flowpath"
 
     # Virtual Flowpath -> reference_flowpaths (via virtual_fp_id); div_id links
     # to the regular flowpath the virtual chain connects to.
@@ -518,8 +526,8 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([3, 4, 5, 6, 7], dtype="Int64"),
-            "vpu_id": pd.Series(["02", "02", "02", "02", "02"], dtype="object"),
+            "virtual_nex_id": pd.Series([3, 4, 5, 6, 7, 10], dtype="Int64"),
+            "vpu_id": pd.Series(["02", "02", "02", "02", "02", "02"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
@@ -604,8 +612,8 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 6, 12, 13], dtype="Int64"),
-            "vpu_id": pd.Series(["01", "01", "01", "01"], dtype="object"),
+            "virtual_nex_id": pd.Series([4, 6, 10, 14, 15], dtype="Int64"),
+            "vpu_id": pd.Series(["01", "01", "01", "01", "01"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)

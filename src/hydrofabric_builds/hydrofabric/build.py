@@ -142,7 +142,6 @@ def _create_mainstem_virtual_flowpaths(
     nhf_fp_to_ref_ids: dict[int, list[str]],
     nhf_fp_to_all_ref_ids: dict[int, list[str]],
     nhf_fp_tributary_pct: dict[int, float],
-    nhf_fps_with_upstream: set[int],
     fp_data: list[dict[str, Any]],
     fp_lookup: dict[str, dict[str, Any]],
     div_lookup: dict[str, dict[str, Any]] | None,
@@ -290,24 +289,21 @@ def _create_mainstem_virtual_flowpaths(
         segment_boundaries: list[tuple[float, float, int]] = []  # (start_dist, end_dist, dn_vnex_id)
 
         # Create upstream nexus at the start of the NHF flowpath
-        # (only if something flows into this fp — i.e., it's not a headwater)
-        upstream_vnex_id: int | None = None
-        if nhf_fp_id in nhf_fps_with_upstream:
-            if line_geom.geom_type == "MultiLineString":
-                start_coord = list(line_geom.geoms)[0].coords[0]
-            else:
-                start_coord = line.coords[0]
+        if line_geom.geom_type == "MultiLineString":
+            start_coord = list(line_geom.geoms)[0].coords[0]
+        else:
+            start_coord = line.coords[0]
 
-            upstream_vnex_id = nhf_id
-            nhf_id += 1
-            new_virtual_nexus_data.append(
-                {
-                    "virtual_nex_id": upstream_vnex_id,
-                    "vpu_id": nhf_fp_vpu_id,
-                    "geometry": Point(start_coord),
-                }
-            )
-            nhf_fp_to_upstream_vnex[nhf_fp_id] = upstream_vnex_id
+        upstream_vnex_id: int = nhf_id
+        nhf_id += 1
+        new_virtual_nexus_data.append(
+            {
+                "virtual_nex_id": upstream_vnex_id,
+                "vpu_id": nhf_fp_vpu_id,
+                "geometry": Point(start_coord),
+            }
+        )
+        nhf_fp_to_upstream_vnex[nhf_fp_id] = upstream_vnex_id
 
         prev_dist = 0.0
         skipped_nexuses: list[tuple[int, float]] = []
@@ -870,9 +866,6 @@ def _build_hydrofabric(
 
     div_lookup: dict[str, dict[str, Any]] | None = partition_data.get("div_lookup")
 
-    # Build set of NHF fp_ids that have upstream flowpaths draining into them
-    nhf_fps_with_upstream: set[int] = {fp["fp_to_id"] for fp in fp_data if fp.get("fp_to_id") is not None}
-
     (
         mainstem_vfp_data,
         mainstem_vnex_data,
@@ -886,7 +879,6 @@ def _build_hydrofabric(
         nhf_fp_to_ref_ids=nhf_fp_to_ref_ids,
         nhf_fp_to_all_ref_ids=nhf_fp_to_all_ref_ids,
         nhf_fp_tributary_pct=nhf_fp_tributary_pct,
-        nhf_fps_with_upstream=nhf_fps_with_upstream,
         fp_data=fp_data,
         fp_lookup=fp_lookup,
         div_lookup=div_lookup,
@@ -924,24 +916,22 @@ def _build_hydrofabric(
         if line_geom is None or line_geom.is_empty:
             continue
 
-        # Create upstream nexus for non-headwater fallback VFPs
-        upstream_vnex_id_fb: int | None = None
-        if fp_id in nhf_fps_with_upstream:
-            if line_geom.geom_type == "MultiLineString":
-                start_coord = list(line_geom.geoms)[0].coords[0]
-            else:
-                start_coord = line_geom.coords[0]
+        # Create upstream nexus for fallback VFPs
+        if line_geom.geom_type == "MultiLineString":
+            start_coord = list(line_geom.geoms)[0].coords[0]
+        else:
+            start_coord = line_geom.coords[0]
 
-            upstream_vnex_id_fb = nhf_id
-            nhf_id += 1
-            virtual_nexus_data.append(
-                {
-                    "virtual_nex_id": upstream_vnex_id_fb,
-                    "vpu_id": fp_entry["vpu_id"],
-                    "geometry": Point(start_coord),
-                }
-            )
-            nhf_fp_upstream_vnex[fp_id] = upstream_vnex_id_fb
+        upstream_vnex_id_fb: int = nhf_id
+        nhf_id += 1
+        virtual_nexus_data.append(
+            {
+                "virtual_nex_id": upstream_vnex_id_fb,
+                "vpu_id": fp_entry["vpu_id"],
+                "geometry": Point(start_coord),
+            }
+        )
+        nhf_fp_upstream_vnex[fp_id] = upstream_vnex_id_fb
 
         # Create virtual nexus at downstream end of flowpath
         if line_geom.geom_type == "MultiLineString":
@@ -977,8 +967,7 @@ def _build_hydrofabric(
         )
         nhf_id += 1
 
-        if upstream_vnex_id_fb is not None:
-            vnex_to_dn_vfp[upstream_vnex_id_fb] = fallback_vfp_id
+        vnex_to_dn_vfp[upstream_vnex_id_fb] = fallback_vfp_id
 
         # Update reference_flowpaths entries for this divide with the fallback virtual_fp_id
         for ref_idx in div_id_to_ref_indices.get(fp_id, []):
