@@ -1,5 +1,6 @@
 """A utils file for common hydrofabric building functions"""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rustworkx as rx
+
+logger = logging.getLogger(__name__)
 
 
 def _get_upstream_ids_for_outlet(
@@ -274,5 +277,14 @@ def _crosswalk_reference(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFra
         crosswalked gdf
     """
     gdf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
-    gdf["ref_fp_id"] = pd.to_numeric(gdf["ref_fp_id"]).astype(np.int64)
+
+    # prefer casting to int as this is correct type. Handle null flowpaths and alert user
+    try:
+        gdf["ref_fp_id"] = pd.to_numeric(gdf["ref_fp_id"]).astype(np.int64)
+    except pd.errors.IntCastingNaNError:
+        gdf_ref["ref_fp_id"] = gdf_ref["ref_fp_id"].astype(str)
+        logger.info(
+            "NOTE: Layer to be crosswalked has null reference flowpath associations. Casting to string for join. Check if this is unexpected behavior."
+        )
+
     return gdf.merge(gdf_ref, on="ref_fp_id", how="left")
