@@ -22,7 +22,7 @@ def hydrolocations_pipeline(hf_path: Path) -> None:
         Path to hydrofabric to use
     """
     # Initialize an empty gdf for each layer to assert correct typing
-    # Add new layers here
+    # Add new layer names here
     gdf_dict = {"waterbodies": gpd.GeoDataFrame(), "gages": gpd.GeoDataFrame(), "lakes": gpd.GeoDataFrame()}
 
     # This patterns handles null layers and assigns an incremental hy_id
@@ -30,6 +30,7 @@ def hydrolocations_pipeline(hf_path: Path) -> None:
     # assign a hy_id based on the index + 1
     # start the next hy_id where you left off (last value + 1)
     # end_hy starts at 1 until overwritten by finding a present layer
+    # remove layer from dict if does not exist
     end_hy = 1
 
     for k in list(gdf_dict.keys()):
@@ -56,8 +57,7 @@ def hydrolocations_pipeline(hf_path: Path) -> None:
     # save with hy_id
     for k, v in gdf_dict.items():
         v.to_file(hf_path, layer=k, driver="GPKG", overwrite=True)
-
-    logger.info("Wrote layers with updated with hy_id")
+        logger.info(f"Wrote layer {k} with updated with hy_id")
 
     # save final hl
     gdf_hl.to_file(hf_path, layer="hydrolocations", driver="GPKG", overwrite=True)

@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_0.1.55.gpkg # If not specified, will default to version
+output_name: hi_nhf_0.1.56.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -15,8 +15,8 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False
-  hydrolocations: False
+  waterbodies: False # not present in OCONUS
+  hydrolocations: True
   gages: True
   fp_crosswalk: True
   lakes: True
@@ -151,6 +151,10 @@ gages:
         path: nwm_calib/nwm_calib_gages_07112025.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
+      routelink:
+        path: RouteLink_CONUS_EPSG4326.gpkg
+        gage_source_crs: EPSG:4326
+        id_col_name: gages
     target:
       crs: EPSG:32604
       snap_tolerance_m: 100.0

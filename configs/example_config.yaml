@@ -15,8 +15,8 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False
-  hydrolocations: False
+  waterbodies: True
+  hydrolocations: True
   gages: True
   fp_crosswalk: True
   lakes: True

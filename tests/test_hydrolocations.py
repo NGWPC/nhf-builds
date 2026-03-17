@@ -10,63 +10,62 @@ from hydrofabric_builds.hydrofabric.hydrolocations import hydrolocations_pipelin
 
 
 @pytest.fixture
-def tmp_hf_for_hl() -> Path:
-    """Copy the full sample HF gpkg. Includes flowpaths, lakes, waterbodies, and gages"""
-    sample_path = here() / "tests/data/sample_hf_hl.gpkg"
-    tmp_path = here() / "tests/data/tmp_hf_hl.gpkg"
-    shutil.copy(sample_path, tmp_path)
-    return tmp_path
+def sample_hl_path() -> Path:
+    return here() / "tests/data/sample_hf_hl.gpkg"
 
 
 @pytest.fixture
-def tmp_hf_for_hl__two_layers() -> Path:
+def tmp_hl_path() -> Path:
+    return here() / "tests/data/tmp_hf_hl.gpkg"
+
+
+@pytest.fixture
+def tmp_hf_for_hl(sample_hl_path: Path, tmp_hl_path: Path) -> Path:
+    """Copy the full sample HF gpkg. Includes flowpaths, lakes, waterbodies, and gages"""
+    shutil.copy(sample_hl_path, tmp_hl_path)
+    return tmp_hl_path
+
+
+@pytest.fixture
+def tmp_hf_for_hl__two_layers(sample_hl_path: Path, tmp_hl_path: Path) -> Path:
     """Create a GPKG with 2/3 layers.
     Note: If you drop tables with sqlite instead, OGR gets runtime warnings
     about tables being referenced in GPKG but not existing
     """
-    sample_path = here() / "tests/data/sample_hf_hl.gpkg"
-    tmp_path = here() / "tests/data/tmp_hf_hl.gpkg"
+    gdf_fp = gpd.read_file(sample_hl_path, layer="flowpaths")
+    gdf_fp.to_file(tmp_hl_path, layer="flowpaths", driver="GPKG", overwrite=True)
+    gdf_lakes = gpd.read_file(sample_hl_path, layer="lakes")
+    gdf_lakes.to_file(tmp_hl_path, layer="lakes", driver="GPKG", overwrite=True)
+    gdf_gages = gpd.read_file(sample_hl_path, layer="gages")
+    gdf_gages.to_file(tmp_hl_path, layer="gages", driver="GPKG", overwrite=True)
 
-    gdf_fp = gpd.read_file(sample_path, layer="flowpaths")
-    gdf_fp.to_file(tmp_path, layer="flowpaths", driver="GPKG", overwrite=True)
-    gdf_lakes = gpd.read_file(sample_path, layer="lakes")
-    gdf_lakes.to_file(tmp_path, layer="lakes", driver="GPKG", overwrite=True)
-    gdf_gages = gpd.read_file(sample_path, layer="gages")
-    gdf_gages.to_file(tmp_path, layer="gages", driver="GPKG", overwrite=True)
-
-    return tmp_path
+    return tmp_hl_path
 
 
 @pytest.fixture
-def tmp_hf_for_hl__one_layer() -> Path:
+def tmp_hf_for_hl__one_layer(sample_hl_path: Path, tmp_hl_path: Path) -> Path:
     """Create a GPKG with 1/3 layers.
     Note: If you drop tables with sqlite instead, OGR gets runtime warnings
     about tables being referenced in GPKG but not existing
     """
-    sample_path = here() / "tests/data/sample_hf_hl.gpkg"
-    tmp_path = here() / "tests/data/tmp_hf_hl.gpkg"
+    gdf_fp = gpd.read_file(sample_hl_path, layer="flowpaths")
+    gdf_fp.to_file(tmp_hl_path, layer="flowpaths", driver="GPKG", overwrite=True)
+    gdf_gages = gpd.read_file(sample_hl_path, layer="gages")
+    gdf_gages.to_file(tmp_hl_path, layer="gages", driver="GPKG", overwrite=True)
 
-    gdf_fp = gpd.read_file(sample_path, layer="flowpaths")
-    gdf_fp.to_file(tmp_path, layer="flowpaths", driver="GPKG", overwrite=True)
-    gdf_gages = gpd.read_file(sample_path, layer="gages")
-    gdf_gages.to_file(tmp_path, layer="gages", driver="GPKG", overwrite=True)
-
-    return tmp_path
+    return tmp_hl_path
 
 
 @pytest.fixture
-def tmp_hf_for_hl__no_layers() -> Path:
+def tmp_hf_for_hl__no_layers(sample_hl_path: Path, tmp_hl_path: Path) -> Path:
     """Create a GPKG with no HF layers.
     Note: If you drop tables with sqlite instead, OGR gets runtime warnings
     about tables being referenced in GPKG but not existing
     """
-    sample_path = here() / "tests/data/sample_hf_hl.gpkg"
-    tmp_path = here() / "tests/data/tmp_hf_hl.gpkg"
+    gdf = gpd.read_file(sample_hl_path, layer="flowpaths")
+    gdf.to_file(tmp_hl_path, layer="flowpaths")
 
-    gdf = gpd.read_file(sample_path, layer="flowpaths")
-    gdf.to_file(tmp_path, layer="flowpaths")
-
-    return tmp_path
+    return tmp_hl_path
 
 
 def test_hydrolocations_pipeline(tmp_hf_for_hl: Path) -> None:
