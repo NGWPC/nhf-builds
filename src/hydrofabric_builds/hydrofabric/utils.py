@@ -137,12 +137,15 @@ def _combine_hydrofabrics(
     combined_nexus = pd.concat(all_nexus, ignore_index=True)
     combined_reference_flowpaths = pd.concat(all_reference_flowpaths, ignore_index=True)
 
-    # Merge coincident nexuses from different outlets
+    # Merge coincident nexuses from different outlets, but only when they
+    # share the same dn_fp_id (or both are null outlets). Nexuses at the same
+    # location with different downstream flowpaths are distinct junctions.
     combined_nexus["_coord"] = combined_nexus.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
-    nex_dupes = combined_nexus.duplicated(subset=["_coord"], keep="first")
+    combined_nexus["_dn_key"] = combined_nexus["dn_fp_id"].astype("Int64").fillna(-1)
+    nex_dupes = combined_nexus.duplicated(subset=["_coord", "_dn_key"], keep="first")
     if nex_dupes.any():
         nex_remap: dict[int, int] = {}
-        for _coord, group in combined_nexus.groupby("_coord"):
+        for (_coord, _dn_key), group in combined_nexus.groupby(["_coord", "_dn_key"]):
             if len(group) <= 1:
                 continue
             keep_id = group["nex_id"].iloc[0]
@@ -156,7 +159,7 @@ def _combine_hydrofabrics(
             combined_flowpaths["up_nex_id"] = combined_flowpaths["up_nex_id"].map(
                 lambda x: nex_remap.get(x, x) if pd.notna(x) else x
             )
-    combined_nexus = combined_nexus.drop(columns=["_coord"])
+    combined_nexus = combined_nexus.drop(columns=["_coord", "_dn_key"])
 
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
