@@ -153,7 +153,7 @@ gages:
         gage_source_crs: EPSG:4326
         id_col_name: site_no
       routelink:
-        path: RouteLink_CONUS_EPSG4326.gpkg # need to change to PRVI but will fail if empty
+        path: routelink/RouteLink_PRVI_EPSG4326.gpkg
         gage_source_crs: EPSG:4326
         id_col_name: gages
     target:
