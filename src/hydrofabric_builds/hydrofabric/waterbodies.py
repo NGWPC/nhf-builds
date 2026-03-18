@@ -56,6 +56,11 @@ def crosswalk_waterbodies(hf_path: Path, rfcda_path: Path) -> gpd.GeoDataFrame:
     hf_fp = gpd.read_file(hf_path, layer="flowpaths")
     hf_vfp = gpd.read_file(hf_path, layer="virtual_flowpaths")
 
+    # Deduplicate ref FPs: keep the most downstream VFP per ref_fp_id
+    if "segment_order" in hf_ref.columns:
+        best_idx = hf_ref.groupby("ref_fp_id")["segment_order"].idxmax()
+        hf_ref = hf_ref.loc[best_idx]
+
     # join on cross walk table
     logger.info("Crosswalking reference flowpath IDs")
     gdf_res = gdf_res.loc[~gdf_res["ref_fab_fp"].isnull(), :].copy()

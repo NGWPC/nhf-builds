@@ -293,6 +293,7 @@ class TestCombineHydrofabricsPure:
                     {
                         "fp_id": [i * 10 + j for j in range(5)],
                         "dn_nex_id": [i * 10 + j for j in range(5)],
+                        "up_nex_id": [None] * 5,
                         "div_id": [i * 10 + j for j in range(5)],
                         "geometry": [LineString([(j, j), (j + 1, j + 1)]) for j in range(5)],
                     },
@@ -312,7 +313,7 @@ class TestCombineHydrofabricsPure:
                     {
                         "nex_id": [i * 10 + j for j in range(5)],
                         "dn_fp_id": [None] * 5,
-                        "geometry": [Point(j, j) for j in range(5)],
+                        "geometry": [Point(i * 10 + j, i * 10 + j) for j in range(5)],
                     },
                     crs=crs,
                 ),
