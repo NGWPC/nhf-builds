@@ -275,6 +275,11 @@ class BuildHydrofabricConfig(BaseModel):
         default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
     )
 
+    headwater_virtual_length_threshold: float = Field(
+        default=0.3,
+        description="Order-1 headwater flowpaths shorter than this length (km) are virtualized instead of independent",
+    )
+
     debug_outlet_count: int | None = Field(
         default=None,
         description="Debug setting to limit the number of outlets processed. None (default) processes all outlets. Set to a positive integer to limit for testing.",
