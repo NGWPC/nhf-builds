@@ -163,7 +163,7 @@ def traverse_and_aggregate(ctx: Context, st: State, start_id: str) -> None:
 def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo) -> None:
     """Handle a headwater flowpath with no upstreams."""
     if curr_id in ctx.div_ids:
-        length_km = ctx.fp_lookup[curr_id].get("length_km", float("inf"))
+        length_km = ctx.fp_lookup[curr_id].get("lengthkm", float("inf"))
         if fp.order == 1 and length_km < ctx.headwater_virtual_length_threshold:
             st.non_nextgen.add(curr_id)
             if curr_id not in st.non_nextgen_virtual_sources:

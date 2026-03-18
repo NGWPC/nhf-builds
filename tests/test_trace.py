@@ -655,10 +655,10 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     )
 
     assert len(aggregate_data.aggregates) == 2319, "Incorrect number of aggregates"
-    assert len(aggregate_data.independents) == 1277, "Incorrect number of independents"
+    assert len(aggregate_data.independents) == 1219, "Incorrect number of independents"
     assert len(aggregate_data.connectors) == 996, "Incorrect number of connectors"
-    assert len(aggregate_data.non_nextgen_flowpaths) == 3431, "Incorrect number of non nextgen flowpaths"
-    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 1907, (
+    assert len(aggregate_data.non_nextgen_flowpaths) == 3586, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2062, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
 
@@ -736,10 +736,10 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     )
 
     assert len(aggregate_data.aggregates) == 1771, "Incorrect number of aggregates"
-    assert len(aggregate_data.independents) == 1448, "Incorrect number of independents"
+    assert len(aggregate_data.independents) == 1435, "Incorrect number of independents"
     assert len(aggregate_data.connectors) == 1060, "Incorrect number of connectors"
-    assert len(aggregate_data.non_nextgen_flowpaths) == 7072, "Incorrect number of non nextgen flowpaths"
-    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2254, (
+    assert len(aggregate_data.non_nextgen_flowpaths) == 7098, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2280, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
 
@@ -817,10 +817,10 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     )
 
     assert len(aggregate_data.aggregates) == 6855, "Incorrect number of aggregates"
-    assert len(aggregate_data.independents) == 3941, "Incorrect number of independents"
+    assert len(aggregate_data.independents) == 3807, "Incorrect number of independents"
     assert len(aggregate_data.connectors) == 2969, "Incorrect number of connectors"
-    assert len(aggregate_data.non_nextgen_flowpaths) == 11238, "Incorrect number of non nextgen flowpaths"
-    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 7877, (
+    assert len(aggregate_data.non_nextgen_flowpaths) == 11538, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 8177, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
 
@@ -898,10 +898,10 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     )
 
     assert len(aggregate_data.aggregates) == 2580, "Incorrect number of aggregates"
-    assert len(aggregate_data.independents) == 2025, "Incorrect number of independents"
+    assert len(aggregate_data.independents) == 1964, "Incorrect number of independents"
     assert len(aggregate_data.connectors) == 1443, "Incorrect number of connectors"
-    assert len(aggregate_data.non_nextgen_flowpaths) == 3666, "Incorrect number of non nextgen flowpaths"
-    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2395, (
+    assert len(aggregate_data.non_nextgen_flowpaths) == 3812, "Incorrect number of non nextgen flowpaths"
+    assert len(aggregate_data.non_nextgen_virtual_flowpaths) == 2541, (
         "Incorrect number of non nextgen virtual flowpaths"
     )
 
