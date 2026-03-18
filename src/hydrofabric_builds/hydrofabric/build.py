@@ -415,9 +415,9 @@ def _create_mainstem_virtual_flowpaths(
             downstream_vfp_id = emitted_segments[j + 1][1]
             vnex_to_dn_vfp[mid_vnex_id] = downstream_vfp_id
 
-        # Build vfp_id -> segment_order lookup from emitted mainstem data
+        # Build vfp_id -> segment_order lookup from segments just emitted for this NHF fp
         vfp_id_to_seg_order: dict[int, int] = {
-            d["virtual_fp_id"]: d["segment_order"] for d in mainstem_vfp_data if d["div_id"] == nhf_fp_id
+            vfp_id: order for order, (_, vfp_id) in enumerate(emitted_segments)
         }
 
         # Assign each reference FP to the mainstem segment containing its midpoint
