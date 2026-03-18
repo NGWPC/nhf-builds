@@ -153,6 +153,7 @@ def _create_mainstem_virtual_flowpaths(
     dict[int, int],
     dict[str, int],
     dict[str, int],
+    dict[str, int],
     int,
 ]:
     """Create main-stem virtual flowpath segments along NHF flowpaths at virtual nexuses.
@@ -187,12 +188,13 @@ def _create_mainstem_virtual_flowpaths(
 
     Returns
     -------
-    tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, int], dict[int, int], dict[str, int], dict[str, int], int]
+    tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, int], dict[int, int], dict[str, int], dict[str, int], dict[str, int], int]
         Main-stem virtual flowpath records (with ref_fp_id populated),
         new virtual nexus records,
         mapping of virtual_nex_id to downstream virtual_fp_id,
         mapping of nhf_fp_id to upstream virtual_nex_id,
         mapping of mainstem ref_fp_id to virtual_fp_id,
+        mapping of mainstem ref_fp_id to segment_order,
         mapping of all ref_fp_id to mainstem virtual_fp_id, and updated ID counter
     """
     mainstem_vfp_data: list[dict[str, Any]] = []
@@ -200,6 +202,7 @@ def _create_mainstem_virtual_flowpaths(
     vnex_to_dn_vfp: dict[int, int] = {}
     nhf_fp_to_upstream_vnex: dict[int, int] = {}  # nhf_fp_id -> upstream virtual_nex_id
     ref_to_vfp: dict[str, int] = {}  # mainstem ref_fp_id -> virtual_fp_id
+    ref_to_segment_order: dict[str, int] = {}  # mainstem ref_fp_id -> segment_order
     all_ref_to_mainstem_vfp: dict[str, int] = {}  # all ref_fp_id -> mainstem virtual_fp_id
     fp_data_by_id: dict[int, dict[str, Any]] = {fp["fp_id"]: fp for fp in fp_data}
 
@@ -369,6 +372,7 @@ def _create_mainstem_virtual_flowpaths(
         # Emit segments and track vnex -> downstream VFP mapping
         emitted_segments: list[tuple[int, int]] = []  # (dn_vnex_id, virtual_fp_id)
         prev_dn_vnex_id = upstream_vnex_id  # None for headwaters
+        seg_order = 0
         for i, (_seg_start_dist, _seg_end_dist, dn_vnex_id) in enumerate(segment_boundaries):
             seg_len = segment_lengths[i]
             if seg_len == 0:
@@ -391,12 +395,14 @@ def _create_mainstem_virtual_flowpaths(
                     "length_km": seg_len / 1e3,
                     "area_sqkm": segment_area,
                     "percentage_area_contribution": percentage,
+                    "segment_order": seg_order,
                     "vpu_id": nhf_fp_vpu_id,
                     "geometry": segment,
                 }
             )
             emitted_segments.append((dn_vnex_id, vfp_id))
             prev_dn_vnex_id = dn_vnex_id
+            seg_order += 1
             nhf_id += 1
 
         # Upstream nexus points to the first emitted segment's VFP
@@ -408,6 +414,11 @@ def _create_mainstem_virtual_flowpaths(
             mid_vnex_id = emitted_segments[j][0]
             downstream_vfp_id = emitted_segments[j + 1][1]
             vnex_to_dn_vfp[mid_vnex_id] = downstream_vfp_id
+
+        # Build vfp_id -> segment_order lookup from emitted mainstem data
+        vfp_id_to_seg_order: dict[int, int] = {
+            d["virtual_fp_id"]: d["segment_order"] for d in mainstem_vfp_data if d["div_id"] == nhf_fp_id
+        }
 
         # Assign each reference FP to the mainstem segment containing its midpoint
         if emitted_segments:
@@ -453,6 +464,7 @@ def _create_mainstem_virtual_flowpaths(
                         best_ref_id = ref_id
                 if best_ref_id is not None:
                     ref_to_vfp[best_ref_id] = vfp_id
+                    ref_to_segment_order[best_ref_id] = vfp_id_to_seg_order.get(vfp_id, 0)
                     assigned_refs.add(best_ref_id)
 
             # Phase 2: assign remaining ref FPs to best-matching VFP
@@ -473,6 +485,7 @@ def _create_mainstem_virtual_flowpaths(
                         best_vfp_id = vfp_id
                 if best_vfp_id is not None:
                     ref_to_vfp[ref_id] = best_vfp_id
+                    ref_to_segment_order[ref_id] = vfp_id_to_seg_order.get(best_vfp_id, 0)
 
             # Project ALL ref FPs (including tributaries) to assign mainstem_virtual_fp_id
             all_ref_ids = nhf_fp_to_all_ref_ids.get(nhf_fp_id, [])
@@ -516,6 +529,7 @@ def _create_mainstem_virtual_flowpaths(
         vnex_to_dn_vfp,
         nhf_fp_to_upstream_vnex,
         ref_to_vfp,
+        ref_to_segment_order,
         all_ref_to_mainstem_vfp,
         nhf_id,
     )
@@ -722,6 +736,7 @@ def _build_hydrofabric(
                     "fp_id": int(unit_id),
                     "virtual_fp_id": None,
                     "mainstem_virtual_fp_id": None,
+                    "segment_order": None,
                     "div_id": int(unit_id),
                 }
             )
@@ -766,6 +781,7 @@ def _build_hydrofabric(
         if dn_ref_id in ref_fp_id_to_index:
             idx = ref_fp_id_to_index[dn_ref_id]
             reference_flowpaths_data[idx]["virtual_fp_id"] = virtual_fp_id
+            reference_flowpaths_data[idx]["segment_order"] = 0
         else:
             idx = len(reference_flowpaths_data)
             reference_flowpaths_data.append(
@@ -774,6 +790,7 @@ def _build_hydrofabric(
                     "fp_id": None,
                     "virtual_fp_id": int(virtual_fp_id),
                     "mainstem_virtual_fp_id": None,
+                    "segment_order": 0,
                     "div_id": int(ref_id_to_new_id[ds_id]),
                 }
             )
@@ -787,6 +804,7 @@ def _build_hydrofabric(
             if ref_id_str in ref_fp_id_to_index:
                 existing_idx = ref_fp_id_to_index[ref_id_str]
                 reference_flowpaths_data[existing_idx]["virtual_fp_id"] = virtual_fp_id
+                reference_flowpaths_data[existing_idx]["segment_order"] = 0
             else:
                 new_idx = len(reference_flowpaths_data)
                 reference_flowpaths_data.append(
@@ -795,6 +813,7 @@ def _build_hydrofabric(
                         "fp_id": None,
                         "virtual_fp_id": int(virtual_fp_id),
                         "mainstem_virtual_fp_id": None,
+                        "segment_order": 0,
                         "div_id": int(ref_id_to_new_id[ds_id]),
                     }
                 )
@@ -836,6 +855,7 @@ def _build_hydrofabric(
                 "length_km": unit["length_km"],
                 "area_sqkm": unit["area_sqkm"],
                 "percentage_area_contribution": percentage,
+                "segment_order": 0,
                 "vpu_id": unit["vpu_id"],
                 "geometry": line_geom,
             }
@@ -872,6 +892,7 @@ def _build_hydrofabric(
         vnex_to_dn_vfp,
         nhf_fp_upstream_vnex,
         mainstem_ref_to_vfp,
+        mainstem_ref_to_segment_order,
         all_ref_to_mainstem_vfp,
         nhf_id,
     ) = _create_mainstem_virtual_flowpaths(
@@ -892,6 +913,7 @@ def _build_hydrofabric(
         if ref_id_str in ref_fp_id_to_index:
             idx = ref_fp_id_to_index[ref_id_str]
             reference_flowpaths_data[idx]["virtual_fp_id"] = vfp_id
+            reference_flowpaths_data[idx]["segment_order"] = mainstem_ref_to_segment_order.get(ref_id_str, 0)
 
     # Update reference_flowpaths entries with mainstem_virtual_fp_id for all ref FPs
     for ref_id_str, vfp_id in all_ref_to_mainstem_vfp.items():
@@ -961,6 +983,7 @@ def _build_hydrofabric(
                 "length_km": fp_entry["length_km"],
                 "area_sqkm": fp_entry["area_sqkm"],
                 "percentage_area_contribution": 1.0,
+                "segment_order": 0,
                 "vpu_id": fp_entry["vpu_id"],
                 "geometry": line_geom,
             }
@@ -973,6 +996,7 @@ def _build_hydrofabric(
         for ref_idx in div_id_to_ref_indices.get(fp_id, []):
             if reference_flowpaths_data[ref_idx]["virtual_fp_id"] is None:
                 reference_flowpaths_data[ref_idx]["virtual_fp_id"] = fallback_vfp_id
+                reference_flowpaths_data[ref_idx]["segment_order"] = 0
             if reference_flowpaths_data[ref_idx]["mainstem_virtual_fp_id"] is None:
                 reference_flowpaths_data[ref_idx]["mainstem_virtual_fp_id"] = fallback_vfp_id
 
@@ -1076,6 +1100,9 @@ def _build_hydrofabric(
     # When a ref FP serves multiple VFPs (e.g. more VFPs than refs on an NHF
     # flowpath, or a tributary ref overwritten by mainstem processing),
     # duplicate the ref FP row so each VFP has its own entry.
+    vfp_id_to_segment_order: dict[int, int] = {
+        vfp["virtual_fp_id"]: vfp["segment_order"] for vfp in virtual_fp_data
+    }
     covered_vfp_ids: set[int] = {
         entry["virtual_fp_id"] for entry in reference_flowpaths_data if entry.get("virtual_fp_id") is not None
     }
@@ -1092,6 +1119,7 @@ def _build_hydrofabric(
                     "fp_id": donor["fp_id"],
                     "virtual_fp_id": vfp_id,
                     "mainstem_virtual_fp_id": donor.get("mainstem_virtual_fp_id"),
+                    "segment_order": vfp_id_to_segment_order.get(vfp_id, 0),
                     "div_id": div_id,
                 }
             )
@@ -1116,6 +1144,7 @@ def _build_hydrofabric(
         reference_flowpaths_df["mainstem_virtual_fp_id"] = reference_flowpaths_df[
             "mainstem_virtual_fp_id"
         ].astype("Int64")
+        reference_flowpaths_df["segment_order"] = reference_flowpaths_df["segment_order"].astype("Int64")
 
         # Virtual layers
         if virtual_fp_data:

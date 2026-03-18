@@ -246,6 +246,14 @@ def _check_nexus_relational_integrity(
             f"Found {len(fps_without_ref)} fp_ids with no ref FP entry: {sorted(fps_without_ref)[:20]}"
         )
 
+    # segment_order must be non-null for all ref FP rows that have a virtual_fp_id
+    if reference_fp_pl is not None and "segment_order" in reference_fp_pl.columns:
+        vfp_rows = reference_fp_pl.filter(pl.col("virtual_fp_id").is_not_null())
+        null_seg_order = vfp_rows.filter(pl.col("segment_order").is_null())
+        assert len(null_seg_order) == 0, (
+            f"Found {len(null_seg_order)} ref FP rows with virtual_fp_id but null segment_order"
+        )
+
     # Flowpaths without up_nex_id should only be headwaters (no other fp drains to them)
     if "up_nex_id" in fp_pl.columns:
         downstream_targets = set(fp_pl["fp_to_id"].drop_nulls().to_list())
