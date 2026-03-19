@@ -186,7 +186,19 @@ def _combine_hydrofabrics(
             lambda g: (round(g.x, 6), round(g.y, 6))
         )
         dupes = combined_virtual_nexus.duplicated(subset=["_coord"], keep="first")
-        if dupes.any():
+        if dupes.any() and final_virtual_flowpaths is not None:
+            # Build sets of nexuses that must not merge:
+            # 1. Pairs where a VFP uses one as up_nex and the other as dn_nex (cycle)
+            # 2. Nexuses both used as up_virtual_nex_id (divergence)
+            no_merge_pairs: set[frozenset[int]] = set()
+            up_nex_ids: set[int] = set()
+            for _, vfp_row in final_virtual_flowpaths.iterrows():
+                up = vfp_row["up_virtual_nex_id"]
+                dn = vfp_row["dn_virtual_nex_id"]
+                if pd.notna(up):
+                    no_merge_pairs.add(frozenset((int(up), int(dn))))
+                    up_nex_ids.add(int(up))
+
             # Build remap: duplicate nex_id -> surviving nex_id
             vnex_remap: dict[int, int] = {}
             for _coord, group in combined_virtual_nexus.groupby("_coord"):
@@ -194,10 +206,19 @@ def _combine_hydrofabrics(
                     continue
                 keep_id = group["virtual_nex_id"].iloc[0]
                 for nex_id in group["virtual_nex_id"].iloc[1:]:
+                    if frozenset((nex_id, keep_id)) in no_merge_pairs:
+                        continue
+                    if nex_id in up_nex_ids and keep_id in up_nex_ids:
+                        continue
                     vnex_remap[nex_id] = keep_id
-            combined_virtual_nexus = combined_virtual_nexus[~dupes].copy()
+                    if nex_id in up_nex_ids:
+                        up_nex_ids.add(keep_id)
+            merged_ids = set(vnex_remap.keys())
+            combined_virtual_nexus = combined_virtual_nexus[
+                ~combined_virtual_nexus["virtual_nex_id"].isin(merged_ids)
+            ].copy()
             # Rewrite VFP references in the combined virtual flowpaths
-            if final_virtual_flowpaths is not None and vnex_remap:
+            if vnex_remap:
                 final_virtual_flowpaths["dn_virtual_nex_id"] = final_virtual_flowpaths[
                     "dn_virtual_nex_id"
                 ].map(lambda x: vnex_remap.get(x, x))
@@ -283,6 +304,177 @@ def _combine_hydrofabrics(
         result["virtual_nexus"] = final_virtual_nexus
 
     return result
+
+
+def _check_network_cycles(
+    fp_gdf: gpd.GeoDataFrame,
+    nex_gdf: gpd.GeoDataFrame,
+    vfp_gdf: gpd.GeoDataFrame | None,
+    vnex_gdf: gpd.GeoDataFrame | None,
+    n_outlets: int = 100,
+    min_flowpaths: int = 10,
+    seed: int = 42,
+) -> None:
+    """Check flowpath and virtual flowpath networks for cycles.
+
+    Samples the largest outlets (by flowpath count) and builds directed graphs
+    from their flowpath/nexus connectivity to detect strongly connected
+    components (cycles) using rustworkx.
+
+    Parameters
+    ----------
+    fp_gdf : gpd.GeoDataFrame
+        Flowpaths layer
+    nex_gdf : gpd.GeoDataFrame
+        Nexus layer
+    vfp_gdf : gpd.GeoDataFrame | None
+        Virtual flowpaths layer
+    vnex_gdf : gpd.GeoDataFrame | None
+        Virtual nexus layer
+    n_outlets : int
+        Number of outlets to sample (default 100)
+    min_flowpaths : int
+        Minimum flowpath count per outlet to be eligible for sampling (default 10)
+    seed : int
+        Random seed for reproducibility
+
+    Raises
+    ------
+    ValueError
+        If cycles are detected in either network
+    """
+    import random
+
+    logger = logging.getLogger(__name__)
+
+    # Identify outlets: flowpaths with no downstream (fp_to_id is null)
+    outlet_col = "fp_to_id" if "fp_to_id" in fp_gdf.columns else None
+    if outlet_col is None:
+        logger.warning("No fp_to_id column found, skipping cycle check")
+        return
+
+    # Build outlet -> upstream fp_ids using the graph
+    fp_to_id_map = dict(zip(fp_gdf["fp_id"].astype(int), fp_gdf["fp_to_id"], strict=False))
+    # Reverse map: downstream_fp -> list of upstream fps
+    upstream_map: dict[int, list[int]] = {}
+    for fp_id, to_id in fp_to_id_map.items():
+        if pd.notna(to_id):
+            upstream_map.setdefault(int(to_id), []).append(fp_id)
+
+    outlets = fp_gdf[fp_gdf["fp_to_id"].isna()]["fp_id"].astype(int).tolist()
+
+    # Count flowpaths per outlet via BFS
+    outlet_sizes: dict[int, int] = {}
+    for outlet in outlets:
+        count = 0
+        stack = [outlet]
+        while stack:
+            node = stack.pop()
+            count += 1
+            stack.extend(upstream_map.get(node, []))
+        outlet_sizes[outlet] = count
+
+    # Filter outlets with enough flowpaths, then sample
+    eligible = [o for o, c in outlet_sizes.items() if c >= min_flowpaths]
+    rng = random.Random(seed)
+    sampled = rng.sample(eligible, min(n_outlets, len(eligible)))
+    logger.info(f"Cycle check: sampling {len(sampled)} outlets (min {min_flowpaths} fps each)")
+
+    # Collect all fp_ids in sampled outlets
+    sampled_fp_ids: set[int] = set()
+    for outlet in sampled:
+        stack = [outlet]
+        while stack:
+            node = stack.pop()
+            sampled_fp_ids.add(node)
+            stack.extend(upstream_map.get(node, []))
+
+    # --- Flowpath network ---
+    fp = fp_gdf[fp_gdf["fp_id"].astype(int).isin(sampled_fp_ids)]
+    nex_ids_needed = set(fp["dn_nex_id"].dropna().astype(int)) | set(fp["up_nex_id"].dropna().astype(int))
+    nex = nex_gdf[nex_gdf["nex_id"].astype(int).isin(nex_ids_needed)]
+
+    if len(fp) > 0:
+        graph = rx.PyDiGraph()
+        node_map: dict[tuple[str, int], int] = {}
+
+        def get_or_add(key: tuple[str, int]) -> int:
+            if key not in node_map:
+                node_map[key] = graph.add_node(key)
+            return node_map[key]
+
+        for fp_id, dn_nex, up_nex in zip(
+            fp["fp_id"].astype(int), fp["dn_nex_id"], fp["up_nex_id"], strict=False
+        ):
+            v = get_or_add(("fp", int(fp_id)))
+            if pd.notna(dn_nex):
+                graph.add_edge(v, get_or_add(("nex", int(dn_nex))), None)
+            if pd.notna(up_nex):
+                graph.add_edge(get_or_add(("nex", int(up_nex))), v, None)
+
+        for nex_id, dn_fp in zip(nex["nex_id"].astype(int), nex["dn_fp_id"], strict=False):
+            if pd.notna(dn_fp):
+                graph.add_edge(get_or_add(("nex", int(nex_id))), get_or_add(("fp", int(dn_fp))), None)
+
+        sccs = [scc for scc in rx.strongly_connected_components(graph) if len(scc) > 1]
+        if sccs:
+            cycle_fps = [sorted(graph[n][1] for n in scc if graph[n][0] == "fp") for scc in sccs]
+            raise ValueError(f"Flowpath network has {len(sccs)} cycle(s): {cycle_fps}")
+        logger.info(f"Flowpath network DAG check passed ({len(fp)} flowpaths)")
+
+    # --- Virtual flowpath network ---
+    if vfp_gdf is None or vnex_gdf is None or vfp_gdf.empty or vnex_gdf.empty:
+        return
+
+    # Filter VFPs by sampled fp_ids via reference_flowpaths div_id isn't available,
+    # but VFPs share vpu_id with their parent flowpaths. Use the nexus overlap instead:
+    # a VFP is in scope if its dn_virtual_nex_id or up_virtual_nex_id is referenced
+    # by a flowpath in sampled_fp_ids. Simpler: just use all VFPs for sampled VPUs.
+    sampled_vpus = set(fp["vpu_id"].unique())
+    vfp = vfp_gdf[vfp_gdf["vpu_id"].isin(sampled_vpus)]
+    vnex = vnex_gdf[vnex_gdf["vpu_id"].isin(sampled_vpus)]
+
+    if len(vfp) == 0:
+        return
+
+    vgraph = rx.PyDiGraph()
+    vnode_map: dict[tuple[str, int], int] = {}
+
+    def vget_or_add(key: tuple[str, int]) -> int:
+        if key not in vnode_map:
+            vnode_map[key] = vgraph.add_node(key)
+        return vnode_map[key]
+
+    for vfp_id, dn_nex, up_nex in zip(
+        vfp["virtual_fp_id"].astype(int),
+        vfp["dn_virtual_nex_id"].astype(int),
+        vfp["up_virtual_nex_id"],
+        strict=False,
+    ):
+        v = vget_or_add(("vfp", int(vfp_id)))
+        vgraph.add_edge(v, vget_or_add(("nex", int(dn_nex))), None)
+        if pd.notna(up_nex):
+            vgraph.add_edge(vget_or_add(("nex", int(up_nex))), v, None)
+
+    for nex_id, dn_fp in zip(vnex["virtual_nex_id"].astype(int), vnex["dn_virtual_fp_id"], strict=False):
+        if pd.notna(dn_fp):
+            vgraph.add_edge(vget_or_add(("nex", int(nex_id))), vget_or_add(("vfp", int(dn_fp))), None)
+
+    vsccs = [scc for scc in rx.strongly_connected_components(vgraph) if len(scc) > 1]
+    if vsccs:
+        cycle_vfps = [sorted(vgraph[n][1] for n in scc if vgraph[n][0] == "vfp") for scc in vsccs]
+        raise ValueError(f"Virtual flowpath network has {len(vsccs)} cycle(s): {cycle_vfps}")
+    logger.info(f"Virtual flowpath network DAG check passed ({len(vfp)} VFPs)")
+
+    # --- Divergence check: no nexus should feed multiple downstream VFPs ---
+    up_nex_counts = vfp["up_virtual_nex_id"].dropna().astype(int).value_counts()
+    divergent = up_nex_counts[up_nex_counts > 1]
+    if len(divergent) > 0:
+        raise ValueError(
+            f"Virtual flowpath network has {len(divergent)} divergent nexus(es) "
+            f"(up_virtual_nex_id shared by multiple VFPs): {divergent.index.tolist()[:20]}"
+        )
+    logger.info(f"Virtual flowpath network divergence check passed ({len(vfp)} VFPs)")
 
 
 def _crosswalk_nexus(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
