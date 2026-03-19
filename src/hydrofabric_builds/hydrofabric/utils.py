@@ -516,15 +516,19 @@ def _crosswalk_reference(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFra
     gpd.GeoDataFrame
         crosswalked gdf
     """
-    gdf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
+    hf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
 
     # prefer casting to int as this is correct type. Handle null flowpaths and alert user
     try:
         gdf["ref_fp_id"] = pd.to_numeric(gdf["ref_fp_id"]).astype(np.int64)
     except pd.errors.IntCastingNaNError:
-        gdf_ref["ref_fp_id"] = gdf_ref["ref_fp_id"].astype(str)
+        hf_ref["ref_fp_id"] = hf_ref["ref_fp_id"].astype(str)
         logger.info(
             "NOTE: Layer to be crosswalked has null reference flowpath associations. Casting to string for join. Check if this is unexpected behavior."
         )
 
-    return gdf.merge(gdf_ref, on="ref_fp_id", how="left")
+    if "segment_order" in hf_ref.columns:
+        best_idx = hf_ref.groupby("ref_fp_id")["segment_order"].idxmax()
+        hf_ref = hf_ref.loc[best_idx]
+
+    return gdf.merge(hf_ref, on="ref_fp_id", how="left")
