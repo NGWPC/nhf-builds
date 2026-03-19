@@ -312,7 +312,7 @@ def _check_network_cycles(
     vfp_gdf: gpd.GeoDataFrame | None,
     vnex_gdf: gpd.GeoDataFrame | None,
     n_outlets: int = 100,
-    min_flowpaths: int = 10,
+    min_flowpaths: int = 100,
     seed: int = 42,
 ) -> None:
     """Check flowpath and virtual flowpath networks for cycles.
