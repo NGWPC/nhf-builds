@@ -33,6 +33,7 @@ class Context:
     fp_lookup: dict[str, dict[str, Any]]
     div_ids: set[str]
     threshold: float
+    headwater_virtual_length_threshold: float
 
 
 @dataclass
@@ -162,7 +163,13 @@ def traverse_and_aggregate(ctx: Context, st: State, start_id: str) -> None:
 def handle_headwater(ctx: Context, st: State, curr_id: str, fp: FPInfo) -> None:
     """Handle a headwater flowpath with no upstreams."""
     if curr_id in ctx.div_ids:
-        if curr_id not in st.aggregation_set:
+        length_km = ctx.fp_lookup[curr_id].get("lengthkm", float("inf"))
+        if fp.order == 1 and fp.to_id != "0" and length_km < ctx.headwater_virtual_length_threshold:
+            st.non_nextgen.add(curr_id)
+            if curr_id not in st.non_nextgen_virtual_sources:
+                st.non_nextgen_virtual_sources.add(curr_id)
+                st.non_nextgen_virtual_pairs.append((curr_id, fp.to_id))
+        elif curr_id not in st.aggregation_set:
             st.independent.add(curr_id)
     else:
         st.non_nextgen.add(curr_id)
@@ -416,6 +423,7 @@ def _trace_stack(
         fp_lookup=partition_data["fp_lookup"],
         div_ids=div_ids,
         threshold=cfg.build.divide_aggregation_threshold,
+        headwater_virtual_length_threshold=cfg.build.headwater_virtual_length_threshold,
     )
 
     st = State(queue=[start_id])

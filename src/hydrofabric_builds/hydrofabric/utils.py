@@ -1,8 +1,10 @@
 """A utils file for common hydrofabric building functions"""
 
+from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rustworkx as rx
 
@@ -137,6 +139,30 @@ def _combine_hydrofabrics(
     combined_nexus = pd.concat(all_nexus, ignore_index=True)
     combined_reference_flowpaths = pd.concat(all_reference_flowpaths, ignore_index=True)
 
+    # Merge coincident nexuses from different outlets, but only when they
+    # share the same dn_fp_id (or both are null outlets). Nexuses at the same
+    # location with different downstream flowpaths are distinct junctions.
+    combined_nexus["_coord"] = combined_nexus.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
+    combined_nexus["_dn_key"] = combined_nexus["dn_fp_id"].astype("Int64").fillna(-1)
+    nex_dupes = combined_nexus.duplicated(subset=["_coord", "_dn_key"], keep="first")
+    if nex_dupes.any():
+        nex_remap: dict[int, int] = {}
+        for (_coord, _dn_key), group in combined_nexus.groupby(["_coord", "_dn_key"]):
+            if len(group) <= 1:
+                continue
+            keep_id = group["nex_id"].iloc[0]
+            for nex_id in group["nex_id"].iloc[1:]:
+                nex_remap[nex_id] = keep_id
+        combined_nexus = combined_nexus[~nex_dupes].copy()
+        if nex_remap:
+            combined_flowpaths["dn_nex_id"] = combined_flowpaths["dn_nex_id"].map(
+                lambda x: nex_remap.get(x, x) if pd.notna(x) else x
+            )
+            combined_flowpaths["up_nex_id"] = combined_flowpaths["up_nex_id"].map(
+                lambda x: nex_remap.get(x, x) if pd.notna(x) else x
+            )
+    combined_nexus = combined_nexus.drop(columns=["_coord", "_dn_key"])
+
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
     final_nexus = gpd.GeoDataFrame(combined_nexus)
@@ -152,6 +178,30 @@ def _combine_hydrofabrics(
 
     if all_virtual_nexus:
         combined_virtual_nexus = pd.concat(all_virtual_nexus, ignore_index=True)
+        # Merge coincident nexuses from different outlets
+        combined_virtual_nexus["_coord"] = combined_virtual_nexus.geometry.apply(
+            lambda g: (round(g.x, 6), round(g.y, 6))
+        )
+        dupes = combined_virtual_nexus.duplicated(subset=["_coord"], keep="first")
+        if dupes.any():
+            # Build remap: duplicate nex_id -> surviving nex_id
+            vnex_remap: dict[int, int] = {}
+            for _coord, group in combined_virtual_nexus.groupby("_coord"):
+                if len(group) <= 1:
+                    continue
+                keep_id = group["virtual_nex_id"].iloc[0]
+                for nex_id in group["virtual_nex_id"].iloc[1:]:
+                    vnex_remap[nex_id] = keep_id
+            combined_virtual_nexus = combined_virtual_nexus[~dupes].copy()
+            # Rewrite VFP references in the combined virtual flowpaths
+            if final_virtual_flowpaths is not None and vnex_remap:
+                final_virtual_flowpaths["dn_virtual_nex_id"] = final_virtual_flowpaths[
+                    "dn_virtual_nex_id"
+                ].map(lambda x: vnex_remap.get(x, x))
+                final_virtual_flowpaths["up_virtual_nex_id"] = final_virtual_flowpaths[
+                    "up_virtual_nex_id"
+                ].map(lambda x: vnex_remap.get(x, x) if pd.notna(x) else x)
+        combined_virtual_nexus = combined_virtual_nexus.drop(columns=["_coord"])
         final_virtual_nexus = gpd.GeoDataFrame(combined_virtual_nexus)
 
     # if all_reference_virtual_flowpaths:
@@ -174,12 +224,36 @@ def _combine_hydrofabrics(
             final_virtual_flowpaths = final_virtual_flowpaths.to_crs(crs)
         elif final_virtual_flowpaths.crs is None:
             final_virtual_flowpaths = final_virtual_flowpaths.set_crs(crs)
+    else:
+        # Some areas (e.g. Alaska) produce no virtual flowpaths; create empty GeoDataFrame with expected schema
+        final_virtual_flowpaths = gpd.GeoDataFrame(
+            columns=[
+                "virtual_fp_id",
+                "dn_virtual_nex_id",
+                "length_km",
+                "area_sqkm",
+                "percentage_area_contribution",
+                "vpu_id",
+                "geometry",
+            ],
+            crs=crs,
+        )
 
     if final_virtual_nexus is not None:
         if final_virtual_nexus.crs is not None and final_virtual_nexus.crs != crs:
             final_virtual_nexus = final_virtual_nexus.to_crs(crs)
         elif final_virtual_nexus.crs is None:
             final_virtual_nexus = final_virtual_nexus.set_crs(crs)
+    else:
+        final_virtual_nexus = gpd.GeoDataFrame(
+            columns=[
+                "virtual_nex_id",
+                "dn_virtual_fp_id",
+                "vpu_id",
+                "geometry",
+            ],
+            crs=crs,
+        )
 
     # Line merge flowpaths to remove multilinestring geometries
     final_flowpaths = final_flowpaths.assign(geometry=final_flowpaths.line_merge())
@@ -206,3 +280,47 @@ def _combine_hydrofabrics(
         result["virtual_nexus"] = final_virtual_nexus
 
     return result
+
+
+def _crosswalk_nexus(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Crosswalk using flowpath and virtual flowpath to get dn_nex_id / virtual_dn_nex_id
+
+    Parameters
+    ----------
+    hf_path : Path
+        hydrofabric
+    gdf : gpd.GeoDataFrame
+        dataframe to crosswalk to
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        crosswalked gdf
+    """
+    gdf_fp = gpd.read_file(hf_path, layer="flowpaths")
+    gdf_vfp = gpd.read_file(hf_path, layer="virtual_flowpaths")
+
+    gdf = gdf.merge(gdf_fp[["fp_id", "dn_nex_id"]], on="fp_id", how="left")
+    gdf = gdf.merge(gdf_vfp[["virtual_fp_id", "dn_virtual_nex_id"]], on="virtual_fp_id", how="left")
+
+    return gdf
+
+
+def _crosswalk_reference(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Crosswalk a gdf to refernce flowpaths to get fp_id and virtual_fp_id
+
+    Parameters
+    ----------
+    hf_path : Path
+        hydrofabric
+    gdf : gpd.GeoDataFrame
+        dataframe to crosswalk to
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        crosswalked gdf
+    """
+    gdf_ref = gpd.read_file(hf_path, layer="reference_flowpaths")
+    gdf["ref_fp_id"] = pd.to_numeric(gdf["ref_fp_id"]).astype(np.int64)
+    return gdf.merge(gdf_ref, on="ref_fp_id", how="left")

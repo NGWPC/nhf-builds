@@ -27,6 +27,9 @@ Below are the data files needed for running a full build of the NHF dataset and 
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
 - `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
+
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
 uv sync --all-extras
@@ -42,7 +45,7 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 - `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
-- TBD
+- None needed
 
 4. Flowpath Attributes
 - None needed
@@ -53,7 +56,11 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 - `aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/ak/divide-attributes/glaciers`
 
 6. NHD
-- TBD
+- `aws s3 cp s3://edfs-data/nhd/nwm_flows_alaska_nwmv3_ID_v2.gpkg ./data/reference/nwm_flows_alaska_nwmv3_ID_v2.gpkg`
+- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
+
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
 
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
@@ -70,7 +77,7 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 - `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
-- TBD
+- None needed
 
 4. Flowpath Attributes
 - None needed
@@ -80,7 +87,11 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 - `aws s3 sync s3://edfs-data/attributes/gw/hi ./data/hi/divide-attributes/gw`
 
 6. NHD
-- TBD
+- `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
+- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
+
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
 
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
@@ -97,7 +108,7 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 - `aws s3 sync s3://edfs-data/gages/ ./data/gages`
 
 3. Reference Reservoirs
-- TBD
+- None needed
 
 4. Flowpath Attributes
 - None needed
@@ -107,7 +118,11 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 - `aws s3 sync s3://edfs-data/attributes/gw/prvi ./data/prvi/divide-attributes/gw`
 
 6. NHD
-- TBD
+- `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
+- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
+
+7. Lakes
+- `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
 
 To run the NHF build, you can use the example config, or make your own based on it. The full run commands are:
 ```sh
