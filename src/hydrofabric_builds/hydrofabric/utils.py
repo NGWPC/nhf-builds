@@ -464,6 +464,16 @@ def _check_network_cycles(
         raise ValueError(f"Virtual flowpath network has {len(vsccs)} cycle(s): {cycle_vfps}")
     logger.info(f"Virtual flowpath network DAG check passed ({len(vfp)} VFPs)")
 
+    # --- Divergence check: no nexus should feed multiple downstream VFPs ---
+    up_nex_counts = vfp["up_virtual_nex_id"].dropna().astype(int).value_counts()
+    divergent = up_nex_counts[up_nex_counts > 1]
+    if len(divergent) > 0:
+        raise ValueError(
+            f"Virtual flowpath network has {len(divergent)} divergent nexus(es) "
+            f"(up_virtual_nex_id shared by multiple VFPs): {divergent.index.tolist()[:20]}"
+        )
+    logger.info(f"Virtual flowpath network divergence check passed ({len(vfp)} VFPs)")
+
 
 def _crosswalk_nexus(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Crosswalk using flowpath and virtual flowpath to get dn_nex_id / virtual_dn_nex_id
