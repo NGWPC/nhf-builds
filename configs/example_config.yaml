@@ -378,15 +378,15 @@ fp_crosswalk:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
 
-<<<<<<< HEAD
 # --------------------------------------------------
 # validate hydrofabric
 # --------------------------------------------------
 validate_hf:
   calibration_gages_path: data/validate_hf/calibratable_gages.csv
-=======
 
+#---------------------------------------------------
 # lakes
+#---------------------------------------------------
 lakes:
   associate_flowpaths: True # this will run the flowpath association
   input_path: "data/lakes/input/nwm_lakes_sconus_input.gpkg"
@@ -399,4 +399,3 @@ lakes:
   attrib_src_path: "data/lakes/input/nwm_patch_conus_nextgen.gpkg" # file to get attributes from
   attrib_src_layer: "lakes"
   attrib_src_key: "lake_id"
->>>>>>> main
