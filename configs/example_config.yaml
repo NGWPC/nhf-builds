@@ -372,3 +372,9 @@ fp_crosswalk:
   outputs:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
+
+# --------------------------------------------------
+# validate hydrofabric
+# --------------------------------------------------
+validate_hf:
+  calibration_gages_path: data/validate_hf/calibratable_gages.csv

@@ -14,6 +14,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     FlowpathAttributesModelConfig,
     FPCrosswalkConfig,
     GagesConfig,
+    ValidateHFConfig,
     WaterbodiesConfig,
 )
 
@@ -92,6 +93,10 @@ class HFConfig(BaseModel):
 
     fp_crosswalk: FPCrosswalkConfig = Field(
         default=FPCrosswalkConfig(), description="Settings for building flowpath crosswalks"
+    )
+
+    validate_hf: ValidateHFConfig = Field(
+        default=ValidateHFConfig(), description="settings for validating hf"
     )
 
     @classmethod

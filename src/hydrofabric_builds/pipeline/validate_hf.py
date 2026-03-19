@@ -10,18 +10,17 @@ from pydantic import ValidationError
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.schemas.validate_hydrofabric import (
+    CRS,
     Divides,
+    Domain,
     Flowpaths,
-    Gages_AK,
-    Gages_CONUS,
-    Gages_HI,
-    Gages_PRVI,
+    Layer,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def validate_divides(gpkg_path_filename: Path) -> list[dict[Any, Any]]:
+def validate_layer(gpkg_path_filename: Path, layer_name: Layer, crs: CRS) -> list[dict[Any, Any]]:
     """Validate the divides layer using Pydantic and check for NaNs
 
     Parameters
@@ -29,94 +28,91 @@ def validate_divides(gpkg_path_filename: Path) -> list[dict[Any, Any]]:
     gpkg_path_filename : Path
         full path and filename of the NHF geopackage
 
+    layer_name : Layer
+        Name of geopackage layer for divides or flowpaths
+
+    crs : CRS
+        EPSG string for the CRS
+
     Returns
     -------
     list
         list of dictionaries containing divide validation
     """
+    # Read layer and convert from geo data frame to a Pandas data frame
     try:
-        divides = gpd.read_file(gpkg_path_filename, layer="divides")
+        layer = gpd.read_file(gpkg_path_filename, layer=layer_name.value)
     except FileNotFoundError:
-        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
+        error_str = {"Error": f"The file {gpkg_path_filename} was not found."}
+        logger.warning(error_str)
+        return [error_str]
+    except ValueError:
+        error_str = {"Error": f"Unable to read {layer_name.value} layer from {gpkg_path_filename}"}
+        logger.warning(error_str)
+        return [error_str]
+    layer = pd.DataFrame(layer)
 
-    divides = pd.DataFrame(divides)
+    # Get CRS and set the domain name
+    if crs == CRS.CONUS:
+        domain = Domain.CONUS.value
+    elif crs == CRS.AK:
+        domain = Domain.AK.value
+    elif crs == CRS.HI:
+        domain = Domain.HI.value
+    elif crs == CRS.PRVI:
+        domain = Domain.PRVI.value
 
-    divides_out: list[dict[str, int | list[str]]] = []
+    # Create empty list to store output items
+    layer_out: list[dict[str, int | list[str]]] = []
 
-    divides_out.append({"Total number of divide rows": len(divides)})
+    # Get total number of rows in layer
+    layer_out.append({f"Total number of {layer_name.value} rows": len(layer)})
 
-    rows_with_nan = divides[divides.isna().any(axis=1)]
-    divides_out.append({"Total number of rows with NaNs": len(rows_with_nan)})
+    # Get total number of rows with NaNs
+    rows_with_nan = layer[layer.isna().any(axis=1)]
+    layer_out.append({f"Total number of {layer_name.value} rows with NaNs": len(rows_with_nan)})
 
-    nan_counts = divides.isna().sum().to_dict()
-    divides_out.append({"Number of NaNs per attribute": nan_counts})
+    # Get NaN counts by attribute
+    nan_counts = layer.isna().sum().to_dict()
+    layer_out.append({"Number of NaNs per attribute": nan_counts})
 
-    validator = Pandantic(schema=Divides)
+    # Use Pandantic to validate the data frames with the Pydantic schema.
+    if layer_name == Layer.DIVIDES:
+        # Add the domain name to the dataframe to select the proper lat/lon ranges per domain
+        layer["domain"] = domain
+        pydantic_schema = Divides
+        logger.info("Validate divide attributes format")
+    elif layer_name == Layer.FLOWPATHS:
+        pydantic_schema = Flowpaths
+        logger.info("Validate flowpaths attributes format")
 
-    logger.info("Validate divide attributes format")
+    # Empty list to collect validation errors
     validation_errors = []
+
+    validator = Pandantic(schema=pydantic_schema)
+
     try:
-        validator.validate(dataframe=divides, errors="raise")
+        validator.validate(dataframe=layer, errors="raise")
     except ValidationError as e:
         error_details = e.errors()
         for error in error_details:
             validation_errors.append(f"{error['loc']}: {error['msg']}; value is {error['input']}")
-    divides_out.append({"Validate divide attributes format": validation_errors})
-    return divides_out
+    layer_out.append({f"Validate {layer_name.value} attributes format": validation_errors})
+
+    return layer_out
 
 
-def validate_flowpaths(gpkg_path_filename: Path) -> list[dict[Any, Any]]:
-    """Validate the flowpath layer using Pydantic and check for NaNs
-
-    Parameters
-    ----------
-    gpkg_path_filename : Path
-        full path and filename of the NHF geopackage
-
-    Returns
-    -------
-    list
-        list of dictionaries containing divide validation
-    """
-    try:
-        flowpaths = gpd.read_file(gpkg_path_filename, layer="flowpaths")
-    except FileNotFoundError:
-        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
-    flowpaths = pd.DataFrame(flowpaths)
-
-    flowpaths_out: list[dict[str, int | list[str]]] = []
-
-    flowpaths_out.append({"Total number of flowpaths rows": len(flowpaths)})
-
-    rows_with_nan = flowpaths[flowpaths.isna().any(axis=1)]
-    flowpaths_out.append({"Total number of flowpaths rows with NaNs": len(rows_with_nan)})
-
-    nan_counts = flowpaths.isna().sum().to_dict()
-    flowpaths_out.append({"Number of NaNs per attribute": nan_counts})
-
-    validator = Pandantic(schema=Flowpaths)
-
-    validation_errors = []
-    try:
-        validator.validate(dataframe=flowpaths, errors="raise")
-    except ValidationError as e:
-        error_details = e.errors()
-        for error in error_details:
-            validation_errors.append(f"{error['loc']}:{error['msg']}; value is {error['input']}")
-
-    flowpaths_out.append({"Validate flowpaths attributes format": validation_errors})
-    return flowpaths_out
-
-
-def validate_gages(gpkg_path_filename: Path, crs: str) -> list:
+def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list:
     """Check NHF gages against the list of ~1600 gages
 
     Parameters
     ----------
     gpkg_path_filename : Path
         full path and filename of the NHF geopackage
-    crs: str
+    crs : CRS
         CRS EPSG string
+    gages_list : Path
+        path and filename for calibratable gages list in csv format
 
     Returns
     -------
@@ -126,23 +122,49 @@ def validate_gages(gpkg_path_filename: Path, crs: str) -> list:
     try:
         gages_layer = gpd.read_file(gpkg_path_filename, layer="Gages")
     except FileNotFoundError:
-        logger.warning(f"Error: The file {gpkg_path_filename} was not found.")
+        error_str = f"Error: The file {gpkg_path_filename} was not found."
+        logger.warning(error_str)
+        return [error_str]
+    except ValueError:
+        error_str = f"Error reading gages layer from {gpkg_path_filename}"
+        logger.warning(error_str)
+        return [error_str]
+
     gages_layer = pd.DataFrame(gages_layer)
 
-    gages_nwm = gages_layer["site_no"].to_list()
+    gages_nhf = gages_layer["site_no"].to_list()
 
-    if crs == "EPSG:5070":
-        gages_calibratable = Gages_CONUS.gages
-    elif crs == "EPSG:3338":
-        gages_calibratable = Gages_AK.gages
-    elif crs == "EPSG:32604":
-        gages_calibratable = Gages_HI.gages
-    elif crs == "EPSG:6566":
-        gages_calibratable = Gages_PRVI.gages
+    calibratable_gages = pd.read_csv(gages_list)
 
-    diff = set(gages_calibratable) - set(gages_nwm)
+    if crs.value == CRS.CONUS.value:
+        calibratable_gages_domain: list = calibratable_gages[
+            calibratable_gages["domain"] == Domain.CONUS.value
+        ]["gage_id"].to_list()
+    elif crs.value == CRS.AK.value:
+        calibratable_gages_domain = calibratable_gages[calibratable_gages["domain"] == Domain.AK.value][
+            "gage_id"
+        ].to_list()
+    elif crs.value == CRS.HI.value:
+        calibratable_gages_domain = calibratable_gages[calibratable_gages["domain"] == Domain.HI.value][
+            "gage_id"
+        ].to_list()
+    elif crs.value == CRS.PRVI.value:
+        calibratable_gages_domain = calibratable_gages[calibratable_gages["domain"] == Domain.PRVI.value][
+            "gage_id"
+        ].to_list()
+
+    gages_out = []
+
+    diff = set(calibratable_gages_domain) - set(gages_nhf)
     diffs_list = list(diff)
-    return diffs_list
+    gages_out.append({"Missing Gages": diffs_list})
+
+    missing_fp = gages_layer[gages_layer["fp_id"].isna() & gages_layer["virtual_fp_id"].isna()][
+        "site_no"
+    ].to_list()
+    gages_out.append({"Gages with no flowpath or vitual flowpath": missing_fp})
+
+    return gages_out
 
 
 def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
@@ -169,11 +191,20 @@ def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
     path = cfg.output_dir
     gpkg_file_root = cfg.output_name.stem
     crs = cfg.crs
+    calibration_gages = cfg.validate_hf.calibration_gages_path
 
-    divides = validate_divides(file_name)
-    flowpaths = validate_flowpaths(file_name)
-    gages = validate_gages(file_name, crs)
-    output_items = {"Divides": divides, "Flowpaths": flowpaths, "Missing Gages": gages}
+    # Check if CRS is valid
+    try:
+        crs_enum = CRS(crs)
+    except:
+        error_str = f"CRS {crs} is not valid"
+        logger.warning(error_str)
+        return {"validation": error_str}
+
+    divides = validate_layer(file_name, Layer.DIVIDES, crs_enum)
+    flowpaths = validate_layer(file_name, Layer.FLOWPATHS, crs_enum)
+    gages = validate_gages(file_name, crs_enum, calibration_gages)
+    output_items = {"Divides": divides, "Flowpaths": flowpaths, "Gages": gages}
 
     with open(f"{path}/{gpkg_file_root}_validation.json", "w") as file:
         json.dump(output_items, file, indent=4)

@@ -951,3 +951,9 @@ class FPCrosswalkConfig(BaseModel):
         self.outputs.matches_gpkg = _resolve(self.outputs.matches_gpkg, base)
 
         return self
+
+
+class ValidateHFConfig(BaseModel):
+    """config class for the hf_validate block in the YAML"""
+
+    calibration_gages_path: Path = Path("data/validate_hf/calibratable_gages.csv")

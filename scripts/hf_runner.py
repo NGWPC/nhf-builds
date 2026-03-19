@@ -207,7 +207,8 @@ def main() -> int:
         if config.tasks.fp_crosswalk:
             runner.run_task(task_id="fp_crosswalk", python_callable=build_fp_crosswalk, op_kwargs={})
 
-        runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
+        if config.tasks.validate_hf:
+            runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
 
         print("\n" + "=" * 60)
         print("Pipeline completed")
