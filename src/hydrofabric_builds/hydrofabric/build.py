@@ -1049,6 +1049,17 @@ def _build_hydrofabric(
                     if candidate != vfp_entry["up_virtual_nex_id"]:
                         vfp_entry["dn_virtual_nex_id"] = candidate
 
+    # Remove vnex_to_dn_vfp entries that would create cycles:
+    # if nexus N routes to VFP V, but VFP V drains into nexus N, that's a cycle.
+    vfp_dn_nex_lookup: dict[int, int] = {
+        vfp_e["virtual_fp_id"]: vfp_e["dn_virtual_nex_id"] for vfp_e in virtual_fp_data
+    }
+    cycle_nex_ids = [
+        nex_id for nex_id, vfp_id in vnex_to_dn_vfp.items() if vfp_dn_nex_lookup.get(vfp_id) == nex_id
+    ]
+    for nex_id in cycle_nex_ids:
+        del vnex_to_dn_vfp[nex_id]
+
     # Set dn_virtual_fp_id on all virtual nexus records
     for vnex_entry in virtual_nexus_data:
         vnex_entry["dn_virtual_fp_id"] = vnex_to_dn_vfp.get(vnex_entry["virtual_nex_id"])
