@@ -224,6 +224,12 @@ gages:
         path: routelink/RouteLink_AK_EPSG4326.gpkg
         gage_source_crs: EPSG:4326
         id_col_name: gages
+      other:
+        path: other/gage_xy_v1.1.csv
+        gage_source_crs: EPSG:4326
+        id_col_name: site_no
+        x_col_name: lon
+        y_col_name: lat
     target:
       crs: EPSG:3338
       snap_tolerance_m: 100.0

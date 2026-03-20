@@ -310,7 +310,7 @@ gages:
         gage_source_crs: EPSG:4326
         id_col_name: site_no
       other:
-        path: other/gage_xy_v1.csv
+        path: other/gage_xy_v1.1.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
         x_col_name: lon
