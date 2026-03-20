@@ -118,7 +118,7 @@ class Divides(BaseModel):
                     f"lat should be greater than {LatLonLimits.LAT_MIN_CONUS.value} and less than {LatLonLimits.LAT_MAX_CONUS.value} for CONUS"
                 )
         elif info.data["domain"] == Domain.AK.value:
-            if v < LatLonLimits.LAT_MIN_AK.value or v > LatLonLimits.LAT_MAX_CONUS.value:
+            if v < LatLonLimits.LAT_MIN_AK.value or v > LatLonLimits.LAT_MAX_AK.value:
                 raise ValueError(
                     f"lat should be greater than {LatLonLimits.LAT_MIN_AK.value} and less than {LatLonLimits.LAT_MAX_AK.value} for AK"
                 )
@@ -144,19 +144,19 @@ class Divides(BaseModel):
                     f"lon should be greater than {LatLonLimits.LON_MIN_CONUS.value} and less than {LatLonLimits.LON_MAX_CONUS.value} for CONUS"
                 )
         elif info.data["domain"] == Domain.AK.value:
-            if v < LatLonLimits.LON_MIN_AK.value or v > LatLonLimits.LON_MAX_CONUS.value:
+            if v < LatLonLimits.LON_MIN_AK.value or v > LatLonLimits.LON_MAX_AK.value:
                 raise ValueError(
-                    f"lon should be greater than {LatLonLimits.LAT_MIN_AK.value} and less than {LatLonLimits.LAT_MAX_AK.value} for AK"
+                    f"lon should be greater than {LatLonLimits.LON_MIN_AK.value} and less than {LatLonLimits.LON_MAX_AK.value} for AK"
                 )
         elif info.data["domain"] == Domain.HI.value:
             if v < LatLonLimits.LON_MIN_HI.value or v > LatLonLimits.LON_MAX_HI.value:
                 raise ValueError(
-                    f"lon should be greater than {LatLonLimits.LAT_MIN_HI.value} and less than {LatLonLimits.LAT_MAX_HI.value} for HI"
+                    f"lon should be greater than {LatLonLimits.LON_MIN_HI.value} and less than {LatLonLimits.LON_MAX_HI.value} for HI"
                 )
         elif info.data["domain"] == Domain.PRVI.value:
             if v < LatLonLimits.LON_MIN_PRVI.value or v > LatLonLimits.LON_MAX_PRVI.value:
                 raise ValueError(
-                    f"lon should be greater than {LatLonLimits.LAT_MIN_PRVI.value} and less than {LatLonLimits.LAT_MAX_PRVI.value} for PRVI"
+                    f"lon should be greater than {LatLonLimits.LON_MIN_PRVI.value} and less than {LatLonLimits.LON_MAX_PRVI.value} for PRVI"
                 )
         return v
 

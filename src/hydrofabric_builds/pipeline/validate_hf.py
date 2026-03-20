@@ -162,7 +162,7 @@ def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list
     missing_fp = gages_layer[gages_layer["fp_id"].isna() & gages_layer["virtual_fp_id"].isna()][
         "site_no"
     ].to_list()
-    gages_out.append({"Gages with no flowpath or vitual flowpath": missing_fp})
+    gages_out.append({"Gages with no flowpath or virtual flowpath": missing_fp})
 
     return gages_out
 
@@ -196,7 +196,7 @@ def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
     # Check if CRS is valid
     try:
         crs_enum = CRS(crs)
-    except:
+    except ValueError:
         error_str = f"CRS {crs} is not valid"
         logger.warning(error_str)
         return {"validation": error_str}

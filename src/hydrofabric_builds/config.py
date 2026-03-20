@@ -49,7 +49,7 @@ class TaskSelection(BaseModel):
         default=True, description="Decides if we want to run the hydrolocations task"
     )
 
-    validate_hf: bool = Field(default=True, description="Decides if we want to run hf validation")
+    validate_hf: bool = Field(default=False, description="Decides if we want to run hf validation")
 
 
 class HFConfig(BaseModel):
