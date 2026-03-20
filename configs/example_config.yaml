@@ -15,8 +15,8 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False
-  hydrolocations: False
+  waterbodies: True
+  hydrolocations: True
   gages: True
   lakes: True
   fp_crosswalk: True
@@ -311,7 +311,7 @@ gages:
         gage_source_crs: EPSG:4326
         id_col_name: site_no
       other:
-        path: other/gage_xy_v1.csv
+        path: other/gage_xy_v1.1.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
         x_col_name: lon
@@ -325,7 +325,7 @@ gages:
         gage_source_crs: EPSG:4326
         id_col_name: site_no
       routelink:
-        path: RouteLink_CONUS_EPSG4326.gpkg
+        path: routelink/RouteLink_CONUS_EPSG4326.gpkg
         gage_source_crs: EPSG:4326
         id_col_name: gages
     target:

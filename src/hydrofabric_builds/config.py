@@ -37,7 +37,7 @@ class TaskSelection(BaseModel):
 
     waterbodies: bool = Field(default=True, description="Decides if we want to run the waterbodies task")
 
-    nwm_lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
+    lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
 
     gages: bool = Field(default=True, description="Decides if we want to run the gages task")
 

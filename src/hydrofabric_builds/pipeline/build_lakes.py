@@ -1,6 +1,7 @@
 """Contains all code for building active NWM lakes in task"""
 
 import logging
+from pathlib import Path
 from typing import Any, cast
 
 from hydrofabric_builds.config import HFConfig
@@ -39,12 +40,11 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             logger.info("Associating flowpath with points")
             gdf = associate_flowpaths_nearest_point(
                 points_path=cfg.lakes.input_path,
-                flowpaths_path=cfg.output_file_path,
-                flowpath_layer="flowpaths",
+                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.lakes.search_radius_m,
                 point_id=cfg.lakes.id_field,
-                flowpath_id="fp_id",
-                flowpath_id_out_field="fp_id",
+                flowpath_id="flowpath_id",
+                flowpath_id_out_field="ref_fp_id",
                 points_layer=cfg.lakes.input_layer,
             )
         # use polygon flowpath outlet method
@@ -52,12 +52,11 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
             logger.info("Associating flowpaths with polygons")
             gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.lakes.input_path,
-                flowpaths_path=cfg.output_file_path,
-                flowpath_layer="flowpaths",
+                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.lakes.search_radius_m,
                 min_preferred_intersection_len_m=cfg.lakes.min_preferred_intersection_len_m,
-                flowpath_id="fp_id",
-                flowpath_id_out_field="fp_id",
+                flowpath_id="flowpath_id",
+                flowpath_id_out_field="ref_fp_id",
                 polygon_layer=cfg.lakes.input_layer,
             )
             if cfg.lakes.attrib_src_path:
@@ -86,8 +85,10 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         gdf = populate_nwm_hydaulics(cfg.lakes.processed_path)
         gdf.to_file(cfg.lakes.processed_path, overwrite=True, driver="GPKG")
 
-    # Complete the nwm_lakes file with requested columns
-    gdf = complete_lakes(nwm_lakes_path=cfg.lakes.processed_path, fields=cfg.lakes.fields)
+    # Complete the nwm_lakes file with requested columns and crosswalk to fps/virtual fp/nexus/vnexus
+    gdf = complete_lakes(
+        hf_path=cfg.output_file_path, nwm_lakes_path=cfg.lakes.processed_path, fields=cfg.lakes.fields
+    )
 
     # Save nwm_lakes layer to NHF
     gdf.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)

@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:6566
-output_name: prvi_nhf_0.1.54.gpkg # If not specified, will default to version
+output_name: prvi_nhf_0.1.56.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -15,8 +15,8 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False
-  hydrolocations: False
+  waterbodies: False # not present in OCONUS
+  hydrolocations: True
   gages: True
   lakes: True
   fp_crosswalk: True
@@ -153,6 +153,16 @@ gages:
         path: nwm_calib/nwm_calib_gages_07112025.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
+      routelink:
+        path: routelink/RouteLink_PRVI_EPSG4326.gpkg
+        gage_source_crs: EPSG:4326
+        id_col_name: gages
+      other:
+        path: other/gage_xy_v1.1.csv
+        gage_source_crs: EPSG:4326
+        id_col_name: site_no
+        x_col_name: lon
+        y_col_name: lat
     target:
       crs: EPSG:6566
       snap_tolerance_m: 100.0

@@ -15,8 +15,8 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False
-  hydrolocations: False
+  waterbodies: False # not present in OCONUS
+  hydrolocations: True
   gages: True
   lakes: True
   fp_crosswalk: True
@@ -221,6 +221,16 @@ gages:
         path: nwm_calib/nwm_calib_gages_07112025.csv
         gage_source_crs: EPSG:4326
         id_col_name: site_no
+      routelink:
+        path: routelink/RouteLink_AK_EPSG4326.gpkg
+        gage_source_crs: EPSG:4326
+        id_col_name: gages
+      other:
+        path: other/gage_xy_v1.1.csv
+        gage_source_crs: EPSG:4326
+        id_col_name: site_no
+        x_col_name: lon
+        y_col_name: lat
     target:
       crs: EPSG:3338
       snap_tolerance_m: 100.0

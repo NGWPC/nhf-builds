@@ -1018,6 +1018,9 @@ def _build_hydrofabric(
             for vfp_entry in vfp_by_div.get(fp_id, []):
                 old_nex_id = vfp_entry["dn_virtual_nex_id"]
                 if old_nex_id not in vnex_to_dn_vfp and old_nex_id in existing_vnex_ids:
+                    # Don't rewire if it would create a cycle (up_nex == dn_nex)
+                    if vfp_entry["up_virtual_nex_id"] == upstream_vnex:
+                        continue
                     vfp_entry["dn_virtual_nex_id"] = upstream_vnex
                     removed_vnex_ids.add(old_nex_id)
                     existing_vnex_ids.discard(old_nex_id)
@@ -1042,7 +1045,9 @@ def _build_hydrofabric(
                 # Find the upstream nexus of the downstream divide this was wired to
                 downstream_fp_id = fp_to_id_map.get(vfp_entry["div_id"])
                 if downstream_fp_id is not None and downstream_fp_id in nhf_fp_upstream_vnex:
-                    vfp_entry["dn_virtual_nex_id"] = nhf_fp_upstream_vnex[downstream_fp_id]
+                    candidate = nhf_fp_upstream_vnex[downstream_fp_id]
+                    if candidate != vfp_entry["up_virtual_nex_id"]:
+                        vfp_entry["dn_virtual_nex_id"] = candidate
 
     # Set dn_virtual_fp_id on all virtual nexus records
     for vnex_entry in virtual_nexus_data:
@@ -1051,11 +1056,24 @@ def _build_hydrofabric(
     # Merge coincident virtual nexuses: when multiple nexuses share the same
     # location (e.g. a tributary self-nexus and a mainstem tail nexus), keep
     # one and rewrite all VFP references to the survivor.
+    # Skip merging nexuses that would create a self-loop (up_nex == dn_nex) on any VFP.
     coord_to_nexuses: dict[tuple[float, float], list[int]] = defaultdict(list)
     for vnex_entry in virtual_nexus_data:
         g = vnex_entry["geometry"]
         key = (round(g.x, 6), round(g.y, 6))
         coord_to_nexuses[key].append(vnex_entry["virtual_nex_id"])
+
+    # Build sets of nexuses that must not be merged:
+    # 1. Pairs where a VFP uses one as up_nex and the other as dn_nex (would create a cycle)
+    # 2. Nexuses used as up_virtual_nex_id — merging two of these creates a divergence
+    no_merge_pairs: set[frozenset[int]] = set()
+    up_nex_ids: set[int] = set()
+    for vfp_entry in virtual_fp_data:
+        up = vfp_entry["up_virtual_nex_id"]
+        dn = vfp_entry["dn_virtual_nex_id"]
+        if up is not None:
+            no_merge_pairs.add(frozenset((up, dn)))
+            up_nex_ids.add(up)
 
     nex_remap: dict[int, int] = {}
     merged_nex_ids: set[int] = set()
@@ -1065,8 +1083,16 @@ def _build_hydrofabric(
         keep = min(nex_ids)
         for nex_id in nex_ids:
             if nex_id != keep:
+                if frozenset((nex_id, keep)) in no_merge_pairs:
+                    continue
+                # Don't merge two nexuses that are both used as up_virtual_nex_id
+                if nex_id in up_nex_ids and keep in up_nex_ids:
+                    continue
                 nex_remap[nex_id] = keep
                 merged_nex_ids.add(nex_id)
+                # Transfer up_nex_id status to survivor
+                if nex_id in up_nex_ids:
+                    up_nex_ids.add(keep)
                 # Merge dn_virtual_fp_id onto the survivor
                 if vnex_to_dn_vfp.get(nex_id) is not None and vnex_to_dn_vfp.get(keep) is None:
                     vnex_to_dn_vfp[keep] = vnex_to_dn_vfp[nex_id]
@@ -1087,14 +1113,27 @@ def _build_hydrofabric(
             if up is not None and up in nex_remap:
                 vfp_entry["up_virtual_nex_id"] = nex_remap[up]
 
+    # Break 1-hop cycles: if nexus N routes to VFP V but V drains into N, clear the routing.
+    vfp_dn_nex_lookup: dict[int, int] = {
+        vfp_e["virtual_fp_id"]: vfp_e["dn_virtual_nex_id"] for vfp_e in virtual_fp_data
+    }
+    for vnex_entry in virtual_nexus_data:
+        dn_vfp = vnex_entry.get("dn_virtual_fp_id")
+        if dn_vfp is not None and vfp_dn_nex_lookup.get(dn_vfp) == vnex_entry["virtual_nex_id"]:
+            vnex_entry["dn_virtual_fp_id"] = None
+            vnex_to_dn_vfp.pop(vnex_entry["virtual_nex_id"], None)
+
     # Wire up_virtual_nex_id on VFPs that are missing it
     # Use remapped nexus IDs so we don't wire to merged (removed) nexuses
+    # Skip if the candidate nexus is the VFP's own dn_virtual_nex_id (would create a cycle)
     dn_vfp_to_vnex: dict[int, int] = {
         vfp_id: nex_remap.get(vnex_id, vnex_id) for vnex_id, vfp_id in vnex_to_dn_vfp.items()
     }
     for vfp_entry in virtual_fp_data:
         if vfp_entry["up_virtual_nex_id"] is None and vfp_entry["virtual_fp_id"] in dn_vfp_to_vnex:
-            vfp_entry["up_virtual_nex_id"] = dn_vfp_to_vnex[vfp_entry["virtual_fp_id"]]
+            candidate_nex = dn_vfp_to_vnex[vfp_entry["virtual_fp_id"]]
+            if candidate_nex != vfp_entry["dn_virtual_nex_id"]:
+                vfp_entry["up_virtual_nex_id"] = candidate_nex
 
     # Ensure every VFP appears in at least one ref FP's virtual_fp_id.
     # When a ref FP serves multiple VFPs (e.g. more VFPs than refs on an NHF

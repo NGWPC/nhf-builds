@@ -152,8 +152,12 @@ def _check_virtual_flowpath_area_contributions(
 def _check_no_coincident_nexuses(
     nex_gdf: gpd.GeoDataFrame,
     virtual_nex_gdf: gpd.GeoDataFrame | None = None,
+    virtual_fp_gdf: gpd.GeoDataFrame | None = None,
 ) -> None:
     """Check that no two nexuses share the same location.
+
+    Virtual nexuses may be coincident when merging them would create a cycle
+    (i.e. a VFP uses one as up_nex and the other as dn_nex).
 
     Parameters
     ----------
@@ -161,19 +165,53 @@ def _check_no_coincident_nexuses(
         Regular nexus GeoDataFrame
     virtual_nex_gdf : gpd.GeoDataFrame, optional
         Virtual nexus GeoDataFrame
+    virtual_fp_gdf : gpd.GeoDataFrame, optional
+        Virtual flowpaths GeoDataFrame (used to determine allowed coincident pairs)
     """
-    for label, gdf, id_col in [
-        ("nexus", nex_gdf, "nex_id"),
-        ("virtual_nexus", virtual_nex_gdf, "virtual_nex_id"),
-    ]:
-        if gdf is None or len(gdf) == 0:
-            continue
-        coords = gdf.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
+    # Regular nexuses must never be coincident
+    if nex_gdf is not None and len(nex_gdf) > 0:
+        coords = nex_gdf.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
         dupes = coords.duplicated(keep=False)
         n_dupes = dupes.sum()
         if n_dupes > 0:
-            dup_ids = gdf.loc[dupes, id_col].tolist()
-            raise AssertionError(f"Found {n_dupes} coincident {label} records. IDs: {dup_ids[:20]}")
+            dup_ids = nex_gdf.loc[dupes, "nex_id"].tolist()
+            raise AssertionError(f"Found {n_dupes} coincident nexus records. IDs: {dup_ids[:20]}")
+
+    # Virtual nexuses may be coincident when merging them would create a
+    # cycle (up_nex == dn_nex on some VFP) or a divergence (two VFPs sharing
+    # the same up_nex). All other coincident pairs are errors.
+    if virtual_nex_gdf is not None and len(virtual_nex_gdf) > 0:
+        vcoords = virtual_nex_gdf.geometry.apply(lambda g: (round(g.x, 6), round(g.y, 6)))
+        vdupes = vcoords.duplicated(keep=False)
+        if vdupes.any():
+            # Build allowed pairs from VFP up/dn nexus references
+            no_merge_pairs: set[frozenset[int]] = set()
+            up_nex_ids: set[int] = set()
+            if virtual_fp_gdf is not None:
+                for _, row in virtual_fp_gdf.iterrows():
+                    up = row.get("up_virtual_nex_id")
+                    dn = row.get("dn_virtual_nex_id")
+                    if pd.notna(up):
+                        no_merge_pairs.add(frozenset((int(up), int(dn))))
+                        up_nex_ids.add(int(up))
+
+            dup_groups = virtual_nex_gdf[vdupes].groupby(vcoords[vdupes])["virtual_nex_id"].apply(list)
+            bad_ids = []
+            for nex_ids in dup_groups:
+                for i, a in enumerate(nex_ids):
+                    for b in nex_ids[i + 1 :]:
+                        # Allowed: merging would create a cycle
+                        if frozenset((a, b)) in no_merge_pairs:
+                            continue
+                        # Allowed: both are up_nex for different VFPs (divergence)
+                        if a in up_nex_ids and b in up_nex_ids:
+                            continue
+                        bad_ids.extend([a, b])
+            if bad_ids:
+                raise AssertionError(
+                    f"Found {len(bad_ids)} unexplained coincident virtual_nexus records. "
+                    f"IDs: {sorted(set(bad_ids))[:20]}"
+                )
 
 
 def _check_nexus_relational_integrity(
@@ -460,7 +498,7 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -546,7 +584,7 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -632,7 +670,7 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -713,7 +751,7 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -794,7 +832,7 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -875,7 +913,7 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
 
 
@@ -955,5 +993,5 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
     virtual_nex_pl = pl.from_pandas(final_virtual_nexus.to_wkb())
     _check_virtual_nexus_meets_flowpath(virtual_nex_pl, virtual_fp_pl, reference_fp_pl, fp_pl)
     nex_pl = pl.from_pandas(final_nexus.to_wkb())
-    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus)
+    _check_no_coincident_nexuses(final_nexus, final_virtual_nexus, final_virtual_flowpaths)
     _check_nexus_relational_integrity(fp_pl, nex_pl, virtual_fp_pl, virtual_nex_pl, reference_fp_pl)
