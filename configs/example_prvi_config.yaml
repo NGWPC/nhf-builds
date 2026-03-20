@@ -130,7 +130,7 @@ divide_attributes:
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
     groundwater:
-      file_name: gw/gw_pr_nhf_0.1.5.csv # must include 'gw' or 'groundwater' to be used
+      file_name: gw/gw_pr_nhf_1.1.3.csv # must include 'gw' or 'groundwater' to be used
       agg_type: groundwater
       field_name: groundwater # field name not honored, all fields in csv will be joined
 
