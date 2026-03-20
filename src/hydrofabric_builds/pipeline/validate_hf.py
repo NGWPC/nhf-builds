@@ -163,7 +163,9 @@ def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list
     ].to_list()
     gages_out.append({"Gages with no flowpath or virtual flowpath": missing_fp})
 
-    missing_fp_calibratable_gage = list(set(missing_fp) - set(calibratable_gages_domain))
+    missing_fp_calibratable_gage = [
+        gage for gage in set(missing_fp) if gage in set(calibratable_gages_domain)
+    ]
     gages_out.append({"Calibratable gages with no flowpath or vitual flowpath": missing_fp_calibratable_gage})
 
     return gages_out
