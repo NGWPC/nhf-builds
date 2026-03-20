@@ -24,6 +24,7 @@ from hydrofabric_builds.pipeline.processing import (
     reduce_combine_base_hydrofabric,
 )
 from hydrofabric_builds.pipeline.trace_graph_attributes import trace_hydrofabric_attributes
+from hydrofabric_builds.pipeline.validate_hf import validate_hf
 from hydrofabric_builds.pipeline.write import write_base_hydrofabric
 
 logger = setup_logging()
@@ -209,6 +210,9 @@ def main() -> int:
             )
         if config.tasks.fp_crosswalk:
             runner.run_task(task_id="fp_crosswalk", python_callable=build_fp_crosswalk, op_kwargs={})
+
+        if config.tasks.validate_hf:
+            runner.run_task(task_id="validate_hf", python_callable=validate_hf, op_kwargs={})
 
         print("\n" + "=" * 60)
         print("Pipeline completed")

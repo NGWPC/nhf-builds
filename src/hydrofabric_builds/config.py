@@ -15,6 +15,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     FPCrosswalkConfig,
     GagesConfig,
     LakesConfig,
+    ValidateHFConfig,
     WaterbodiesConfig,
 )
 
@@ -48,6 +49,8 @@ class TaskSelection(BaseModel):
         default=True, description="Decides if we want to run the hydrolocations task"
     )
 
+    validate_hf: bool = Field(default=False, description="Decides if we want to run hf validation")
+
 
 class HFConfig(BaseModel):
     """A config validation class for default build settings"""
@@ -57,7 +60,7 @@ class HFConfig(BaseModel):
         description="The directory for output files to be saved from Hydrofabric builds",
     )
 
-    output_name: Path = Field(default=f"nhf_{__version__}.gpkg", description="The output file name")
+    output_name: Path = Field(default=Path(f"nhf_{__version__}.gpkg"), description="The output file name")
 
     output_file_path: Path = Field(
         default_factory=lambda data: data["output_dir"] / data["output_name"],
@@ -95,6 +98,10 @@ class HFConfig(BaseModel):
 
     fp_crosswalk: FPCrosswalkConfig = Field(
         default=FPCrosswalkConfig(), description="Settings for building flowpath crosswalks"
+    )
+
+    validate_hf: ValidateHFConfig = Field(
+        default=ValidateHFConfig(), description="settings for validating hf"
     )
 
     @classmethod

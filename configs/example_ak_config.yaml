@@ -20,6 +20,7 @@ tasks:
   gages: True
   lakes: True
   fp_crosswalk: True
+  validate_hf: True
 
 flowpath_attributes:
   flowpath_id: fp_id
@@ -249,6 +250,12 @@ gages:
    work_crs: EPSG:3338          # an area-equal crs to calculate buffers and distances
 
 # --------------------------------------------------
+# validate hydrofabric
+# --------------------------------------------------
+validate_hf:
+  calibration_gages_path: data/validate_hf/calibratable_gages.csv
+
+#---------------------------------------------------    
 # flowpath crosswalk (fp_crosswalk)
 # --------------------------------------------------
 fp_crosswalk:
@@ -270,8 +277,9 @@ fp_crosswalk:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk_ak.parquet
 
-
+#---------------------------------------------------
 # nwm lakes
+#--------------------------------------------------
 lakes:
   input_path: "data/lakes/input/ak_lakeparm.gpkg"
   processed_path: "data/lakes/output/ak_lakes_fp_associated.gpkg"

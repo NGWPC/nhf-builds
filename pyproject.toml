@@ -55,7 +55,8 @@ dependencies = [
   "rasterstats>=0.20.0",
   "xarray-spatial==0.5.2",
   "dask==2026.1.2",
-  "zarr==3.1.5"
+  "zarr==3.1.5",
+  "pandantic==1.0.0"
 ]
 
 [project.optional-dependencies]

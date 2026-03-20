@@ -18,8 +18,9 @@ tasks:
   waterbodies: False
   hydrolocations: False
   gages: True
-  fp_crosswalk: True
   lakes: True
+  fp_crosswalk: True
+  validate_hf: True
 
 # flowpaths
 flowpath_attributes:
@@ -377,8 +378,15 @@ fp_crosswalk:
     # final full-table crosswalk output
     path: data/nhd-crosswalk/nhd_crosswalk.parquet
 
+# --------------------------------------------------
+# validate hydrofabric
+# --------------------------------------------------
+validate_hf:
+  calibration_gages_path: data/validate_hf/calibratable_gages.csv
 
+#---------------------------------------------------
 # lakes
+#---------------------------------------------------
 lakes:
   associate_flowpaths: True # this will run the flowpath association
   input_path: "data/lakes/input/nwm_lakes_sconus_input.gpkg"
