@@ -382,7 +382,7 @@ fp_crosswalk:
 # validate hydrofabric
 # --------------------------------------------------
 validate_hf:
-  calibration_gages_path: data/validate_hf/calibratable_gages.csv
+  calibration_gages_path: data/gages/validation/calibratable_gages.csv
 
 #---------------------------------------------------
 # lakes

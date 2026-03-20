@@ -21,7 +21,7 @@ tasks:
   lakes: True
   fp_crosswalk: True
   validate_hf: True
-  
+
 # flowpaths
 flowpath_attributes:
   flowpath_id: fp_id
@@ -185,7 +185,7 @@ gages:
 # validate hydrofabric
 # --------------------------------------------------
 validate_hf:
-  calibration_gages_path: data/validate_hf/calibratable_gages.csv
+  calibration_gages_path: data/gages/validation/calibratable_gages.csv
 
 #---------------------------------------------------
 # flowpath crosswalk (fp_crosswalk)
