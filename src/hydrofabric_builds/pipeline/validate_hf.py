@@ -155,14 +155,18 @@ def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list
 
     gages_out = []
 
-    diff = set(calibratable_gages_domain) - set(gages_nhf)
-    diffs_list = list(diff)
-    gages_out.append({"Missing Gages": diffs_list})
+    gage_diffs = list(set(calibratable_gages_domain) - set(gages_nhf))
+    gages_out.append({"Missing Gages": gage_diffs})
 
     missing_fp = gages_layer[gages_layer["fp_id"].isna() & gages_layer["virtual_fp_id"].isna()][
         "site_no"
     ].to_list()
     gages_out.append({"Gages with no flowpath or virtual flowpath": missing_fp})
+
+    missing_fp_calibratable_gage = [
+        gage for gage in set(missing_fp) if gage in set(calibratable_gages_domain)
+    ]
+    gages_out.append({"Calibratable gages with no flowpath or vitual flowpath": missing_fp_calibratable_gage})
 
     return gages_out
 
