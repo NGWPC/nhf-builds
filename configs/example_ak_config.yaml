@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:3338
-output_name: ak_nhf_0.1.54.gpkg # If not specified, will default to version
+output_name: ak_nhf_1.1.3.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -34,7 +34,6 @@ divide_attributes:
   data_dir: data/ak/divide-attributes
   divide_id: div_id
   tmp_dir: data/ak/tmp/divide-attributes
-  alt_divides_path: data/ak/divide-attributes/ak_domain.gpkg
   split_vpu: False
   debug: False
   domain_mask: data/ak/divide-attributes/domain/ak_nextgen.gpkg
