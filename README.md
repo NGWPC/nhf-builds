@@ -13,7 +13,7 @@ uv sync
 #### Automated Setup using [just](https://github.com/casey/just):
 `just` calls series of commands calle "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to set up the data sources for `nhf-builds`. You can also use `just` to build hydrofabrics for each domain or specify a config.
 
-Note: `just sync` commands will overwrite input datasets in your input folder.
+**Note**: `just sync` commands will overwrite all input datasets in your data folder.
 
 Place AWS credentials in .env or manually set the relevant environment variables (AWS_DEFAULT_REGION, AWS_ACCESS_KEY_ID, etc.) then run the commands corresponding to your chosen domain:
 ```sh
@@ -22,6 +22,7 @@ just sync       # CONUS
 just sync-ak    # oCONUS/Alaska
 just sync-hi    # oCONUS/Hawaii
 just sync-prvi  # oCONUS/Puerto Rico & US Virgin Islands
+just --oconus-version=<version> sync-<domain> # Specify a reference fabric version for OCONUS
 # (2) build hydrofabric
 just build-conus # CONUS
 just build-ak    # oCONUS/Alaska
@@ -29,6 +30,7 @@ just build-hi    # oCONUS/Hawaii
 just build-prvi  # oCONUS/Puerto Rico & US Virgin Islands
 just build "configs/my_custom_config.yaml" # Build a custom HydroFabric
 ```
+
 #### Manual Setup:
 [See here for all steps for downloading data from the RTX EDFS Test Account Bucket and running with uv run](docs/builds/quickstart.md)
 
