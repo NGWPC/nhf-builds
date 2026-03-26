@@ -24,7 +24,7 @@ just sync       # CONUS
 just sync-ak    # oCONUS/Alaska
 just sync-hi    # oCONUS/Hawaii
 just sync-prvi  # oCONUS/Puerto Rico & US Virgin Islands
-just --oconus-version=<version> sync-<domain> # Specify a reference fabric version for OCONUS
+just oconus-version=<version> sync-<domain> # Specify a reference fabric version for OCONUS
 # (2) build hydrofabric
 just build-conus # CONUS
 just build-ak    # oCONUS/Alaska
