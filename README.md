@@ -13,7 +13,9 @@ uv sync
 #### Automated Setup using [just](https://github.com/casey/just):
 `just` calls series of commands calle "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to set up the data sources for `nhf-builds`. You can also use `just` to build hydrofabrics for each domain or specify a config.
 
-**Note**: `just sync` commands will overwrite all input datasets in your data folder.
+**Note**: `just sync` commands will overwrite all input datasets in your `data` folder.
+
+**Note**: `just build` commands will build `configs/example_[domain]_config.yaml`
 
 Place AWS credentials in .env or manually set the relevant environment variables (AWS_DEFAULT_REGION, AWS_ACCESS_KEY_ID, etc.) then run the commands corresponding to your chosen domain:
 ```sh
