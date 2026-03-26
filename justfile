@@ -1,4 +1,6 @@
+# Settings
 set dotenv-load := true
+oconus-version := "0.1.5"
 
 alias download := sync
 alias download-ak := sync-ak
@@ -36,7 +38,7 @@ build-conus: (build "configs/example_config.yaml")
 # AK
 sync-ak:
     # Reference Fabric
-    aws s3 sync s3://edfs-data/reference-builds/ak/ ./data/reference/ --exclude "*" --include "ak_0.1.5_reference_divides.parquet" --include "ak_0.1.5_reference_flowpaths.parquet"
+    aws s3 sync s3://edfs-data/reference-builds/ak/ ./data/reference/ --exclude "*" --include "ak_{{oconus-version}}_reference_divides.parquet" --include "ak_{{oconus-version}}_reference_flowpaths.parquet"
     # Gages - same as CONUS
     aws s3 sync s3://edfs-data/gages/ ./data/gages
     # Reference Reservoirs
@@ -57,7 +59,7 @@ build-ak: (build "configs/example_ak_config.yaml")
 # HI
 sync-hi:
     # Reference Fabric
-    aws s3 sync s3://edfs-data/reference-builds/hi/hi_0.1.5_reference_divides.parquet ./data/reference/ --exclude "*" --include "hi_0.1.5_reference_divides.parquet" --include "hi_0.1.5_reference_flowpaths.parquet"
+    aws s3 sync s3://edfs-data/reference-builds/hi/ ./data/reference/ --exclude "*" --include "hi_{{oconus-version}}_reference_divides.parquet" --include "hi_{{oconus-version}}_reference_flowpaths.parquet"
     # Gages - same as CONUS
     aws s3 sync s3://edfs-data/gages/ ./data/gages
     # Reference Reservoirs
@@ -77,7 +79,7 @@ build-hi: (build "configs/example_hi_config.yaml")
 # PRVI
 sync-prvi:
     # Reference Fabric
-    aws s3 sync s3://edfs-data/reference-builds/prvi/prvi_0.1.5_reference_divides.parquet ./data/reference/ --exclude "*" --include "prvi_0.1.5_reference_divides.parquet" --include "prvi_0.1.5_reference_flowpaths.parquet"
+    aws s3 sync s3://edfs-data/reference-builds/prvi/ ./data/reference/ --exclude "*" --include "prvi_{{oconus-version}}_reference_divides.parquet" --include "prvi_{{oconus-version}}_reference_flowpaths.parquet"
     # Gages - same as CONUS
     aws s3 sync s3://edfs-data/gages/ ./data/gages
     # Reference Reservoirs

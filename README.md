@@ -10,6 +10,22 @@ uv sync
 ```
 
 ### Quickstart
+#### Automated Setup using [just](https://github.com/casey/just):
+Place AWS credentials in .env or manually set the relevant environment variables (AWS_DEFAULT_REGION, AWS_ACCESS_KEY_ID, etc.) then run the commands corresponding to your chosen domain:
+```sh
+# (1) download data from AWS
+just sync       # CONUS
+just sync-ak    # oCONUS/Alaska
+just sync-hi    # oCONUS/Hawaii
+just sync-prvi  # oCONUS/Puerto Rico & US Virgin Islands
+# (2) build hydrofabric
+just build-conus # CONUS
+just build-ak    # oCONUS/Alaska
+just build-hi    # oCONUS/Hawaii
+just build-prvi  # oCONUS/Puerto Rico & US Virgin Islands
+just build "configs/my_custom_config.yaml" # Build a custom HydroFabric
+``` 
+#### Manual Setup:
 [See here for all steps for downloading data from the RTX EDFS Test Account Bucket](docs/builds/quickstart.md)
 
 ### Development
