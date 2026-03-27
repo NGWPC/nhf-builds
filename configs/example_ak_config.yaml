@@ -201,6 +201,13 @@ divide_attributes:
       file_name: ueb/dec.tif
       agg_type: mean
       field_name: temp_delta_dec_mean
+    gwbuckparm:
+      file_name: gw/ak/GWBUCKPARM_AK_FullRouting.nc
+      file_name2: gw/ak/spatialweights_AK_FullRouting.nc
+      file_name3: gw/ak/geogrid_1km_blank_ak.tif
+      agg_type: groundwater
+      field_name: groundwater
+
 
 
 gages:

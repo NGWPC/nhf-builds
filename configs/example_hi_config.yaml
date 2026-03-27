@@ -31,9 +31,9 @@ flowpath_attributes:
 # divide attributes
 divide_attributes:
   processes: 1
-  data_dir: data/hi/divide-attributes
+  data_dir: data/divide-attributes
   divide_id: div_id
-  tmp_dir: data/hi/tmp/divide-attributes
+  tmp_dir: data/tmp/divide-attributes
   split_vpu: False
   debug: False
   attributes: # attributes must be specified - there are no defaults
@@ -133,6 +133,12 @@ divide_attributes:
       file_name: nwm/XXAJ.tif
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
+    gwbuckparm:
+      file_name: gw/hi/GWBUCKPARM_HI_FullRouting.nc
+      file_name2: gw/hi/spatialweights_HI_FullRouting.nc
+      file_name3: gw/hi/geogrid_1km_blank_hi.tif
+      agg_type: groundwater
+      field_name: groundwater
 
 gages:
   gages:

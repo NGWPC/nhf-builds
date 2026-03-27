@@ -133,6 +133,12 @@ divide_attributes:
       file_name: gw/gw_pr_nhf_1.1.3.csv # must include 'gw' or 'groundwater' to be used
       agg_type: groundwater
       field_name: groundwater # field name not honored, all fields in csv will be joined
+    gwbuckparm:
+      file_name: gw/prvi/GWBUCKPARM_PRVI_FullRouting.nc
+      file_name2: gw/hi/spatialweights_PRVI_FullRouting.nc
+      file_name3: gw/hi/geogrid_1km_blank_pr.tif
+      agg_type: groundwater
+      field_name: groundwater
 
 
 gages:

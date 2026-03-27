@@ -12,15 +12,15 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: True
+  build_hydrofabric: False
   divide_attributes: True
-  flowpath_attributes: True
-  waterbodies: True
-  hydrolocations: True
-  gages: True
-  lakes: True
-  fp_crosswalk: True
-  validate_hf: True
+  flowpath_attributes: False
+  waterbodies: False
+  hydrolocations: False
+  gages: False
+  lakes: False
+  fp_crosswalk: False
+  validate_hf: False
 
 # flowpaths
 flowpath_attributes:
@@ -244,6 +244,12 @@ divide_attributes:
       file_name: ueb/dec.tif
       agg_type: mean
       field_name: temp_delta_dec_mean
+    gwbuckparm:
+      file_name: gw/GWBUCKPARM_CONUS_FullRouting.nc
+      file_name2: gw/spatialweights_1km_LongRange_NWMv3.0.nc
+      file_name3: gw/geogrid_1km_blank.tif
+      agg_type: groundwater
+      field_name: groundwater
 
 # waterbodies - all values have defaults
 waterbodies:

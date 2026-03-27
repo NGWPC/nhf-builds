@@ -357,9 +357,15 @@ class DivideAttributeConfig(BaseModel):
     agg_type: AggTypeEnum = Field(description="Zonal stats aggregation type")
     field_name: str = Field(description="Output field name for divide attribute")
     file_name: Path = Field(description="File path of attribute raster")
+    file_name2: Path | None = Field(description="Optional file path for a second file", default=None)
+    file_name3: Path | None = Field(description="Optional file path for a third file", default=None)
     tmp: Path = Field(
         description="Temp file path for parquet",
         default_factory=lambda data: Path("/tmp/divide-attributes") / f"tmp_{data['field_name']}.parquet",
+    )
+    tmp_raster: Path = Field(
+        description="Temp file path for groundwater raster",
+        default=Path("/tmp/divide-attributes") / "tmp_raster_file.tif",
     )
 
     @model_validator(mode="after")
@@ -372,6 +378,10 @@ class DivideAttributeConfig(BaseModel):
     def full_file_name(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Join the root data dir to the file name"""
         self.file_name = self.data_dir / self.file_name
+        if self.file_name2:
+            self.file_name2 = self.data_dir / self.file_name2
+        if self.file_name3:
+            self.file_name3 = self.data_dir / self.file_name3
         return self
 
 
