@@ -12,15 +12,15 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: True
+  build_hydrofabric: False
   divide_attributes: True
-  flowpath_attributes: True
+  flowpath_attributes: False
   waterbodies: False # not present in OCONUS
-  hydrolocations: True
-  gages: True
-  lakes: True
-  fp_crosswalk: True
-  validate_hf: True
+  hydrolocations: False
+  gages: False
+  lakes: False
+  fp_crosswalk: False
+  validate_hf: False
 
 # flowpaths
 flowpath_attributes:
@@ -31,7 +31,7 @@ flowpath_attributes:
 # divide attributes
 divide_attributes:
   processes: 1
-  data_dir: data/divide-attributes
+  data_dir: data/hi/divide-attributes
   divide_id: div_id
   tmp_dir: data/tmp/divide-attributes
   split_vpu: False

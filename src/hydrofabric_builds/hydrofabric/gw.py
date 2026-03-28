@@ -43,7 +43,9 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # Read divides from the hydrofabric that was just built
     try:
-        divides = gpd.read_file(model_cfg.hf_path, layer="divides")
+        # divides = gpd.read_file(model_cfg.hf_path, layer="divides")
+        divides = gpd.read_file("/home/daniel.cumpton/nhf-builds/ak_nhf_1.1.13gw.gpkg", layer="divides")
+
     except FileNotFoundError:
         error_str = {"Error": f"The file {model_cfg.hf_path} was not found."}
         logger.warning(error_str)
@@ -54,11 +56,11 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         return
 
     # Reproject divides to the NWM domain CRS.
-    divides = divides.to_crs(prjstr)
+    divides_reproj = divides.to_crs(prjstr)
 
     # Number the divides for matching to pixel in the spatial weights file.
     # This can be changed to use the div_id and a separate numbering isn't necessary.
-    divides["cat_id"] = np.arange(len(divides)) + 1
+    divides_reproj["cat_id"] = np.arange(len(divides_reproj)) + 1
 
     # Using the empty NWM domain raster, burn in the divide polygons and save in the temp dir.
     logger.info("rasterizing catchments")
@@ -67,7 +69,10 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         transform = src.transform
         crs = src.crs
 
-        shapes = ((geom, value) for geom, value in zip(divides.geometry, divides["cat_id"], strict=False))
+        shapes = (
+            (geom, value)
+            for geom, value in zip(divides_reproj.geometry, divides_reproj["cat_id"], strict=False)
+        )
 
         rasterized = features.rasterize(
             shapes,
@@ -148,23 +153,26 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # Merge divide IDs -- This can be removed if div_id is used instead of
     # creating new numbers for each divide.
-    columns_to_merge = divides[["cat_id", "div_id"]]
+    columns_to_merge = divides_reproj[["cat_id", "div_id"]]
     gwparm = pd.merge(gwparm, columns_to_merge, on="cat_id", how="left")
 
     # For each divide, compute attributes by summing the weights from each
     # contributing ComID and dividing by the total contributing weight.
     print(gwparm.columns)
-    gwparm = gwparm.groupby("div_id").apply(
-        lambda x: pd.Series(
-            {
-                "Coeff": (x["Coeff"] * x["sumwt"]).sum() / x["sumwt"].sum(),
-                "Expon": (x["Expon"] * x["sumwt"]).sum() / x["sumwt"].sum(),
-                "Zmax": (x["Zmax"] * x["sumwt"]).sum() / x["sumwt"].sum(),
-            }
+    print(gwparm.index)
+    gwparm = (
+        gwparm.groupby("div_id")
+        .apply(
+            lambda x: pd.Series(
+                {
+                    "Coeff": (x["Coeff"] * x["sumwt"]).sum() / x["sumwt"].sum(),
+                    "Expon": (x["Expon"] * x["sumwt"]).sum() / x["sumwt"].sum(),
+                    "Zmax": (x["Zmax"] * x["sumwt"]).sum() / x["sumwt"].sum(),
+                }
+            )
         )
+        .reset_index()
     )
-
-    gwparm.set_index("div_id", inplace=True)
 
     # Merge groundwater attributes to the divides layer in the hydrofabric.
     divides = divides.merge(gwparm, on=model_cfg.divide_id, how="left")
