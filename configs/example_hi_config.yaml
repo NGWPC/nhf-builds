@@ -33,7 +33,7 @@ divide_attributes:
   processes: 1
   data_dir: data/hi/divide-attributes
   divide_id: div_id
-  tmp_dir: data/tmp/divide-attributes
+  tmp_dir: data/hi/tmp/divide-attributes
   split_vpu: False
   debug: False
   attributes: # attributes must be specified - there are no defaults
