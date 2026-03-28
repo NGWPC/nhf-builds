@@ -12,15 +12,15 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: False
+  build_hydrofabric: True
   divide_attributes: True
-  flowpath_attributes: False
+  flowpath_attributes: True
   waterbodies: False # not present in OCONUS
-  hydrolocations: False
-  gages: False
-  lakes: False
-  fp_crosswalk: False
-  validate_hf: False
+  hydrolocations: True
+  gages: True
+  lakes: True
+  fp_crosswalk: True
+  validate_hf: True
 
 # flowpaths
 flowpath_attributes:

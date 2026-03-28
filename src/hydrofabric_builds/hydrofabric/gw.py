@@ -43,9 +43,7 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # Read divides from the hydrofabric that was just built
     try:
-        # divides = gpd.read_file(model_cfg.hf_path, layer="divides")
-        divides = gpd.read_file("/home/daniel.cumpton/nhf-builds/ak_nhf_1.1.13gw.gpkg", layer="divides")
-
+        divides = gpd.read_file(model_cfg.hf_path, layer="divides")
     except FileNotFoundError:
         error_str = {"Error": f"The file {model_cfg.hf_path} was not found."}
         logger.warning(error_str)
@@ -158,8 +156,7 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # For each divide, compute attributes by summing the weights from each
     # contributing ComID and dividing by the total contributing weight.
-    print(gwparm.columns)
-    print(gwparm.index)
+
     gwparm = (
         gwparm.groupby("div_id")
         .apply(
