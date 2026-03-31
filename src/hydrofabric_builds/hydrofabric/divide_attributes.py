@@ -377,18 +377,19 @@ def _groundwater(model_cfg: DivideAttributesModelConfig) -> None:
     model_cfg : DivideAttributesModelConfig
         Pydantic model for full model config
     """
-    try:
-        gw_attribute = [
-            cfg
-            for cfg in model_cfg.attributes
-            if ("gw" in cfg.file_name.name) or ("groundwater" in cfg.file_name.name)
-        ][0]
-        logger.info(f"Joining groundwater from {gw_attribute.file_name}")
-        _calculate_groundwater(model_cfg, gw_attribute)
+    # try:
+    #     gw_attribute = [
+    #         cfg
+    #         for cfg in model_cfg.attributes
+    #         if ("gw" in cfg.file_name.name) or ("groundwater" in cfg.file_name.name)
+    #     ][0]
+    #     logger.info(f"Joining groundwater from {gw_attribute.file_name}")
+    #     _calculate_groundwater(model_cfg, gw_attribute)
 
-    except IndexError:
-        logger.info("Groundwater not found in attributes - skipping.")
-        return
+    # except IndexError:
+    #     logger.info("Groundwater not found in attributes - skipping.")
+    #     return
+    return
 
 
 def _teardown(tmpdir: Path) -> None:
