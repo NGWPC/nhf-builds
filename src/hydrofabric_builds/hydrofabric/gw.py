@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -14,29 +13,6 @@ from hydrofabric_builds.schemas.hydrofabric import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _create_blank_geogrid(geogrid: Path, output_grid_file: Path) -> None:
-    ds = xr.open_dataset(geogrid, engine="netcdf4")
-
-    transform = from_origin(ds["x"][0], ds["y"][0], 1000, 1000)
-
-    with rasterio.open(
-        output_grid_file,
-        "w",
-        driver="GTiff",
-        height=len(ds["y"]),
-        width=len(ds["x"]),
-        count=1,
-        dtype=rasterio.uint8,
-        crs=ds.attrs["proj4"],
-        transform=transform,
-    ) as _dst:
-        pass
-
-    del ds
-    logger.info("Created blank geogrid raster for groundwater")
-    return
 
 
 def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
@@ -93,9 +69,27 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     # This can be changed to use the div_id and a separate numbering isn't necessary.
     divides_reproj["cat_id"] = np.arange(len(divides_reproj)) + 1
 
+    # Creating blank raster for catchments
+    logger.info("Creating blank geogrid raster")
+    ds = xr.open_dataset(geogrid_raster_filename, engine="netcdf4")
+    transform = from_origin(ds["x"][0], ds["y"][0], 1000, 1000)
+
+    with rasterio.open(
+        tmp_geogrid_path,
+        "w",
+        driver="GTiff",
+        height=len(ds["y"]),
+        width=len(ds["x"]),
+        count=1,
+        dtype=rasterio.uint8,
+        crs=ds.attrs["proj4"],
+        transform=transform,
+    ) as _dst:
+        pass
+    del ds, transform
+
     # Using the empty NWM domain raster, burn in the divide polygons and save in the temp dir.
-    logger.info("rasterizing catchments")
-    _create_blank_geogrid(geogrid=geogrid_raster_filename, output_grid_file=tmp_geogrid_path)
+    logger.info("Rasterizing catchments")
     with rasterio.open(tmp_geogrid_path) as src:
         out_shape = src.shape
         transform = src.transform
@@ -132,17 +126,16 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     try:
         wts = xr.open_dataset(spatial_weights_filename)
     except FileNotFoundError:
-        error_str = {"Error": f"The file {spatial_weights_filename} was not found."}
+        error_str = {"Error": f"The file {spatial_weights_filename} was not found. Skipping groundwater"}
         logging.warning(error_str)
         return
     wts = wts[["IDmask", "weight", "i_index", "j_index"]].to_dataframe()
-    wts.to_csv("wts_prvi.csv")
 
     # Read the NWM GWBUCKPARM file
     try:
         gwbuckparm = xr.open_dataset(gwbuckparm_filename)
     except FileNotFoundError:
-        error_str = {"Error": f"The file {gwbuckparm_filename} was not found."}
+        error_str = {"Error": f"The file {gwbuckparm_filename} was not found. Skipping groundwater."}
         logging.warning(error_str)
         return
     gwbuckparm = gwbuckparm[["ComID", "Expon", "Zmax", "Coeff"]].to_dataframe()
@@ -162,35 +155,23 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
         raster_matrix = pd.DataFrame({"row": rows_flat, "col": cols_flat, "value": values_flat})
         raster_matrix = raster_matrix.dropna()
-        logger.info(raster_matrix)
 
     # Create i_index and j_index columns, reversing the j index so that it starts at 1,1
     # in the lower left corner.
     raster_matrix["i_index"] = raster_matrix["col"].copy()
     raster_matrix["j_index"] = height + 1 - raster_matrix["row"].copy()
-    raster_matrix.to_csv("raster_matrix.csv")
 
     # Merge the raster dataframe to the weights on i_index and j_index
-    # raster_matrix.set_index(["i_index", "j_index"], drop=True, inplace=True)
-    # raster_matrix.to_csv("raster-matrix-index.csv")
-    # wts.set_index(["i_index", "j_index"], drop=True, inplace=True)
-    # wts.to_csv("wts.csv")
+    raster_matrix.set_index(["i_index", "j_index"], drop=True, inplace=True)
+    wts.set_index(["i_index", "j_index"], drop=True, inplace=True)
     wts_div = raster_matrix.merge(wts, on=["i_index", "j_index"], how="left")
-    # wts_div = raster_matrix.merge(wts, left_index=True, right_index=True, how="left")
-    wts_div.to_csv("wts_div.csv")
 
     # For each ComID (IDmask) in the spatial weights, add up the weights for each
     # overlapping divide.  This creates rows for divides that contain the contribution
     # from each ComID.
-    # wts_div_agg = wts_div.groupby(["IDmask", "value"])[["weight"]].sum()
-    wts_div.to_csv("tmp.csv")
-    wts_div_agg = wts_div[["IDmask", "value", "weight"]].groupby(["IDmask", "value"]).sum()
-    logger.info("here")
-    logger.info(wts_div_agg)
+    wts_div_agg = wts_div.groupby(["IDmask", "value"])[["weight"]].sum()
     wts_div_agg = wts_div_agg.reset_index()
     wts_div_agg = wts_div_agg.rename(columns={"IDmask": "ComID", "value": "cat_id", "weight": "sumwt"})
-    logger.info(wts_div_agg)
-
     # Merge with gwbuckparm data on the ComID to get GW attribute values by
     # divide with contribution from each overlapping ComID
     gwparm = wts_div_agg.merge(gwbuckparm, on="ComID", how="left")
@@ -199,7 +180,6 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     # creating new numbers for each divide.
     columns_to_merge = divides_reproj[["cat_id", "div_id"]]
     gwparm = pd.merge(gwparm, columns_to_merge, on="cat_id", how="left")
-    logger.info(gwparm)
 
     # For each divide, compute attributes by summing the weights from each
     # contributing ComID and dividing by the total contributing weight.
@@ -217,7 +197,6 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         )
         .reset_index()
     )
-    logger.info(gwparm)
 
     # Merge groundwater attributes to the divides layer in the hydrofabric.
     divides = divides.merge(gwparm, on=model_cfg.divide_id, how="left")
