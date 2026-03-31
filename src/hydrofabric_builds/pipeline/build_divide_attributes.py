@@ -38,9 +38,9 @@ def build_divide_attributes(**context: dict[str, Any]) -> dict[str, Any]:
     if cfg.divide_attributes.processes > 1:
         divide_attributes_pipeline_parallel(div_cfg, processes=cfg.divide_attributes.processes)
     else:
-        # If a divides mask is requested, check if it exists. If it doesn't exist, create it
+        # Create divides mask if requested [note: should be re-created due to divides numbering changing on rebuild]
         if div_cfg.domain_mask:
-            if div_cfg.divides_masked and not div_cfg.divides_masked.exists():
+            if div_cfg.divides_masked:
                 logger.info("Creating domain mask for divides")
                 domain_mask(
                     mask_path=div_cfg.domain_mask,
