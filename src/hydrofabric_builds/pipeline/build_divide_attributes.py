@@ -9,7 +9,6 @@ from hydrofabric_builds.hydrofabric.divide_attributes import (
     divide_attributes_pipeline_parallel,
     divide_attributes_pipeline_single,
 )
-from hydrofabric_builds.hydrofabric.gw import groundwater_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +31,6 @@ def build_divide_attributes(**context: dict[str, Any]) -> dict[str, Any]:
     """
     cfg = cast(HFConfig, context["config"])
     div_cfg = cfg.divide_attributes
-
-    groundwater_attributes(div_cfg)
 
     if cfg.divide_attributes.processes > 1:
         divide_attributes_pipeline_parallel(div_cfg, processes=cfg.divide_attributes.processes)

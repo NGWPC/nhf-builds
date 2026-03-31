@@ -247,7 +247,7 @@ divide_attributes:
     gwbuckparm:
       file_name: gw/GWBUCKPARM_CONUS_FullRouting.nc
       file_name2: gw/spatialweights_1km_LongRange_NWMv3.0.nc
-      file_name3: gw/geogrid_1km_blank.tif
+      file_name3: gw/GEOGRID_LDASOUT_Spatial_Metadata_CONUS.nc
       agg_type: groundwater
       field_name: groundwater
 

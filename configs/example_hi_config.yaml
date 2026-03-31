@@ -136,7 +136,7 @@ divide_attributes:
     gwbuckparm:
       file_name: gw/hi/GWBUCKPARM_HI_FullRouting.nc
       file_name2: gw/hi/spatialweights_HI_FullRouting.nc
-      file_name3: gw/hi/geogrid_1km_blank_hi.tif
+      file_name3: gw/hi/GEOGRID_LDASOUT_Spatial_Metadata_HI.nc
       agg_type: groundwater
       field_name: groundwater
 

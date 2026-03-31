@@ -36,7 +36,16 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         prjstr = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=18.1 +lat_2=18.1 +lat_0=18.1 +lon_0=-65.91 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
 
     # Get paths from the divide attributes section of the config file
-    gw_attributes = [cfg for cfg in model_cfg.attributes if "GWBUCKPARM" in cfg.file_name.name][0]
+    attrs = [cfg for cfg in model_cfg.attributes if "GWBUCKPARM" in cfg.file_name.name]
+    if attrs:
+        gw_attributes = attrs[0]
+    else:
+        error_str = {
+            "Error": "Groundwater divide attribute of name 'GWBUCKPARM' not found. Groundwater will not be calculated"
+        }
+        logger.warning(error_str)
+        return
+
     gwbuckparm_filename = gw_attributes.file_name
     if gw_attributes.file_name2 and gw_attributes.file_name3:
         spatial_weights_filename = gw_attributes.file_name2
@@ -142,7 +151,7 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # Open the raster containing the divides and create a dataframe
     # containing the row, column and divide ID.
-    logger.info("computing groundwater parameters")
+    logger.info("Computing groundwater parameters")
     with rasterio.open(tmp_raster_path) as src:
         band_data = src.read(1)
         height = src.height
