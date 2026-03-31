@@ -68,7 +68,9 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         tmp_geogrid_path = gw_attributes.file_name3.parent / "tmp_geogrid.tif"
         tmp_raster_path = gw_attributes.file_name3.parent / "tmp_gw_features.tif"
     else:
-        error_str = {"Error": "Groundwater divide attribute requires a 'file_name2' and 'file_name2' to be specified with spatial weights and geogrid files. Groundwater will not be calculated."}
+        error_str = {
+            "Error": "Groundwater divide attribute requires a 'file_name2' and 'file_name2' to be specified with spatial weights and geogrid files. Groundwater will not be calculated."
+        }
         logger.warning(error_str)
         return
 
