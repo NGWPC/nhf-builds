@@ -254,9 +254,8 @@ class HydrofabricCRS(Enum):
 
     AK = 3338
     CONUS = 5070
-    GL = 5070  # TEMP: MAY CHANGE
-    HI = 102007
-    PRVI = 32161
+    HI = 32604
+    PRVI = 6566
 
 
 class BuildHydrofabricConfig(BaseModel):
@@ -357,9 +356,15 @@ class DivideAttributeConfig(BaseModel):
     agg_type: AggTypeEnum = Field(description="Zonal stats aggregation type")
     field_name: str = Field(description="Output field name for divide attribute")
     file_name: Path = Field(description="File path of attribute raster")
+    file_name2: Path | None = Field(description="Optional file path for a second file", default=None)
+    file_name3: Path | None = Field(description="Optional file path for a third file", default=None)
     tmp: Path = Field(
         description="Temp file path for parquet",
         default_factory=lambda data: Path("/tmp/divide-attributes") / f"tmp_{data['field_name']}.parquet",
+    )
+    tmp_raster: Path = Field(
+        description="Temp file path for groundwater raster",
+        default=Path("/tmp/divide-attributes") / "tmp_raster_file.tif",
     )
 
     @model_validator(mode="after")
@@ -372,6 +377,10 @@ class DivideAttributeConfig(BaseModel):
     def full_file_name(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Join the root data dir to the file name"""
         self.file_name = self.data_dir / self.file_name
+        if self.file_name2:
+            self.file_name2 = self.data_dir / self.file_name2
+        if self.file_name3:
+            self.file_name3 = self.data_dir / self.file_name3
         return self
 
 
@@ -1048,3 +1057,51 @@ class NWMDefaultHydraulics(Enum):
     OrificeC = 0.1
     OrificeA = 1.0  # m²
     ifd = 0.899
+
+
+class GroundWaterProjectionCONUS(Enum):
+    """CRS, origin, and size of CONUS NWM grids for groundwater; source:  Fulldom_CONUS_FullRouting.nc"""
+
+    PROJ4 = "+proj=lcc +lat_1=30 +lat_2=60 +lat_0=40.0000076293945 +lon_0=-97 +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs"
+    X_ORIGIN = -2303874.17655
+    Y_ORIGIN = 1919874.66329
+    WIDTH = 4608
+    HEIGHT = 3840
+    DX = 1000
+    DY = 1000
+
+
+class GroundWaterProjectionAK(Enum):
+    """CRS, origin, and size of NWM grids for groundwater; source:  Fulldom_AK_FullRouting.nc"""
+
+    PROJ4 = "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-135"
+    X_ORIGIN = -1130764.7202253528
+    Y_ORIGIN = -2704639.5335353096
+    WIDTH = 3516
+    HEIGHT = 1816
+    DX = 1000
+    DY = 1000
+
+
+class GroundWaterProjectionHI(Enum):
+    """CRS, origin, and size of NWM grids for groundwater; source:  Fulldom_HI_FullRouting.nc"""
+
+    PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=10.0 +lat_2=30.0 +lat_0=20.6 +lon_0=-157.42 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext +no_defs"
+    X_ORIGIN = -294950.07097397465
+    Y_ORIGIN = 194950.63030902296
+    WIDTH = 5900
+    HEIGHT = 3900
+    DX = 100
+    DY = 100
+
+
+class GroundWaterProjectionPRVI(Enum):
+    """CRS, origin, and size of NWM grids for groundwater; source:  Fulldom_PRVI_FullRouting.nc"""
+
+    PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=18.1 +lat_2=18.1 +lat_0=18.1 +lon_0=-65.91 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
+    X_ORIGIN = -149949.83
+    Y_ORIGIN = 54951.032
+    WIDTH = 3000
+    HEIGHT = 1100
+    DX = 100
+    DY = 100

@@ -12,6 +12,7 @@ import xarray as xr
 from exactextract import exact_extract
 
 from hydrofabric_builds.hydrofabric.graph import _validate_and_fix_geometries
+from hydrofabric_builds.hydrofabric.gw import groundwater_attributes
 from hydrofabric_builds.schemas.hydrofabric import (
     DivideAttributeConfig,
     DivideAttributesModelConfig,
@@ -343,52 +344,20 @@ def _glaciers(model_cfg: DivideAttributesModelConfig) -> None:
         return
 
 
-def _calculate_groundwater(
-    model_cfg: DivideAttributesModelConfig, gw_attribute: DivideAttributeConfig
-) -> None:
-    """Reads and joins groundwater data
-
-    ***Note***
-    All fields in gw.csv will be joined. Does not honor field name in attribute config.
-
-    Parameters
-    ----------
-    model_cfg : DivideAttributesModelConfig
-        Pydantic model for full model config
-    gw_attribute : DivideAttributeConfig
-        Pydantic model for groundwater attribute
-    """
-    gdf_div = gpd.read_file(model_cfg.hf_path, layer="divides")
-    df_gw = pd.read_csv(gw_attribute.file_name)
-    gdf_div = gdf_div.merge(df_gw, on=model_cfg.divide_id, how="left")
-    gdf_div.to_file(model_cfg.hf_path, layer="divides", driver="GPKG", overwrite=True)
-
-
 def _groundwater(model_cfg: DivideAttributesModelConfig) -> None:
     """Test if groundwater is available and joins
 
-    Groundwater attribute should include 'gw' or 'groundwater' in file name
+    Groundwater attribute should be called 'GWBUCKPARM'
 
     ***Note***
-    All fields in gw.csv will be joined. Does not honor field name in attribute config.
+    Coeff, Expon, and Zmax will be joined. Does not honor field name in attribute config.
 
     Parameters
     ----------
     model_cfg : DivideAttributesModelConfig
         Pydantic model for full model config
     """
-    try:
-        gw_attribute = [
-            cfg
-            for cfg in model_cfg.attributes
-            if ("gw" in cfg.file_name.name) or ("groundwater" in cfg.file_name.name)
-        ][0]
-        logger.info(f"Joining groundwater from {gw_attribute.file_name}")
-        _calculate_groundwater(model_cfg, gw_attribute)
-
-    except IndexError:
-        logger.info("Groundwater not found in attributes - skipping.")
-        return
+    groundwater_attributes(model_cfg)
 
 
 def _teardown(tmpdir: Path) -> None:

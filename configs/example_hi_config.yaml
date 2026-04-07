@@ -117,10 +117,6 @@ divide_attributes:
       file_name: usgs/hi_aspect_250.tif
       agg_type: weighted_circular_mean
       field_name: aspect_circmean
-    groundwater:
-      file_name: gw/gw_hi_nhf_1.1.3.csv # must include 'gw' or 'groundwater' to be used
-      agg_type: groundwater
-      field_name: groundwater # field name not honored, all fields in csv will be joined
     axaj:
       file_name: nwm/AXAJ.tif
       agg_type: mean
@@ -133,6 +129,11 @@ divide_attributes:
       file_name: nwm/XXAJ.tif
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
+    gwbuckparm:
+      file_name: gw/GWBUCKPARM_HI_FullRouting.nc
+      file_name2: gw/spatialweights_HI_FullRouting.nc
+      agg_type: groundwater
+      field_name: groundwater
 
 gages:
   gages:
