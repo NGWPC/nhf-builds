@@ -1,12 +1,12 @@
 # global settings
 output_dir: data/
 crs: EPSG:6566
-output_name: prvi_nhf_1.1.3.gpkg # If not specified, will default to version
+output_name: prvi_nhf_1.1.4.gpkg # If not specified, will default to version
 
 # hf builds
 build:
-  reference_divides_path: data/reference/prvi_0.1.5_reference_divides.parquet
-  reference_flowpaths_path: data/reference/prvi_0.1.5_reference_flowpaths.parquet
+  reference_divides_path: data/reference/prvi_0.1.6_reference_divides.parquet
+  reference_flowpaths_path: data/reference/prvi_0.1.6_reference_flowpaths.parquet
   # debug_outlet_count: 2000 # If specified, only the total amount of rivers here will be built
   divide_aggregation_threshold: 3.0
 
@@ -185,7 +185,7 @@ gages:
   ###--------------------------------------------
   assign_fp_to_gages:
    rel_err: 0.25                    # relative acceptable error between total upstream area and USGS upstream area.
-   buffer_m: 1000.0                 # Buffering around point gages to find flowpaths. in meters
+   buffer_m: 2500                 # Buffering around point gages to find flowpaths. in meters
    parallel: False                  # serial (False) or parallel (True)
    max_workers: null                  # None: if serial
    USGS_NLDI_crs: EPSG:4326      # usgs crs used in NLDI API. more info: https://waterdata.usgs.gov/blog/nldi-intro/
@@ -196,6 +196,7 @@ gages:
 # --------------------------------------------------
 validate_hf:
   calibration_gages_path: data/gages/validation/calibratable_gages.csv
+  routelink_gages_path: data/gages/routelink/RouteLink_PRVI_EPSG4326.gpkg
 
 #---------------------------------------------------
 # flowpath crosswalk (fp_crosswalk)

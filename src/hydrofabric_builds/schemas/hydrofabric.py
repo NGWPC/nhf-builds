@@ -1037,6 +1037,7 @@ class ValidateHFConfig(BaseModel):
     """config class for the hf_validate block in the YAML"""
 
     calibration_gages_path: Path = Path("data/gages/validation/calibratable_gages.csv")
+    routelink_gages_path: Path | None = None
 
 
 class NWMDefaultHydraulics(Enum):
