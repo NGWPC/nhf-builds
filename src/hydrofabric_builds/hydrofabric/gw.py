@@ -10,6 +10,11 @@ from rasterio.transform import from_origin
 
 from hydrofabric_builds.schemas.hydrofabric import (
     DivideAttributesModelConfig,
+    GroundWaterProjectionAK,
+    GroundWaterProjectionCONUS,
+    GroundWaterProjectionHI,
+    GroundWaterProjectionPRVI,
+    HydrofabricCRS,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,15 +30,23 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     """
     # set projection based on input CRS string.  The NWM domain projections are used for groundwater parameters not
     # the EDFS projections.
-    crs = model_cfg.crs
-    if crs == "EPSG:5070":
-        prjstr = "+proj=lcc +lat_1=30 +lat_2=60 +lat_0=40.0000076293945 +lon_0=-97 +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs"
-    elif crs == "EPSG:3338":
-        prjstr = "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-135"
-    elif crs == "EPSG:32604":
-        prjstr = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=10.0 +lat_2=30.0 +lat_0=20.6 +lon_0=-157.42 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext +no_defs"
-    elif crs == "EPSG:6566":
-        prjstr = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=18.1 +lat_2=18.1 +lat_0=18.1 +lon_0=-65.91 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
+
+    crs_full = model_cfg.crs
+    crs = int(crs_full.split(":")[1])
+    domain_crs: (
+        type[GroundWaterProjectionCONUS]
+        | type[GroundWaterProjectionAK]
+        | type[GroundWaterProjectionHI]
+        | type[GroundWaterProjectionPRVI]
+    )
+    if crs == HydrofabricCRS.CONUS.value:
+        domain_crs = GroundWaterProjectionCONUS
+    elif crs == HydrofabricCRS.AK.value:
+        domain_crs = GroundWaterProjectionAK
+    elif crs == HydrofabricCRS.HI.value:
+        domain_crs = GroundWaterProjectionHI
+    elif crs == HydrofabricCRS.PRVI.value:
+        domain_crs = GroundWaterProjectionPRVI
 
     # Get paths from the divide attributes section of the config file
     attrs = [cfg for cfg in model_cfg.attributes if "GWBUCKPARM" in cfg.file_name.name]
@@ -47,11 +60,10 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         return
 
     gwbuckparm_filename = gw_attributes.file_name
-    if gw_attributes.file_name2 and gw_attributes.file_name3:
+    if gw_attributes.file_name2:
         spatial_weights_filename = gw_attributes.file_name2
-        geogrid_raster_filename = gw_attributes.file_name3
-        tmp_geogrid_path = gw_attributes.file_name3.parent / "tmp_geogrid.tif"
-        tmp_raster_path = gw_attributes.file_name3.parent / "tmp_gw_features.tif"
+        tmp_geogrid_path = gw_attributes.file_name2.parent / "tmp_geogrid.tif"
+        tmp_raster_path = gw_attributes.file_name2.parent / "tmp_gw_features.tif"
     else:
         error_str = {
             "Error": "Groundwater divide attribute requires a 'file_name2' and 'file_name2' to be specified with spatial weights and geogrid files. Groundwater will not be calculated."
@@ -72,7 +84,7 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         return
 
     # Reproject divides to the NWM domain CRS.
-    divides_reproj = divides.to_crs(prjstr)
+    divides_reproj = divides.to_crs(domain_crs.PROJ4.value)
 
     # Number the divides for matching to pixel in the spatial weights file.
     # This can be changed to use the div_id and a separate numbering isn't necessary.
@@ -80,22 +92,23 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # Creating blank raster for catchments
     logger.info("Creating blank geogrid raster")
-    ds = xr.open_dataset(geogrid_raster_filename, engine="netcdf4")
-    transform = from_origin(ds["x"][0], ds["y"][0], 1000, 1000)
+    transform = from_origin(
+        domain_crs.X_ORIGIN.value, domain_crs.Y_ORIGIN.value, domain_crs.DX.value, domain_crs.DY.value
+    )
 
     with rasterio.open(
         tmp_geogrid_path,
         "w",
         driver="GTiff",
-        height=len(ds["y"]),
-        width=len(ds["x"]),
+        height=domain_crs.HEIGHT.value,
+        width=domain_crs.WIDTH.value,
         count=1,
         dtype=rasterio.uint8,
-        crs=ds.attrs["proj4"],
+        crs=domain_crs.PROJ4.value,
         transform=transform,
     ) as _dst:
         pass
-    del ds, transform
+    del transform
 
     # Using the empty NWM domain raster, burn in the divide polygons and save in the temp dir.
     logger.info("Rasterizing catchments")
@@ -181,6 +194,7 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
     wts_div_agg = wts_div.groupby(["IDmask", "value"])[["weight"]].sum()
     wts_div_agg = wts_div_agg.reset_index()
     wts_div_agg = wts_div_agg.rename(columns={"IDmask": "ComID", "value": "cat_id", "weight": "sumwt"})
+
     # Merge with gwbuckparm data on the ComID to get GW attribute values by
     # divide with contribution from each overlapping ComID
     gwparm = wts_div_agg.merge(gwbuckparm, on="ComID", how="left")
@@ -192,15 +206,14 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
 
     # For each divide, compute attributes by summing the weights from each
     # contributing ComID and dividing by the total contributing weight.
-
     gwparm = (
-        gwparm.groupby("div_id")
+        gwparm.groupby("div_id", as_index=False)
         .apply(
             lambda x: pd.Series(
                 {
                     "Coeff": (x["Coeff"] * x["sumwt"]).sum() / x["sumwt"].sum(),
                     "Expon": (x["Expon"] * x["sumwt"]).sum() / x["sumwt"].sum(),
-                    "Zmax": (x["Zmax"] * x["sumwt"]).sum() / x["sumwt"].sum(),
+                    "Zmax": ((x["Zmax"] * x["sumwt"]).sum() / x["sumwt"].sum()) / 1000.0,
                 }
             )
         )

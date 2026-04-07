@@ -134,9 +134,8 @@ divide_attributes:
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
     gwbuckparm:
-      file_name: gw/hi/GWBUCKPARM_HI_FullRouting.nc
-      file_name2: gw/hi/spatialweights_HI_FullRouting.nc
-      file_name3: gw/hi/GEOGRID_LDASOUT_Spatial_Metadata_HI.nc
+      file_name: gw/GWBUCKPARM_HI_FullRouting.nc
+      file_name2: gw/spatialweights_HI_FullRouting.nc
       agg_type: groundwater
       field_name: groundwater
 

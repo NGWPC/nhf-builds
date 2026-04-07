@@ -134,9 +134,8 @@ divide_attributes:
       agg_type: groundwater
       field_name: groundwater # field name not honored, all fields in csv will be joined
     gwbuckparm:
-      file_name: gw/prvi/GWBUCKPARM_PRVI_FullRouting.nc
-      file_name2: gw/prvi/spatialweights_PRVI_FullRouting.nc
-      file_name3: gw/prvi/GEOGRID_LDASOUT_Spatial_Metadata_PRVI.nc
+      file_name: gw/GWBUCKPARM_PRVI_FullRouting.nc
+      file_name2: gw/spatialweights_PRVI_FullRouting.nc
       agg_type: groundwater
       field_name: groundwater
 
