@@ -124,10 +124,6 @@ divide_attributes:
       file_name: glaciers/glims_20250624.parquet # must include 'glacier' or 'glims' to be used
       agg_type: percent
       field_name: glacier_percent
-    groundwater:
-      file_name: gw/gw_ak_nhf_1.1.3.csv # must include 'gw' or 'groundwater' to be used
-      agg_type: groundwater
-      field_name: groundwater # field name not honored, all fields in csv will be joined
     mfmin:
       file_name: snow17/MFMIN.tif
       agg_type: mean
