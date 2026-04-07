@@ -47,6 +47,10 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
         domain_crs = GroundWaterProjectionHI
     elif crs == HydrofabricCRS.PRVI.value:
         domain_crs = GroundWaterProjectionPRVI
+    else:
+        error_str = {"Error": "Groundwater CRS not supported. Groundwater will not be calculated"}
+        logger.warning(error_str)
+        return
 
     # Get paths from the divide attributes section of the config file
     attrs = [cfg for cfg in model_cfg.attributes if "GWBUCKPARM" in cfg.file_name.name]
