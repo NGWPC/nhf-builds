@@ -215,9 +215,10 @@ def groundwater_attributes(model_cfg: DivideAttributesModelConfig) -> None:
                     "Expon": (x["Expon"] * x["sumwt"]).sum() / x["sumwt"].sum(),
                     "Zmax": ((x["Zmax"] * x["sumwt"]).sum() / x["sumwt"].sum()) / 1000.0,
                 }
-            )
+            ),
+            include_groups=False,
         )
-        .reset_index()
+        .reset_index(drop=True)
     )
 
     # Merge groundwater attributes to the divides layer in the hydrofabric.
