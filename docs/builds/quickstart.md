@@ -20,7 +20,7 @@ Below are the data files needed for running a full build of the NHF dataset and 
 
 5. Divide Attributes
 - `aws s3 sync s3://edfs-data/attributes/5070/ ./data/divide-attributes`
-- `aws s3 sync s3://edfs-data/attributes/gw/ ./data/divide-attributes/gw`
+- `aws s3 sync s3://edfs-data/attributes/gw/conus ./data/divide-attributes/gw --exclude="deprecated"`
 - `aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/divide-attributes/glaciers`
 
 6. NHD
@@ -52,7 +52,7 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 
 5. Divide Attributes
 - `aws s3 sync s3://edfs-data/attributes/3338/ ./data/ak/divide-attributes`
-- `aws s3 sync s3://edfs-data/attributes/gw/ak ./data/ak/divide-attributes/gw`
+- `aws s3 sync s3://edfs-data/attributes/gw/ak ./data/ak/divide-attributes/gw --exclude="deprecated"`
 - `aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/ak/divide-attributes/glaciers`
 
 6. NHD
@@ -84,7 +84,7 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 
 5. Divide Attributes
 - `aws s3 sync s3://edfs-data/attributes/32604/ ./data/hi/divide-attributes`
-- `aws s3 sync s3://edfs-data/attributes/gw/hi ./data/hi/divide-attributes/gw`
+- `aws s3 sync s3://edfs-data/attributes/gw/hi ./data/hi/divide-attributes/gw  --exclude="deprecated"`
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
@@ -115,7 +115,7 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 
 5. Divide Attributes
 - `aws s3 sync s3://edfs-data/attributes/6566/ ./data/prvi/divide-attributes`
-- `aws s3 sync s3://edfs-data/attributes/gw/prvi ./data/prvi/divide-attributes/gw`
+- `aws s3 sync s3://edfs-data/attributes/gw/prvi ./data/prvi/divide-attributes/gw  --exclude="deprecated"`
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
