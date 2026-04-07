@@ -204,9 +204,6 @@ def pipeline_results() -> dict[str, Any]:
             ],
             "lon": [-81.347576, -81.357058, -81.401389, -81.384266, -81.376746],
             "lat": [36.351394, 36.327656, 36.368095, 36.324204, 36.351550],
-            "cgw": [0.04, 0.04, 0.04, 0.05, None],
-            "expon": [3.3, 3.3, 3.3, 3.2, None],
-            "max_gw_storage": [0.03, 0.03, 0.03, 0.02, None],
             "glacier_percent": [0.0, 0.0, 0.0, 0.0, 0.0],
         }
     )
@@ -628,9 +625,6 @@ class TestDivideAttributes:
                         "aspect_circmean",
                         "lon",
                         "lat",
-                        "cgw",
-                        "expon",
-                        "max_gw_storage",
                         "glacier_percent",
                     ]
                 ],
@@ -668,9 +662,6 @@ class TestDivideAttributes:
                         "aspect_circmean",
                         "lon",
                         "lat",
-                        "cgw",
-                        "expon",
-                        "max_gw_storage",
                         "glacier_percent",
                     ]
                 ],
