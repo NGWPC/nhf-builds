@@ -57,7 +57,6 @@ uv run python scripts/hf_runner.py --config configs/example_config.yaml
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows_alaska_nwmv3_ID_v2.gpkg ./data/reference/nwm_flows_alaska_nwmv3_ID_v2.gpkg`
-- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
 7. Lakes
 - `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
@@ -88,7 +87,6 @@ uv run python scripts/hf_runner.py --config configs/example_ak_config.yaml
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
-- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
 7. Lakes
 - `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`
@@ -119,7 +117,6 @@ uv run python scripts/hf_runner.py --config configs/example_hi_config.yaml
 
 6. NHD
 - `aws s3 cp s3://edfs-data/nhd/nwm_flows.gpkg ./data/reference/nwm_flows.gpkg`
-- `aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk`
 
 7. Lakes
 - `aws s3 sync s3://edfs-data/lakes/ ./data/lakes`

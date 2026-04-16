@@ -29,7 +29,6 @@ sync:
     aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/divide-attributes/glaciers
     # NHD
     aws s3 sync s3://edfs-data/nhd/ ./data/reference/ --exclude="*" --include "nwm_flows.gpkg"
-    aws s3 sync s3://edfs-data/nhd-crosswalk ./data/nhd-crosswalk
     # Lakes
     aws s3 sync s3://edfs-data/lakes/ ./data/lakes
 
@@ -50,7 +49,7 @@ sync-ak:
     aws s3 sync s3://edfs-data/attributes/gw/ak/ ./data/ak/divide-attributes/gw --exclude "deprecated/*"
     aws s3 sync s3://edfs-data/attributes/glaciers/ ./data/ak/divide-attributes/glaciers
     # NHD
-    # TBD
+    aws s3 cp s3://edfs-data/nhd/nwm_flows_alaska_nwmv3_ID_v2.gpkg ./data/reference/nwm_flows_alaska_nwmv3_ID_v2.gpkg
     # Lakes
     aws s3 sync s3://edfs-data/lakes/ ./data/lakes
 
@@ -70,7 +69,7 @@ sync-hi:
     aws s3 sync s3://edfs-data/attributes/32604/ ./data/hi/divide-attributes
     aws s3 sync s3://edfs-data/attributes/gw/hi/ ./data/hi/divide-attributes/gw --exclude "deprecated/*"
     # NHD
-    # TBD
+    aws s3 sync s3://edfs-data/nhd/ ./data/reference/ --exclude="*" --include "nwm_flows.gpkg"
     # Lakes
     aws s3 sync s3://edfs-data/lakes/ ./data/lakes
 
@@ -90,7 +89,7 @@ sync-prvi:
     aws s3 sync s3://edfs-data/attributes/6566/ ./data/prvi/divide-attributes
     aws s3 sync s3://edfs-data/attributes/gw/prvi/ ./data/prvi/divide-attributes/gw --exclude "deprecated/*"
     # NHD
-    # TBD
+    aws s3 sync s3://edfs-data/nhd/ ./data/reference/ --exclude="*" --include "nwm_flows.gpkg"
     # Lakes
     aws s3 sync s3://edfs-data/lakes/ ./data/lakes
 
