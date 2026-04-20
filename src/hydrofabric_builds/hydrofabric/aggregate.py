@@ -411,7 +411,14 @@ def _process_non_nextgen_virtual_flowpaths(
                 "length_km": length_km,
                 "area_sqkm": area_sqkm,
                 "div_ref_ids": div_ref_ids,
-                "line_geometry": linemerge(list(chain.from_iterable(geom.geoms for geom in line_geoms))),
+                "line_geometry": linemerge(
+                    list(
+                        chain.from_iterable(
+                            (geom.geoms if geom.geom_type == "MultiLineString" else [geom])
+                            for geom in line_geoms
+                        )
+                    )
+                ),
             }
         )
 

@@ -168,6 +168,10 @@ def _combine_hydrofabrics(
 
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
+    # Filter geom types to make exactextract happy
+    final_divides = final_divides[
+        (final_divides.geometry.type == "MultiPolygon") | (final_divides.geometry.type == "Polygon")
+    ]
     final_nexus = gpd.GeoDataFrame(combined_nexus)
 
     # Combine virtual layers (if any exist)
