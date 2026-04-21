@@ -1,0 +1,183 @@
+import argparse
+import os
+from pathlib import Path
+
+import geopandas as gpd
+import numpy as np
+import rasterio
+import rioxarray
+import xarray as xr
+from rasterio.enums import Resampling
+from rasterio.warp import calculate_default_transform, reproject
+
+dst_crs = "EPSG:5070"
+
+
+def get_extent(data_dir: Path, filename: Path, layer: str, buffer: float) -> list[float]:
+    """Get domain extent from a specified layer in the NHF gpkg
+
+    Parameters
+    ----------
+    data_dir : Path
+        Path to directory containing the gpkg
+    filename: Path
+        Filename of gpkg
+    layer: str
+        gpkg layer to use for the extent
+    buffer: float
+        buffer in meters (in sac-sma dataset native crs, ESRI:54009 - World_Mollweide)
+
+    Returns
+    -------
+    list[float]
+        list of extent coordinates
+    """
+    gdf = gpd.read_file(os.path.join(data_dir, filename), layer=layer)
+    proj4 = "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+    gdf = gdf.to_crs(proj4)
+    bounds = gdf.total_bounds
+    bounds[0], bounds[1], bounds[2], bounds[3] = (
+        bounds[0] - buffer,
+        bounds[1] - buffer,
+        bounds[2] + buffer,
+        bounds[3] + buffer,
+    )
+    return bounds
+
+
+def clip_reproject(data_dir: Path, filename: Path, bounds: list[float]) -> Path:
+    """Clips global sac-sma parameter raster to the domain and reprojects to EPSG:5070 and saves a temporary raster"
+
+    Parameters
+    ----------
+    data_dir : Path
+        Path to directory containing the global sac-sma parameter raster
+    filename: Path
+        Filename of the global sac-sma parameter raster
+    bounds: list[float]
+        list of boundary coordinates defining the domain's extent
+
+    Returns
+    -------
+    Path
+        path and filename of temporary raster
+    """
+    with rasterio.open(os.path.join(data_dir, filename)) as src:
+        # Create transform for new crs.
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src.crs,
+            dst_crs,
+            src.width,
+            src.height,
+            bounds[0],
+            bounds[1],
+            bounds[2],
+            bounds[3],
+            resolution=(4000, 4000),
+        )
+
+        # Update metadata for the destination file
+        kwargs = src.meta.copy()
+        kwargs.update(
+            {
+                "crs": dst_crs,
+                "transform": dst_transform,
+                "width": dst_width,
+                "height": dst_height,
+                "tiled": True,
+                "compress": "deflate",
+            }
+        )
+
+        # 3. Write the reprojected and resampled data
+        parameter_name = str(filename).split("_")[0]
+        new_filename = Path(f"{parameter_name}_temp.tif")
+
+        with rasterio.open(os.path.join(data_dir, new_filename), "w", **kwargs) as dst:
+            reproject(
+                source=rasterio.band(src, 1),
+                destination=rasterio.band(dst, 1),
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=dst_transform,
+                dst_crs=dst_crs,
+                resampling=Resampling.bilinear,
+            )
+    return new_filename
+
+
+def combine_rasters(data_dir: Path, superconus_raster: Path, conus_raster: Path) -> None:
+    """Combines the NWS CONUS raster and the superconus temporary raster
+
+    Parameters
+    ----------
+    data_dir : Path
+        Path to directory containing the superconus parameter raster and conus NWS raster
+    superconus_raster: Path
+        Filename of the superconus parameter raster
+    conus_raster: list[float]
+        Filename of the conus NWS paramter raster
+
+    Returns
+    -------
+    None
+    """
+    # Read temporary superconus raster and NWM conus raster
+    superconus = rioxarray.open_rasterio(os.path.join(data_dir, superconus_raster)).squeeze()
+    conus = rioxarray.open_rasterio(os.path.join(data_dir, conus_raster)).squeeze()
+
+    # resample superconus raster to the resolution of the NWS raster
+    superconus = superconus.rio.reproject(
+        superconus.rio.crs, resolution=conus.rio.resolution(), resampling=Resampling.bilinear
+    )
+
+    # Expand the extent of the conus raster to match that of the superconus raster
+    conus_matched = conus.rio.reproject_match(superconus)
+    conus_matched_data = conus_matched.to_numpy()
+    superconus_data = superconus.to_numpy()
+    no_data = conus.rio.nodata
+
+    # Create a numpy array where pixels with in CONUS contain the NWS value and those outside contain
+    # the superconus value.
+    new_array = np.where(conus_matched_data != no_data, conus_matched_data, superconus_data)
+
+    # create new raster
+    new_raster = xr.DataArray(
+        new_array, coords=superconus.coords, dims=superconus.dims, attrs=superconus.attrs
+    )
+
+    # create results directory and save raster
+    Path(f"{data_dir}/combined").mkdir(parents=True, exist_ok=True)
+    new_filename = Path(f"{data_dir}/combined/{conus_raster}")
+    new_raster.rio.to_raster(new_filename, tiled=True, compress="deflate")
+
+    # remove temporary file
+    try:
+        os.remove(os.path.join(data_dir, superconus_raster))
+        print("Removed temporary file")
+    except FileNotFoundError:
+        print(f"Temporary {os.path.join(data_dir, superconus_raster)} file does not exist.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="A script to clip and reproject sac-sma parameters")
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        help="Path to directory containing input rasters and where the output rasters will be written.",
+    )
+    parser.add_argument("--global_raster_file", type=str, help="Input raster filename")
+    parser.add_argument("--extent_file", type=str, help="Input raster filename")
+    parser.add_argument("--conus_raster", type=str, help="Input raster filename")
+
+    args = parser.parse_args()
+
+    extent = get_extent(
+        data_dir=Path(args.data_dir), filename=Path(args.extent_file), layer="divides", buffer=1
+    )
+    filename = clip_reproject(
+        data_dir=Path(args.data_dir), filename=Path(args.global_raster_file), bounds=extent
+    )
+    combine_rasters(
+        data_dir=Path(args.data_dir), superconus_raster=filename, conus_raster=Path(args.conus_raster)
+    )
