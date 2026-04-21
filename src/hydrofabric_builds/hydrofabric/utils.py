@@ -168,7 +168,7 @@ def _combine_hydrofabrics(
 
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
-    # Filter geom types to make exactextract happy
+    # NOTE: Filter geom types to ensure polygon/multipolygon (non-polygon geometries arise in USGS AK ref)
     final_divides = final_divides[
         (final_divides.geometry.type == "MultiPolygon") | (final_divides.geometry.type == "Polygon")
     ]
