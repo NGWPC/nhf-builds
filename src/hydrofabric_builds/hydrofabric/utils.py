@@ -168,6 +168,17 @@ def _combine_hydrofabrics(
 
     final_flowpaths = gpd.GeoDataFrame(combined_flowpaths)
     final_divides = gpd.GeoDataFrame(combined_divides)
+    # NOTE: Emit a warning if non-polygon divides are present
+    non_polygon_divides_count = len(
+        final_divides[
+            ~((final_divides.geometry.type == "MultiPolygon") | (final_divides.geometry.type == "Polygon"))
+        ]
+    )
+    if non_polygon_divides_count > 0:
+        raise AttributeError(
+            f"combine_hydrofabrics: {non_polygon_divides_count} non-polygon divides present in `final_divides`"
+        )
+
     final_nexus = gpd.GeoDataFrame(combined_nexus)
 
     # Combine virtual layers (if any exist)
