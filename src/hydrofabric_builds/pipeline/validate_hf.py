@@ -102,7 +102,7 @@ def validate_layer(gpkg_path_filename: Path, layer_name: Layer, crs: CRS) -> lis
     return layer_out
 
 
-def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list:
+def validate_calibration_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list:
     """Check NHF gages against the list of ~1600 gages
 
     Parameters
@@ -156,7 +156,7 @@ def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list
     gages_out = []
 
     gage_diffs = list(set(calibratable_gages_domain) - set(gages_nhf))
-    gages_out.append({"Missing Gages": gage_diffs})
+    gages_out.append({"Missing Calibration Gages": gage_diffs})
 
     missing_fp = gages_layer[gages_layer["fp_id"].isna() & gages_layer["virtual_fp_id"].isna()][
         "site_no"
@@ -169,6 +169,116 @@ def validate_gages(gpkg_path_filename: Path, crs: CRS, gages_list: Path) -> list
     gages_out.append({"Calibratable gages with no flowpath or vitual flowpath": missing_fp_calibratable_gage})
 
     return gages_out
+
+
+def validate_routelink_gages(gpkg_path_filename: Path, routelink_path: Path, id_col: str = "gages") -> list:
+    """Check NHF gages against the list of ~1600 gages
+
+    Parameters
+    ----------
+    gpkg_path_filename : Path
+        full path and filename of the NHF geopackage
+    routelink_path : Path
+        full pat hand filename to routelink inputs
+    id_col : Str
+        ID column for gages in routelink
+
+    Returns
+    -------
+    list
+        a list of missing gages and gages with no flowpath/virtual flowpath
+    """
+    try:
+        gages_layer = gpd.read_file(gpkg_path_filename, layer="Gages")
+    except FileNotFoundError:
+        error_str = f"Error: The file {gpkg_path_filename} was not found."
+        logger.warning(error_str)
+        return [error_str]
+    except ValueError:
+        error_str = f"Error reading gages layer from {gpkg_path_filename}"
+        logger.warning(error_str)
+        return [error_str]
+
+    try:
+        routelink_gages = gpd.read_file(routelink_path)
+    except FileNotFoundError:
+        error_str = f"Error: The file {routelink_path} was not found."
+        logger.warning(error_str)
+        return [error_str]
+
+    gages_nhf = gages_layer["site_no"].to_list()
+
+    # strip whitespace from routelink and extract gages
+    routelink_gages[id_col] = routelink_gages[id_col].str.strip()
+    routelink_gages = routelink_gages.loc[routelink_gages[id_col] != ""].copy()
+    routelink_list = routelink_gages[id_col].tolist()
+
+    gages_out = []
+
+    gage_diffs = list(set(routelink_list) - set(gages_nhf))
+    gages_out.append({"Missing Routelink Gages": gage_diffs})
+
+    missing_fp = gages_layer[gages_layer["fp_id"].isna() & gages_layer["virtual_fp_id"].isna()][
+        "site_no"
+    ].to_list()
+
+    missing_fp_routelink_gage = [gage for gage in set(missing_fp) if gage in set(routelink_list)]
+    gages_out.append({"Routelink gages with no flowpath or vitual flowpath": missing_fp_routelink_gage})
+
+    return gages_out
+
+
+def validate_lakes(gpkg_path_filename: Path, nwm_lakes_path: Path, id_col: str) -> list:
+    """Validate that the lakes layer has all NWM lakes
+
+    Parameters
+    ----------
+    gpkg_path_filename : Path
+        full path and filename of the NHF geopackage
+    nwm_lakes_path : Path
+        full path and file name to NWM lakes geopackage
+    id_col : str
+        ID column in NWM lakes
+
+    Returns
+    -------
+    list
+        a list of missing lakes and lakes with no flowpaths/virtual flowpath
+    """
+    try:
+        lakes_layer = gpd.read_file(gpkg_path_filename, layer="lakes")
+    except FileNotFoundError:
+        error_str = f"Error: The file {gpkg_path_filename} was not found."
+        logger.warning(error_str)
+        return [error_str]
+    except ValueError:
+        error_str = f"Error reading gages layer from {gpkg_path_filename}"
+        logger.warning(error_str)
+        return [error_str]
+
+    try:
+        nwm_lakes = gpd.read_file(nwm_lakes_path)
+    except FileNotFoundError:
+        error_str = f"Error: The file {nwm_lakes_path} was not found."
+        logger.warning(error_str)
+        return [error_str]
+
+    lakes_out = []
+
+    lakes_nhf = lakes_layer["lake_id"].to_list()
+    lakes_nwm = nwm_lakes[id_col].to_list()
+
+    lake_diffs = list(set(lakes_nwm) - set(lakes_nhf))
+    lakes_out.append({"Missing NWM or Lakeparm Lakes": lake_diffs})
+
+    missing_fp = lakes_layer[lakes_layer["fp_id"].isna() & lakes_layer["virtual_fp_id"].isna()][
+        "lake_id"
+    ].to_list()
+
+    missing_fp_lakes = [lake for lake in set(missing_fp) if lake in set(lakes_nwm)]
+    lakes_out.append({"Lakes with no flowpath or vitual flowpath": missing_fp_lakes})
+
+    return lakes_out
 
 
 def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
@@ -207,8 +317,28 @@ def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
 
     divides = validate_layer(file_name, Layer.DIVIDES, crs_enum)
     flowpaths = validate_layer(file_name, Layer.FLOWPATHS, crs_enum)
-    gages = validate_gages(file_name, crs_enum, calibration_gages)
-    output_items = {"Divides": divides, "Flowpaths": flowpaths, "Gages": gages}
+    calibration_gage_output = validate_calibration_gages(file_name, crs_enum, calibration_gages)
+    routelink_gage_output = (
+        validate_routelink_gages(
+            file_name,
+            routelink_path=cfg.validate_hf.routelink_gages_path,
+            id_col=cfg.gages.gages.inputs.routelink.id_col_name,
+        )
+        if cfg.validate_hf.routelink_gages_path
+        else ["No routelink file found; validation not run"]
+    )
+    lakes = (
+        validate_lakes(file_name, nwm_lakes_path=cfg.lakes.input_path, id_col=cfg.lakes.id_field)
+        if cfg.lakes.input_path
+        else ["No NWM lakes file found; validation not run"]
+    )
+
+    output_items = {
+        "Divides": divides,
+        "Flowpaths": flowpaths,
+        "Gages": calibration_gage_output + routelink_gage_output,
+        "Lakes": lakes,
+    }
 
     with open(f"{path}/{gpkg_file_root}_validation.json", "w") as file:
         json.dump(output_items, file, indent=4)

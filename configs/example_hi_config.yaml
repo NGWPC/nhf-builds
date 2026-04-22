@@ -1,12 +1,12 @@
 # global settings
 output_dir: data/
 crs: EPSG:32604
-output_name: hi_nhf_1.1.3.gpkg # If not specified, will default to version
+output_name: hi_nhf_1.1.4.gpkg # If not specified, will default to version
 
 # hf builds
 build:
-  reference_divides_path: data/reference/hi_0.1.5_reference_divides.parquet
-  reference_flowpaths_path: data/reference/hi_0.1.5_reference_flowpaths.parquet
+  reference_divides_path: data/reference/hi_0.1.6_reference_divides.parquet
+  reference_flowpaths_path: data/reference/hi_0.1.6_reference_flowpaths.parquet
   # debug_outlet_count: 2000 # If specified, only the total amount of rivers here will be built
   divide_aggregation_threshold: 3.0
 
@@ -196,6 +196,7 @@ gages:
 # --------------------------------------------------
 validate_hf:
   calibration_gages_path: data/gages/validation/calibratable_gages.csv
+  routelink_gages_path: data/gages/routelink/RouteLink_HI_EPSG4326.gpkg
 
 #---------------------------------------------------
 # flowpath crosswalk (fp_crosswalk)
