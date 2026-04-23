@@ -76,7 +76,8 @@ dev = [
 ]
 examples = [
     "ipykernel==6.29.5",
-    "jupyterlab==4.4.3"
+    "jupyterlab==4.4.3",
+    "pygraphviz==1.14"
 ]
 tests = [
     "pytest==8.4.1",
