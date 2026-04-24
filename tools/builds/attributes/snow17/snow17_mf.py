@@ -77,6 +77,8 @@ def melt_factors(
     irr_dec[irr_dec == 0] = np.nan
     irr_march_flat[irr_march_flat == 0] = np.nan
     irr_jun[irr_jun == 0] = np.nan
+    # set -3.4e38 fill values in wind to nan
+    wind[wind < 0] = np.nan
 
     # convert forest percent to decimal
     forest = forest / 100
@@ -159,6 +161,10 @@ def uadj(data_dir: Path, wind_file: Path, forest_file: Path, irr_mar_file: Path)
     forest = forest.rio.reproject_match(irr_march)
     wind = wind.rio.reproject_match(irr_march)
 
+    forest = np.squeeze(forest.values) / 100
+    wind = np.squeeze(wind.values)
+    wind[wind < 0] = np.nan
+
     # get information about the rasters and create a transform the new UADJ raster.
     width = irr_march.rio.width
     height = irr_march.rio.height
@@ -176,7 +182,6 @@ def uadj(data_dir: Path, wind_file: Path, forest_file: Path, irr_mar_file: Path)
     wind_travel = wind_adj_kmh * 6
     # compute uadj
     uadj = wind_travel * 0.002
-    uadj = np.squeeze(uadj)
 
     # create new uadj raster
     uadj_file = Path.joinpath(data_dir, "uadj_temp.tif")
