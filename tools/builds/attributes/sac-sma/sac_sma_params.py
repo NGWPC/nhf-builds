@@ -11,9 +11,13 @@ from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
 dst_crs = "EPSG:5070"
+# The proj4 string representing ESRI:54009, World_Mollweide, the native CRS of the global sac-sma dataset
+proj4_src = "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
 
 
-def get_extent(data_dir: Path, filename: Path, layer: str, buffer: float) -> list[float]:
+def get_extent(
+    data_dir: Path, filename: Path, layer: str, buffer: float, source_crs: str = proj4_src
+) -> list[float]:
     """Get domain extent from a specified layer in the NHF gpkg
 
     Parameters
@@ -26,6 +30,8 @@ def get_extent(data_dir: Path, filename: Path, layer: str, buffer: float) -> lis
         gpkg layer to use for the extent
     buffer: float
         buffer in meters (in sac-sma dataset native crs, ESRI:54009 - World_Mollweide)
+    source_crs: str
+        global sac-sma dataset crs.  This should always be the default (ESRI:54009 - World_Mollweide)
 
     Returns
     -------
@@ -33,8 +39,7 @@ def get_extent(data_dir: Path, filename: Path, layer: str, buffer: float) -> lis
         list of extent coordinates
     """
     gdf = gpd.read_file(os.path.join(data_dir, filename), layer=layer)
-    proj4 = "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
-    gdf = gdf.to_crs(proj4)
+    gdf = gdf.to_crs(source_crs)
     bounds = gdf.total_bounds
     bounds[0], bounds[1], bounds[2], bounds[3] = (
         bounds[0] - buffer,
@@ -45,7 +50,7 @@ def get_extent(data_dir: Path, filename: Path, layer: str, buffer: float) -> lis
     return bounds
 
 
-def clip_reproject(data_dir: Path, filename: Path, bounds: list[float]) -> Path:
+def clip_reproject(data_dir: Path, filename: Path, bounds: list[float], dst_crs: str = dst_crs) -> Path:
     """Clips global sac-sma parameter raster to the domain and reprojects to EPSG:5070 and saves a temporary raster"
 
     Parameters
@@ -65,15 +70,7 @@ def clip_reproject(data_dir: Path, filename: Path, bounds: list[float]) -> Path:
     with rasterio.open(os.path.join(data_dir, filename)) as src:
         # Create transform for new crs.
         dst_transform, dst_width, dst_height = calculate_default_transform(
-            src.crs,
-            dst_crs,
-            src.width,
-            src.height,
-            bounds[0],
-            bounds[1],
-            bounds[2],
-            bounds[3],
-            resolution=(4000, 4000),
+            src.crs, dst_crs, src.width, src.height, bounds[0], bounds[1], bounds[2], bounds[3]
         )
 
         # Update metadata for the destination file
@@ -116,7 +113,7 @@ def combine_rasters(data_dir: Path, superconus_raster: Path, conus_raster: Path)
     superconus_raster: Path
         Filename of the superconus parameter raster
     conus_raster: list[float]
-        Filename of the conus NWS paramter raster
+        Filename of the conus NWS parameter raster
 
     Returns
     -------
@@ -152,11 +149,7 @@ def combine_rasters(data_dir: Path, superconus_raster: Path, conus_raster: Path)
     new_raster.rio.to_raster(new_filename, tiled=True, compress="deflate")
 
     # remove temporary file
-    try:
-        os.remove(os.path.join(data_dir, superconus_raster))
-        print("Removed temporary file")
-    except FileNotFoundError:
-        print(f"Temporary {os.path.join(data_dir, superconus_raster)} file does not exist.")
+    Path(data_dir, superconus_raster).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

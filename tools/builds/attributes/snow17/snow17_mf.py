@@ -1,14 +1,13 @@
 import argparse
 import os
 from pathlib import Path
-from typing import Any
 
 import numpy as np
-import numpy.typing as npt
 import rasterio
 import rioxarray
 import xarray as xr
 from rasterio.enums import Resampling
+from rasterio.transform import from_bounds
 
 
 def melt_factors(
@@ -21,6 +20,8 @@ def melt_factors(
     forest_file: Path,
 ) -> None:
     """Computes melt factors MFMAX and MFMIN
+
+    Compute mfmax and mfmin using methodology in https://www.weather.gov/media/owp/oh/rfcdev/docs/Snow-17_A_priori_parm_estimates.pdf
 
     Parameters
     ----------
@@ -44,33 +45,57 @@ def melt_factors(
     None
 
     """
-    irr_mar = read_raster(file_name=Path.joinpath(data_dir, irr_mar_file))
-    irr_march_flat = read_raster(file_name=Path.joinpath(data_dir, irr_mar_flat_file))
-    irr_dec = read_raster(file_name=Path.joinpath(data_dir, irr_dec_file))
-    irr_jun = read_raster(file_name=Path.joinpath(data_dir, irr_jun_file))
-    forest = read_raster(file_name=Path.joinpath(data_dir, forest_file))
-    wind = read_raster(file_name=Path.joinpath(data_dir, wind_file))
-    width, height, transform, crs = raster_info(file_name=Path.joinpath(data_dir, irr_mar_file))
+    # read rasters
+    irr_mar = rioxarray.open_rasterio(Path.joinpath(data_dir, irr_mar_file))
+    irr_march_flat = rioxarray.open_rasterio(Path.joinpath(data_dir, irr_mar_flat_file))
+    irr_dec = rioxarray.open_rasterio(Path.joinpath(data_dir, irr_dec_file))
+    irr_jun = rioxarray.open_rasterio(Path.joinpath(data_dir, irr_jun_file))
+    forest = rioxarray.open_rasterio(Path.joinpath(data_dir, forest_file))
+    wind = rioxarray.open_rasterio(Path.joinpath(data_dir, wind_file))
 
-    irr_mar = np.squeeze(irr_mar)
-    irr_dec = np.squeeze(irr_dec)
-    irr_march_flat = np.squeeze(irr_march_flat)
-    irr_jun = np.squeeze(irr_jun)
-    forest = np.squeeze(forest)
-    wind = np.squeeze(wind)
+    # align forest and wind rasters to the irradiance rasters
+    forest = forest.rio.reproject_match(irr_mar)
+    wind = wind.rio.reproject_match(irr_mar)
+
+    # get raster size info and create transform for new mfmax and mfmin rasters
+    width = irr_mar.rio.width
+    height = irr_mar.rio.height
+    crs = irr_mar.rio.crs
+    bounds = irr_mar.rio.bounds()
+    transform = from_bounds(*bounds, width, height)
+
+    # remove 3rd dimension
+    irr_mar = np.squeeze(irr_mar.values)
+    irr_dec = np.squeeze(irr_dec.values)
+    irr_march_flat = np.squeeze(irr_march_flat.values)
+    irr_jun = np.squeeze(irr_jun.values)
+    forest = np.squeeze(forest.values)
+    wind = np.squeeze(wind.values)
+
+    # set any zeros in the irradiance arrays to nan
+    irr_mar[irr_mar == 0] = np.nan
+    irr_dec[irr_dec == 0] = np.nan
+    irr_march_flat[irr_march_flat == 0] = np.nan
+    irr_jun[irr_jun == 0] = np.nan
 
     # convert forest percent to decimal
     forest = forest / 100
 
+    # get the terrain influence on incoming solar irradiation by taking the ratio of irradition with terrain
+    # to irradiation with a flat surface for march 21 when snowmelt typically starts.
     rdb = irr_mar / irr_march_flat
+    # computer the ratio of minimum annual irradiance to maximum annual irradiance.
     r = irr_dec / irr_jun
-
+    # compute mfmax
     mfmax = ((1.03 * (1 - forest) * rdb) + 2.04 + (0.42 * wind)) / (2 * (r + 1))
     mfmax = np.squeeze(mfmax)
+    # computer mfmin
     mfmin = mfmax * r
 
+    # create mfmax raster
+    mfmax_file = Path.joinpath(data_dir, "mfmax_temp.tif")
     with rasterio.open(
-        "mfmax.tif",
+        mfmax_file,
         "w",
         driver="GTiff",
         height=height,
@@ -82,8 +107,10 @@ def melt_factors(
     ) as dst:
         dst.write(mfmax, 1)
 
+    # create mfmin raster
+    mfmin_file = Path.joinpath(data_dir, "mfmin_temp.tif")
     with rasterio.open(
-        "mfmin.tif",
+        mfmin_file,
         "w",
         driver="GTiff",
         height=height,
@@ -96,8 +123,16 @@ def melt_factors(
         dst.write(mfmin, 1)
 
 
-def uadj(data_dir: Path, wind_file: Path, forest_file: Path) -> None:
+def uadj(data_dir: Path, wind_file: Path, forest_file: Path, irr_mar_file: Path) -> None:
     """Computes UADJ
+
+    UADJ computed using parameterization described in https://www.weather.gov/media/owp/oh/rfcdev/docs/Snow-17_A_priori_parm_estimates.pdf
+    UADJ = 0.002 * U, where U is the 6hr wind travel (distance wind travels in 6 hours) at 1 meter above the surface.
+    I could not find the reference used in the NWS presentation for the wind speed adjustment, so I used the power law method,
+    u_1m = u_10m * (1m/10m)^shear_exponent.  The shear exponent accounts for surface roughness and ranges from 0.1 for open
+    land to 0.25 for dense forest(https://www.engineeringtoolbox.com/wind-shear-d_1215.html#:~:text=Wind%20slowed%20down%20at%20surface,=%207.1%20m/s).
+    Using the forest fraction, I linearly mapped the values between 0% forest to 0.1 and 100% forest to
+    0.25.  This might need to be revisited later.
 
     Parameters
     ----------
@@ -107,26 +142,46 @@ def uadj(data_dir: Path, wind_file: Path, forest_file: Path) -> None:
         Filename of wind raster
     forest_file: Path
         Filename of forest percentage raster
+    irr_march_file: Path
+        Filename of march irradiance file, used to align forest and wind rasters
 
     Returns
     -------
     None
 
     """
-    wind = read_raster(file_name=Path.joinpath(data_dir, wind_file))
-    forest = read_raster(file_name=Path.joinpath(data_dir, forest_file))
-    width, height, transform, crs = raster_info(file_name=Path.joinpath(data_dir, forest_file))
+    # read rasters
+    forest = rioxarray.open_rasterio(Path.joinpath(data_dir, forest_file))
+    wind = rioxarray.open_rasterio(Path.joinpath(data_dir, wind_file))
+    irr_march = rioxarray.open_rasterio(Path.joinpath(data_dir, irr_mar_file))
 
+    # align forest and wind rasters to the irradiance rasters
+    forest = forest.rio.reproject_match(irr_march)
+    wind = wind.rio.reproject_match(irr_march)
+
+    # get information about the rasters and create a transform the new UADJ raster.
+    width = irr_march.rio.width
+    height = irr_march.rio.height
+    crs = irr_march.rio.crs
+    bounds = irr_march.rio.bounds()
+    transform = from_bounds(*bounds, width, height)
+
+    # compute uadj starting with the wind adjustment
     exp_min = 0.1
     exp_max = 0.25
     wind_adj = wind * (1 / 10) ** (exp_min + (exp_max - exp_min) * forest)
+    # convert m/s to km/hr
     wind_adj_kmh = wind_adj * 3.6
+    # get wind travel over 6 hours
     wind_travel = wind_adj_kmh * 6
+    # compute uadj
     uadj = wind_travel * 0.002
     uadj = np.squeeze(uadj)
 
+    # create new uadj raster
+    uadj_file = Path.joinpath(data_dir, "uadj_temp.tif")
     with rasterio.open(
-        "uadj.tif",
+        uadj_file,
         "w",
         driver="GTiff",
         height=height,
@@ -162,7 +217,7 @@ def combine_rasters(data_dir: Path, superconus_raster: Path, conus_raster: Path)
 
     # resample superconus raster to the resolution of the NWS raster
     superconus = superconus.rio.reproject(
-        superconus.rio.crs, resolution=conus.rio.resolution(), resampling=Resampling.bilinear
+        conus.rio.crs, resolution=conus.rio.resolution(), resampling=Resampling.bilinear
     )
 
     # Expand the extent of the conus raster to match that of the superconus raster
@@ -186,43 +241,7 @@ def combine_rasters(data_dir: Path, superconus_raster: Path, conus_raster: Path)
     new_raster.rio.to_raster(new_filename, tiled=True, compress="deflate")
 
     # remove temporary file
-    try:
-        os.remove(os.path.join(data_dir, superconus_raster))
-        print("Removed temporary file")
-    except FileNotFoundError:
-        print(f"Temporary {os.path.join(data_dir, superconus_raster)} file does not exist.")
-
-
-def read_raster(file_name: Path) -> npt.NDArray[np.float32]:
-    """Read raster
-
-    Parameters
-    ----------
-    file_name : Path
-
-    Returns
-    -------
-    Raster object
-
-    """
-    with rasterio.open(file_name) as src:
-        return src.read()
-
-
-def raster_info(file_name: Path) -> Any:
-    """Read raster
-
-    Parameters
-    ----------
-    file_name : Path
-
-    Returns
-    -------
-    Raster
-
-    """
-    with rasterio.open(file_name) as src:
-        return src.width, src.height, src.transform, src.crs
+    Path(data_dir, superconus_raster).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
@@ -266,18 +285,25 @@ if __name__ == "__main__":
         forest_file=Path(args.forest),
     )
 
-    uadj(data_dir=Path(args.data_dir), wind_file=Path(args.wind), forest_file=Path(args.forest))
+    uadj(
+        data_dir=Path(args.data_dir),
+        wind_file=Path(args.wind),
+        forest_file=Path(args.forest),
+        irr_mar_file=Path(args.irr_march),
+    )
 
     combine_rasters(
         data_dir=Path(args.data_dir),
-        superconus_raster=Path("mfmax.tif"),
-        conus_raster=Path(args.conus_raster),
+        superconus_raster=Path("mfmax_temp.tif"),
+        conus_raster=Path(args.conus_mfmax),
     )
     combine_rasters(
         data_dir=Path(args.data_dir),
-        superconus_raster=Path("mfmin.tif"),
-        conus_raster=Path(args.conus_raster),
+        superconus_raster=Path("mfmin_temp.tif"),
+        conus_raster=Path(args.conus_mfmin),
     )
     combine_rasters(
-        data_dir=Path(args.data_dir), superconus_raster=Path("uadj.tif"), conus_raster=Path(args.conus_raster)
+        data_dir=Path(args.data_dir),
+        superconus_raster=Path("uadj_temp.tif"),
+        conus_raster=Path(args.conus_uadj),
     )
