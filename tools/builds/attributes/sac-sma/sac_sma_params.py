@@ -1,3 +1,11 @@
+"""Create Sac-SMA parameters using the NWS rasters for CONUS and a global dataset for the 
+rest of superconus.
+Data source:
+s3://edfs-data/attributes/sac-sma-inputs/
+The global inputs are 250m global Sac-SMA datasets from https://data.csiro.au/collection/csiro:62260?q=sac-sma&_st=keyword&_str=1&_si=1
+The conus inputs are 4km rasters created from the NWS XMRG data: https://hydrology.nws.noaa.gov/pub/Sacramento_Snow_Parameters/sac_par/ssurgo/ 
+"""
+
 import argparse
 import os
 from pathlib import Path
