@@ -1,3 +1,12 @@
+"""Creates a new SNOW17 raster combining NWS CONUS and source rasters to compute.
+
+Sample call:
+python tools/builds/attributes/snow17/snow17_mf.py --data_dir [your dir] --irr_march irr_0321_4km_5070.tif
+ --irr_march_flat irr_0321_flat_4km_5070.tif --irr_december irr_1221_4km_5070.tif
+ --forest forest_4km_5070.tif --wind wind_4km_5070.tif --conus_mfmax MFMAX.tif
+ --conus_mfmin MFMIN.tif --conus_uadj UADJ.tif --irr_june irr_0622_4km_5070.tif
+"""
+
 import argparse
 import os
 from pathlib import Path
