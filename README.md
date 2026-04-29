@@ -86,3 +86,6 @@ To ensure `flowpaths` can be mapped to back to the materials that created them, 
 - Reference Reservoirs -> `dam_id`
 - USGS/ENVCA/CADWR/TXDOT Streamflow Gages -> `site_no`
 - NHD+ -> `nhd_feature_id`
+
+##### Visual Diagram
+<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_diagram.png" alt="NHF Diagram" width="100%" height="100%"/>
