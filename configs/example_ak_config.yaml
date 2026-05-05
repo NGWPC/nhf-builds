@@ -196,11 +196,18 @@ divide_attributes:
       file_name: ueb/dec.tif
       agg_type: mean
       field_name: temp_delta_dec_mean
-    gwbuckparm:
-      file_name: gw/GWBUCKPARM_AK_FullRouting.nc
-      file_name2: gw/spatialweights_AK_FullRouting.nc
-      agg_type: groundwater
-      field_name: groundwater
+    coeff:
+      file_name: gw/coeff.tif
+      agg_type: mean
+      field_name: cgw
+    expon:
+      file_name: gw/expon.tif
+      agg_type: mean
+      field_name: expon
+    zmax:
+      file_name: gw/zmax.tif
+      agg_type: mean
+      field_name: max_gw_storage
 
 
 

@@ -1064,23 +1064,23 @@ class GroundWaterProjectionCONUS(Enum):
 
     PROJ4 = "+proj=lcc +lat_1=30 +lat_2=60 +lat_0=40.0000076293945 +lon_0=-97 +x_0=0 +y_0=0 +a=6370000 +b=6370000 +units=m +no_defs"
     X_ORIGIN = -2303874.17655
-    Y_ORIGIN = 1919874.66329
-    WIDTH = 4608
-    HEIGHT = 3840
-    DX = 1000
-    DY = 1000
+    Y_ORIGIN = -1919874.66329
+    WIDTH = 18432
+    HEIGHT = 15360
+    DX = 250
+    DY = 250
 
 
 class GroundWaterProjectionAK(Enum):
     """CRS, origin, and size of NWM grids for groundwater; source:  Fulldom_AK_FullRouting.nc"""
 
-    PROJ4 = "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-135"
+    PROJ4 = "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=-135 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs"
     X_ORIGIN = -1130764.7202253528
-    Y_ORIGIN = -2704639.5335353096
+    Y_ORIGIN = -3163389.53353531
     WIDTH = 3516
     HEIGHT = 1816
-    DX = 1000
-    DY = 1000
+    DX = 250
+    DY = 250
 
 
 class GroundWaterProjectionHI(Enum):
@@ -1088,7 +1088,7 @@ class GroundWaterProjectionHI(Enum):
 
     PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=10.0 +lat_2=30.0 +lat_0=20.6 +lon_0=-157.42 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext +no_defs"
     X_ORIGIN = -294950.07097397465
-    Y_ORIGIN = 194950.63030902296
+    Y_ORIGIN = -194949.36969098
     WIDTH = 5900
     HEIGHT = 3900
     DX = 100
@@ -1100,7 +1100,7 @@ class GroundWaterProjectionPRVI(Enum):
 
     PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=18.1 +lat_2=18.1 +lat_0=18.1 +lon_0=-65.91 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
     X_ORIGIN = -149949.83
-    Y_ORIGIN = 54951.032
+    Y_ORIGIN = -54948.968
     WIDTH = 3000
     HEIGHT = 1100
     DX = 100

@@ -12,15 +12,15 @@ build:
 
 # choose tasks to run
 tasks:
-  build_hydrofabric: True
+  build_hydrofabric: False
   divide_attributes: True
-  flowpath_attributes: True
-  waterbodies: True
-  hydrolocations: True
-  gages: True
-  lakes: True
-  fp_crosswalk: True
-  validate_hf: True
+  flowpath_attributes: False
+  waterbodies: False
+  hydrolocations: False
+  gages: False
+  lakes: False
+  fp_crosswalk: False
+  validate_hf: False
 
 # flowpaths
 flowpath_attributes:
@@ -33,7 +33,7 @@ flowpath_attributes:
 
 # divide attributes
 divide_attributes:
-  processes: 10
+  processes: 1
   data_dir: data/divide-attributes
   divide_id: div_id
   tmp_dir: data/tmp/divide-attributes
@@ -240,11 +240,19 @@ divide_attributes:
       file_name: ueb/dec.tif
       agg_type: mean
       field_name: temp_delta_dec_mean
-    gwbuckparm:
-      file_name: gw/GWBUCKPARM_CONUS_FullRouting.nc
-      file_name2: gw/spatialweights_1km_LongRange_NWMv3.0.nc
-      agg_type: groundwater
-      field_name: groundwater
+    coeff:
+      file_name: gw/coeff.tif
+      agg_type: mean
+      field_name: cgw
+    expon:
+      file_name: gw/expon.tif
+      agg_type: mean
+      field_name: expon
+    zmax:
+      file_name: gw/zmax.tif
+      agg_type: mean
+      field_name: max_gw_storage
+
 
 # waterbodies - all values have defaults
 waterbodies:
