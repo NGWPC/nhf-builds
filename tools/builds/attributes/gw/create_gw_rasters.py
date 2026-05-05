@@ -1,3 +1,14 @@
+"""Creates separate raster files for groundwater expon, coeff, and zmax attributes.
+
+Inputs are NWM Full Routing spatial weights and GWBUCKPARM netCDF files.
+
+Sample call:
+python gw2.py --data_dir /home/daniel.cumpton/nhf-builds/data/divide-attributes/gw
+--weights_file spatialweights_CONUS_FullRouting.nc
+--gwbuckparm_file GWBUCKPARM_CONUS_FullRouting.nc
+--crs 5070
+"""
+
 import argparse
 import gc
 from pathlib import Path
