@@ -1,3 +1,22 @@
+"""Creates a new SNOW17 raster combining NWS CONUS and source rasters to compute.
+
+Sample call:
+python tools/builds/attributes/snow17/snow17_mf.py --data_dir [your dir] --irr_march irr_0321_4km_5070.tif
+ --irr_march_flat irr_0321_flat_4km_5070.tif --irr_december irr_1221_4km_5070.tif
+ --forest forest_4km_5070.tif --wind wind_4km_5070.tif --conus_mfmax MFMAX.tif
+ --conus_mfmin MFMIN.tif --conus_uadj UADJ.tif --irr_june irr_0622_4km_5070.tif
+Input data:
+Inputs in EPSG:5070 and 4km resolution are in s3://edfs-data/attributes/snow17-inputs/
+Data sources:
+irradiance files are created using the USGS 250m DEM, slope and aspect files downscaled to 4km and run
+in QGIS using the GRASS r.sun.insoltime tool for March 21st (Julian day 80), December 21st (Julian day 355),
+and June 22nd (Julian day 173).  irr_0321_flat_4km_5070 is March 21st irradiance with no topography and
+was created using a flat DEM.  The forest percentage data is from https://data.niaid.nih.gov/resources?id=zenodo_10589729
+Tiles covering North America were merged in QGIS and resampled to 4m and reprojected to EPSG:5070.
+Wind data is from NCEP North American Regional Reanalysis (NARR) monthly long-term 10 meter average windspeed (wspd.10m.mon.ltm.nc) from https://psl.noaa.gov/data/gridded/data.narr.html
+Data for March was used.  This data is 32km resolution and was resampled to 4km to match the other grids and reprojected to EPSG:5070.
+"""
+
 import argparse
 import os
 from pathlib import Path

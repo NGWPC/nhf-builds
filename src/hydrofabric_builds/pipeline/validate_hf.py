@@ -166,7 +166,9 @@ def validate_calibration_gages(gpkg_path_filename: Path, crs: CRS, gages_list: P
     missing_fp_calibratable_gage = [
         gage for gage in set(missing_fp) if gage in set(calibratable_gages_domain)
     ]
-    gages_out.append({"Calibratable gages with no flowpath or vitual flowpath": missing_fp_calibratable_gage})
+    gages_out.append(
+        {"Calibratable gages with no flowpath or virtual flowpath": missing_fp_calibratable_gage}
+    )
 
     return gages_out
 
@@ -223,7 +225,7 @@ def validate_routelink_gages(gpkg_path_filename: Path, routelink_path: Path, id_
     ].to_list()
 
     missing_fp_routelink_gage = [gage for gage in set(missing_fp) if gage in set(routelink_list)]
-    gages_out.append({"Routelink gages with no flowpath or vitual flowpath": missing_fp_routelink_gage})
+    gages_out.append({"Routelink gages with no flowpath or virtual flowpath": missing_fp_routelink_gage})
 
     return gages_out
 
