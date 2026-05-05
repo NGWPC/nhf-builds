@@ -3,6 +3,8 @@
 import logging
 from typing import Any, cast
 
+import geopandas as gpd
+import pandas as pd
 from tqdm import tqdm
 
 from hydrofabric_builds.config import HFConfig
@@ -239,6 +241,111 @@ def map_build_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _bulk_replace(df, cols, replace_map: [int, int]):
+    """Replace several columns in a DataFrame by looking their values up in a dict.
+
+    There are a few odd decisions here that are more or less necessary due to how NULL/NA/NaN is handled in DataFrames
+    as well as the need to comply with assumptions about datatypes made in later pipeline stages.
+
+    Parameters
+    ----------
+    df: DataFrame/GeoDataFrame whose columns will be transformed
+    cols: list of columns to replace
+    replace_map: dict for lookup-based transformation
+
+    Returns
+    -------
+    The transformed DataFrame/GeoDataFrame
+    """
+    for col in cols:
+        df[col] = df[col].apply(lambda e: None if pd.isna(e) else replace_map[int(e)])
+        df[col] = df[col].astype("float64") if df[col].isnull().values.any() else df[col].astype("int64")
+
+    return df
+
+
+def reassign_ids(
+    base_hf: dict[str, (gpd.GeoDataFrame | pd.DataFrame)],
+) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
+    """Reassign fp_ids based on spatial sorting"""
+    flowpaths = base_hf["flowpaths"]
+    flowpaths_wgs84 = gpd.GeoDataFrame(flowpaths.copy()).to_crs("EPSG:4326")
+    nexuses = base_hf["nexus"]
+    nexuses_wgs84 = gpd.GeoDataFrame(nexuses.copy()).to_crs("EPSG:4326")
+    divides = base_hf["divides"]
+
+    fp_ids = set(flowpaths["fp_id"].unique())
+    leftover_nex_ids = set(nexuses["nex_id"].unique()) - fp_ids
+
+    fp_ids_sorted = []
+
+    for _, row in flowpaths_wgs84.iterrows():
+        # fp_centroid = flowpaths_wgs84[idx]["geometry"].centroid
+        fp_centroid = row["geometry"].centroid
+        fp_ids_sorted.append((row["fp_id"], (-fp_centroid.x, fp_centroid.y)))
+
+    for _, row in nexuses_wgs84.loc[nexuses_wgs84["nex_id"].isin(leftover_nex_ids)].iterrows():
+        # nex_centroid = nexuses_wgs84[idx]["geometry"].centroid
+        nex_centroid = row["geometry"].centroid
+        fp_ids_sorted.append((row["nex_id"], (-nex_centroid.x, nex_centroid.y)))
+
+    fp_ids_sorted = sorted(fp_ids_sorted, key=lambda e: e[1])
+
+    fp_reassign_map = {}
+    for idx, fp_id in enumerate(fp_ids_sorted):
+        fp_reassign_map[fp_id[0]] = idx
+
+    flowpaths = _bulk_replace(
+        flowpaths, ["fp_id", "fp_to_id", "div_id", "up_nex_id", "dn_nex_id"], fp_reassign_map
+    )
+    nexuses = _bulk_replace(nexuses, ["nex_id", "dn_fp_id"], fp_reassign_map)
+    divides = _bulk_replace(divides, ["div_id"], fp_reassign_map)
+
+    base_hf["flowpaths"] = flowpaths
+    base_hf["nexus"] = nexuses
+    base_hf["divides"] = divides
+
+    virt_fp_id_offset = len(fp_ids_sorted)
+
+    virt_flowpaths = base_hf["virtual_flowpaths"]
+    virt_nexuses = base_hf["virtual_nexus"]
+
+    virt_fp_ids = set(virt_flowpaths["virtual_fp_id"].unique())
+    leftover_virt_nex_ids = set(virt_nexuses["virtual_nex_id"].unique()) - virt_fp_ids
+
+    virt_fp_ids_sorted = []
+
+    for _, row in virt_flowpaths.copy().to_crs("EPSG:4326").iterrows():
+        # fp_centroid = flowpaths_wgs84[idx]["geometry"].centroid
+        fp_centroid = row["geometry"].centroid
+        virt_fp_ids_sorted.append((row["virtual_fp_id"], (-fp_centroid.x, fp_centroid.y)))
+
+    for _, row in (
+        virt_nexuses.copy()
+        .to_crs("EPSG:4326")
+        .loc[virt_nexuses["virtual_nex_id"].isin(leftover_virt_nex_ids)]
+        .iterrows()
+    ):
+        # nex_centroid = nexuses_wgs84[idx]["geometry"].centroid
+        nex_centroid = row["geometry"].centroid
+        virt_fp_ids_sorted.append((row["virtual_nex_id"], (-nex_centroid.x, nex_centroid.y)))
+
+    virt_fp_ids_sorted = sorted(virt_fp_ids_sorted, key=lambda e: e[1])
+
+    virt_fp_reassign_map = {}
+    for idx, virt_fp_id in enumerate(virt_fp_ids_sorted):
+        virt_fp_reassign_map[virt_fp_id[0]] = idx + virt_fp_id_offset
+
+    base_hf["virtual_flowpaths"] = _bulk_replace(
+        virt_flowpaths, ["virtual_fp_id", "up_virtual_nex_id", "dn_virtual_nex_id"], virt_fp_reassign_map
+    )
+    base_hf["virtual_nexus"] = _bulk_replace(
+        virt_nexuses, ["virtual_nex_id", "dn_virtual_fp_id"], virt_fp_reassign_map
+    )
+
+    return base_hf
+
+
 def reduce_combine_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     """Execute REDUCE PHASE: Combine all built hydrofabric layers into an aggregated dataset.
 
@@ -273,6 +380,8 @@ def reduce_combine_base_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]
         raise ValueError("No built hydrofabrics found from build phase")
 
     result = _combine_hydrofabrics(built_hydrofabrics, cfg.crs)
+
+    result = reassign_ids(result)
 
     _check_network_cycles(
         fp_gdf=result["flowpaths"],
