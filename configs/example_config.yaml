@@ -33,7 +33,7 @@ flowpath_attributes:
 
 # divide attributes
 divide_attributes:
-  processes: 1
+  processes: 10
   data_dir: data/divide-attributes
   divide_id: div_id
   tmp_dir: data/tmp/divide-attributes
