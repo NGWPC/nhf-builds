@@ -129,11 +129,19 @@ divide_attributes:
       file_name: nwm/XXAJ.tif
       agg_type: mean
       field_name: x_xinanjiang_shape_parameter
-    gwbuckparm:
-      file_name: gw/GWBUCKPARM_PRVI_FullRouting.nc
-      file_name2: gw/spatialweights_PRVI_FullRouting.nc
-      agg_type: groundwater
-      field_name: groundwater
+    coeff:
+      file_name: gw/coeff.tif
+      agg_type: mean
+      field_name: cgw
+    expon:
+      file_name: gw/expon.tif
+      agg_type: mean
+      field_name: expon
+    zmax:
+      file_name: gw/zmax.tif
+      agg_type: mean
+      field_name: max_gw_storage
+
 
 
 gages:
