@@ -522,6 +522,11 @@ class TestIntegration:
                     for src_idx, _, _ in in_edges
                 ]
 
+                upstream_paths_len = {}
+
+                for _, up_path_len, up_mainstem in upstream_paths:
+                    upstream_paths_len[up_mainstem] = up_path_len
+
                 # The upstream with longest path should determine the mainstem
                 longest_upstream_id, longest_path, longest_mainstem = max(upstream_paths, key=lambda x: x[1])
 
@@ -536,7 +541,9 @@ class TestIntegration:
                 if len(set(upstream_mainstems)) > 1:
                     # Multiple mainstems joining - verify the longest one continues or current is new
                     assert (
-                        current_mainstem == longest_mainstem or current_mainstem not in upstream_mainstems
+                        current_mainstem == longest_mainstem
+                        or current_mainstem not in upstream_mainstems
+                        or longest_path == upstream_paths_len[current_mainstem]
                     ), (
                         f"At confluence fp_id={fp_id}, current mainstem {current_mainstem} doesn't match "
                         f"longest upstream mainstem {longest_mainstem} (path={longest_path}), and current "
@@ -549,3 +556,4 @@ class TestIntegration:
             assert confluence_count > 0, (
                 f"Expected at least one confluence in network of {len(flowpaths)} flowpaths, found none"
             )
+        assert 1 == 0
