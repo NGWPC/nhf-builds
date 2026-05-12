@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
 
-import geopandas as gpd
 import numpy as np
 import pandas as pd
-
-from hydrofabric_builds.schemas.hydrofabric import NWMDefaultHydraulics
 
 
 def _zero_to_nan(s: pd.Series | None) -> pd.Series | None:
@@ -76,8 +72,8 @@ def populate_hydraulics(
     # parameterized fallbacks
     default_WeirC: float = 0.4,
     default_WeirL: float = 10.0,  # m
-    default_OrficeC: float = 0.1,
-    default_OrficeA: float = 1.0,  # m²
+    default_OrificeC: float = 0.1,
+    default_OrificeA: float = 1.0,  # m²
     default_ifd: float = 0.899,
     # height-based fractions
     crest_frac: float = 0.90,  # crest ~ base + 0.90*H
@@ -85,18 +81,18 @@ def populate_hydraulics(
     max_frac: float = 1.00,  # max pool ~ base + 1.00*H
     # relative to waterbody elevation
     max_from_wb_frac: float = 0.10,  # LkMxE ~ wb + 0.10*H
-    # orifice area heuristics
-    orficeA_small: float = 0.5,
-    orficeA_med: float = 0.9,
-    orficeA_large: float = 1.5,
-    orficeA_concrete: float = 1.2,
+    # Orifice area heuristics
+    OrificeA_small: float = 0.5,
+    OrificeA_med: float = 0.9,
+    OrificeA_large: float = 1.5,
+    OrificeA_concrete: float = 1.2,
     use_hazard: bool = False,
 ) -> pd.DataFrame:
     """
     Python port of R `populate_hydraulics()`.
 
     Expects a DataFrame with (some subset of) the following columns:
-      dam_id, nidid, osm_ww_poly, ref_fab_wb,
+      dam_id, nidid, ref_fab_wb,
       dam_type, spillway_type, purposes, hazard,
       structural_height, dam_height, hydraulic_height, nid_height,
       ref_area_sqkm, osm_area_sqkm, surface_area,
@@ -104,9 +100,9 @@ def populate_hydraulics(
       ref_elev, osm_wb_elev, dam_elev, spillway_width, dam_length.
 
     Returns a new DataFrame with:
-      dam_id, nidid, osm_wb_id, ref_wb_id,
+      dam_id, nidid, ref_wb_id,
       H_m, LkArea, LkMxE, WeirC, WeirL, WeirE,
-      OrficeC, OrficeA, OrficeE, Dam_Length, ifd.
+      OrificeC, OrificeA, OrificeE, Dam_Length, ifd.
 
     :param df: Reference reservoirs dataframe. It should contain columns like dam_id, nidid, dam_type,
         spillway_type, heights, areas, storage, DEM-based elevations, etc. This is the input you’re enriching
@@ -115,33 +111,50 @@ def populate_hydraulics(
         the spillway type text. This is the coefficient in the standard broad-crested/sharp-crested weir equation
     :param default_WeirL: Fallback weir length in meters. Used when neither spillway_width nor dam_length
         are available or valid. Also becomes the default Dam_Length.
-    :param default_OrficeC: Fallback orifice coefficient (dimensionless) used when the spillway text and
+    :param default_OrificeC: Fallback Orifice coefficient (dimensionless) used when the spillway text and
         purposes don’t give enough information to assign a more specific value.
-    :param default_OrficeA: Fallback orifice area in square meters used when no height-based or material-based
-        heuristic can assign OrficeA.
+    :param default_OrificeA: Fallback Orifice area in square meters used when no height-based or material-based
+        heuristic can assign OrificeA.
     :param default_ifd: A constant scalar returned as the ifd column for each dam. In the v1 workflow this is set
         to 0.899 to match NWM defaults.
     :param crest_frac: Fraction of total dam height H used to place the weir crest elevation above the dam base
         (dam_elev) when DEM water-surface info is missing. Approx: WeirE ≈ base + crest_frac * H (default 0.90).
-    :param invert_frac: Fraction of H above the dam base used to estimate the orifice invert elevation.
-        Approx: OrficeE ≈ base + invert_frac * H (default 0.15).
+    :param invert_frac: Fraction of H above the dam base used to estimate the Orifice invert elevation.
+        Approx: OrificeE ≈ base + invert_frac * H (default 0.15).
     :param max_frac: Fraction of H above the dam base used to estimate maximum pool elevation when no better info is available.
         Approx: LkMxE ≈ base + max_frac * H (default 1.00).
     :param max_from_wb_frac: Fraction of H added on top of the waterbody elevation (wb = ref_elev or osm_wb_elev) to estimate maximum pool:
         LkMxE ≈ wb + max_from_wb_frac * H (default 0.10).
-    :param orficeA_small: Heuristic orifice area (m²) assigned when dam height H < 10 m.
-    :param orficeA_med: Heuristic orifice area (m²) for medium dams (10 ≤ H < 30 m).
-    :param orficeA_large: Heuristic orifice area (m²) for tall dams (H ≥ 30 m).
-    :param orficeA_concrete: Override orifice area (m²) used when the dam looks concrete/ogee/gravity/arch. Applied if
-        OrficeA is still missing after height-based rules.
+    :param OrificeA_small: Heuristic Orifice area (m²) assigned when dam height H < 10 m.
+    :param OrificeA_med: Heuristic Orifice area (m²) for medium dams (10 ≤ H < 30 m).
+    :param OrificeA_large: Heuristic Orifice area (m²) for tall dams (H ≥ 30 m).
+    :param OrificeA_concrete: Override Orifice area (m²) used when the dam looks concrete/ogee/gravity/arch. Applied if
+        OrificeA is still missing after height-based rules.
     :param use_hazard: Boolean flag. If True, the function uses the hazard rating (e.g., high / significant) to
-        slightly increase weir length, orifice area, and sometimes orifice coefficient for higher-hazard dams (more conservative hydraulics). If False, no hazard-based adjustment is applied.
+        slightly increase weir length, Orifice area, and sometimes Orifice coefficient for higher-hazard dams (more conservative hydraulics). If False, no hazard-based adjustment is applied.
     :return: a Dataframe
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame")
 
     n = len(df)
+
+    # These columns likely already exist from importing previous data, but if they do not exist, create them and fill with nan
+    param_columns = [
+        "LkArea",
+        "LkMxE",
+        "WeirC",
+        "WeirL",
+        "WeirE",
+        "OrificeC",
+        "OrificeA",
+        "OrificeE",
+        "Dam_Length",
+        "ifd",
+    ]
+    for c in param_columns:
+        if c not in df.columns:
+            df[c] = np.nan
 
     # ---- pull allowed inputs (lowercased strings) ----
     spill = _tolower_chr(df.get("spillway_type", pd.Series(index=df.index, dtype="string")))
@@ -159,15 +172,14 @@ def populate_hydraulics(
     # ---- DEM anchors (m) ----
     wb = _coalesce_num(  # normal pool proxy
         df.get("ref_elev"),
-        df.get("osm_wb_elev"),
     )
     base = _num(df.get("dam_elev", pd.Series(index=df.index, dtype="float32"))).to_numpy()
 
-    # ---- Area (m²): ref_area_sqkm > osm_area_sqkm > surface_area ----
+    # ---- Area (km²): ref_area_sqkm >  surface_area ----
     LkArea = _coalesce_num(
-        _num(df.get("ref_area_sqkm")) * 1e6,
-        _num(df.get("osm_area_sqkm")) * 1e6,
-        _num(df.get("surface_area")),
+        _num(df.get("LkArea")),
+        _num(df.get("ref_area_sqkm")),
+        _num(df.get("surface_area")) / 1e6,
     )
     LkArea = np.where(LkArea == 0, np.nan, LkArea)
 
@@ -187,6 +199,7 @@ def populate_hydraulics(
 
     # ---- Weir length (m): spillway_width > dam_length > default ----
     WeirL = _coalesce_num(
+        _zero_to_nan(df.get("WeirL")),
         _zero_to_nan(df.get("spillway_width")),
         _zero_to_nan(df.get("dam_length")),
     )
@@ -243,16 +256,18 @@ def populate_hydraulics(
     Anything that doesn’t match those patterns falls back to default_WeirC (0.4 in the original workflow,
     matching current NWM default).
     """
-    WeirC = np.full(n, np.nan, dtype="float32")
-    WeirC[is_broad.to_numpy()] = 1.6
-    WeirC[is_ogee.to_numpy()] = 1.7
-    WeirC[is_sharp.to_numpy()] = 1.84
-    WeirC[(is_earth & ~is_broad & ~is_ogee & ~is_sharp).to_numpy()] = 1.6
+    # WeirC = np.full(n, np.nan, dtype="float32")
+    WeirC = df["WeirC"].to_numpy()
+    WeirC[is_broad.to_numpy() & np.isnan(WeirC)] = 1.6
+    WeirC[is_ogee.to_numpy() & np.isnan(WeirC)] = 1.7
+    WeirC[is_sharp.to_numpy() & np.isnan(WeirC)] = 1.84
+    WeirC[(is_earth & ~is_broad & ~is_ogee & ~is_sharp & np.isnan(WeirC)).to_numpy()] = 1.6
     WeirC[np.isnan(WeirC)] = default_WeirC
 
-    # ---- Orifice coefficient OrficeC ----
-    looks_orifice = (
-        spill_str.str.contains("orifice", na=False)
+    # ---- Orifice coefficient OrificeC ----
+    looks_Orifice = (
+        spill_str.str.contains("Orifice", na=False)
+        | spill_str.str.contains("orfice", na=False)
         | spill_str.str.contains("sluice", na=False)
         | spill_str.str.contains("pipe", na=False)
         | spill_str.str.contains("outlet", na=False)
@@ -269,44 +284,46 @@ def populate_hydraulics(
     is_hydro = purp.fillna("").str.contains("hydro|power", regex=True, na=False)
 
     """
-    These are the orifice discharge coefficients we’d plug into the classic orifice equation:
+    These are the Orifice discharge coefficients we’d plug into the classic Orifice equation:
 
     𝑄 = C_d * A * (2 * g * H) ^ 2
-    where C_D is what we’re calling OrficeC.
+    where C_D is what we’re calling OrificeC.
 
     In words:
     0.62 → typical coefficient for a sharp-edged / sluice / pipe outlet
-    Those terms (orifice, sluice, pipe, outlet) usually imply a sharp-edged orifice or simple outlet works.
-    Textbook Cd for sharp-edged orifices is usually ~0.6–0.62.
+    Those terms (Orifice, sluice, pipe, outlet) usually imply a sharp-edged Orifice or simple outlet works.
+    Textbook Cd for sharp-edged Orifices is usually ~0.6–0.62.
 
     0.80 → typical coefficient for rounded / gated / tunnel / culvert / conduit-type inlets
     Terms like gate, gated, radial, tunnel, culvert, conduit, valve generally mean smoother, better-formed
     entrances with less contraction loss.
 
-    C_d values in the ~0.8 range are standard for well-rounded or gated orifices.
+    C_d values in the ~0.8 range are standard for well-rounded or gated Orifices.
     We also set 0.80 when purposes contains "hydro" or "power" (is_hydro), on the assumption that
     hydropower outlets are typically gated/engineered, so their effective Cd is closer to
     the “rounded/gated” value than the conservative default.
 
-    Anything that doesn’t match those cues falls back to default_OrficeC
+    Anything that doesn’t match those cues falls back to default_OrificeC
     (0.1 in the original R code, matching the conservative NWM default).
     All of these numbers are heuristic but grounded in common ranges from standard hydraulics
     references (e.g., Chow’s Open-Channel Hydraulics, USACE manuals, etc.).
     """
-    OrficeC = np.full(n, np.nan, dtype="float32")
-    OrficeC[looks_orifice.to_numpy()] = 0.62
-    mask = np.isnan(OrficeC) & looks_rounded.to_numpy()
-    OrficeC[mask] = 0.80
-    mask = np.isnan(OrficeC) & is_hydro.to_numpy()
-    OrficeC[mask] = 0.80
-    OrficeC[np.isnan(OrficeC)] = default_OrficeC
+    # OrificeC = np.full(n, np.nan, dtype="float32")
+    OrificeC = df["OrificeC"].to_numpy()
+    OrificeC[looks_Orifice.to_numpy() & np.isnan(OrificeC)] = 0.62
+    mask = np.isnan(OrificeC) & looks_rounded.to_numpy()
+    OrificeC[mask] = 0.80
+    mask = np.isnan(OrificeC) & is_hydro.to_numpy()
+    OrificeC[mask] = 0.80
+    OrificeC[np.isnan(OrificeC)] = default_OrificeC
 
-    # ---- Orifice area OrficeA (m²) ----
-    OrficeA = np.full(n, np.nan, dtype="float32")
+    # ---- Orifice area OrificeA (m²) ----
+    OrificeA = np.full(n, np.nan, dtype="float32")
+    OrificeA = df["OrificeA"].to_numpy()
     H_valid = ~np.isnan(H)
-    OrficeA[H_valid & (H < 10)] = orficeA_small
-    OrficeA[H_valid & (H >= 10) & (H < 30)] = orficeA_med
-    OrficeA[H_valid & (H >= 30)] = orficeA_large
+    OrificeA[H_valid & (H < 10) & np.isnan(OrificeA)] = OrificeA_small
+    OrificeA[H_valid & (H >= 10) & (H < 30) & np.isnan(OrificeA)] = OrificeA_med
+    OrificeA[H_valid & (H >= 30) & np.isnan(OrificeA)] = OrificeA_large
 
     # ---- Optional hazard-based nudges ----
     if use_hazard and "hazard" in df.columns:
@@ -314,38 +331,39 @@ def populate_hydraulics(
         is_high = haz.str.startswith("h", na=False)
         is_sig = haz.str.startswith("s", na=False)
 
-        # modest adjustments to WeirL and OrficeA
+        # modest adjustments to WeirL and OrificeA
         WeirL = np.where(is_high.to_numpy(), WeirL * 1.10, WeirL)
         WeirL = np.where(is_sig.to_numpy(), WeirL * 1.05, WeirL)
 
-        OrficeA = np.where(is_high.to_numpy(), OrficeA * 1.20, OrficeA)
-        OrficeA = np.where(is_sig.to_numpy(), OrficeA * 1.10, OrficeA)
+        OrificeA = np.where(is_high.to_numpy(), OrificeA * 1.20, OrificeA)
+        OrificeA = np.where(is_sig.to_numpy(), OrificeA * 1.10, OrificeA)
 
-        # if OrficeC fell back to default, bump slightly for higher hazard
+        # if OrificeC fell back to default, bump slightly for higher hazard
         spill_raw = df.get("spillway_type", pd.Series(index=df.index, dtype="string"))
-        used_default_OrficeC = spill_raw.isna() | (spill_raw.astype("string") == "")
-        OrficeC = np.where(
-            is_high.to_numpy() & used_default_OrficeC.to_numpy(), np.maximum(OrficeC, 0.80), OrficeC
+        used_default_OrificeC = spill_raw.isna() | (spill_raw.astype("string") == "")
+        OrificeC = np.where(
+            is_high.to_numpy() & used_default_OrificeC.to_numpy(), np.maximum(OrificeC, 0.80), OrificeC
         )
-        OrficeC = np.where(
-            is_sig.to_numpy() & used_default_OrficeC.to_numpy(), np.maximum(OrficeC, 0.70), OrficeC
+        OrificeC = np.where(
+            is_sig.to_numpy() & used_default_OrificeC.to_numpy(), np.maximum(OrificeC, 0.70), OrificeC
         )
 
-    # ---- Concrete / ogee cue for OrficeA ----
+    # ---- Concrete / ogee cue for OrificeA ----
     looks_concrete = (
         dtype_str.str.contains("concrete", na=False)
         | dtype_str.str.contains("gravity", na=False)
         | dtype_str.str.contains("arch", na=False)
         | spill_str.str.contains("ogee", na=False)
     )
-    mask = np.isnan(OrficeA) & looks_concrete.to_numpy()
-    OrficeA[mask] = orficeA_concrete
-    OrficeA[np.isnan(OrficeA)] = default_OrficeA
+    mask = np.isnan(OrificeA) & looks_concrete.to_numpy()
+    OrificeA[mask] = OrificeA_concrete
+    OrificeA[np.isnan(OrificeA)] = default_OrificeA
 
     # ---- absolute elevations (m) using DEM anchors ----
 
     # Crest (WeirE)
     WeirE = _coalesce_num(
+        df["WeirE"].to_numpy(),
         wb,
         np.where((~np.isnan(base)) & (~np.isnan(H)), base + crest_frac * H, np.nan),
         np.where((~np.isnan(base)) & (~np.isnan(mean_depth)), base + mean_depth, np.nan),
@@ -353,27 +371,29 @@ def populate_hydraulics(
 
     # Max pool (LkMxE)
     LkMxE = _coalesce_num(
+        df["LkMxE"].to_numpy(),
         np.where((~np.isnan(wb)) & (~np.isnan(H)), wb + max_from_wb_frac * H, np.nan),
         wb,
         np.where((~np.isnan(base)) & (~np.isnan(H)), base + max_frac * H, np.nan),
         np.where((~np.isnan(base)) & (~np.isnan(mean_depth)), base + mean_depth, np.nan),
     )
 
-    # Orifice invert (OrficeE)
-    OrficeE = _coalesce_num(
+    # Orifice invert (OrificeE)
+    OrificeE = _coalesce_num(
+        df["OrificeE"].to_numpy(),
         np.where((~np.isnan(base)) & (~np.isnan(H)), base + invert_frac * H, np.nan),
         np.where((~np.isnan(wb)) & (~np.isnan(H)), wb - (crest_frac - invert_frac) * H, np.nan),
     )
 
     # ---- constant ifd ----
-    ifd = np.full(n, default_ifd, dtype="float32")
+    ifd = df["OrificeE"].to_numpy()
+    ifd = np.where(np.isnan(ifd), default_ifd, ifd)
 
     # ---- return DataFrame ----
     out = pd.DataFrame(
         {
             "dam_id": df.get("dam_id"),
             "nidid": df.get("nidid"),
-            "osm_wb_id": df.get("osm_ww_poly"),
             "ref_wb_id": df.get("ref_fab_wb"),
             "H_m": H,
             "LkArea": LkArea,
@@ -381,31 +401,18 @@ def populate_hydraulics(
             "WeirC": WeirC,
             "WeirL": WeirL,
             "WeirE": WeirE,
-            "OrficeC": OrficeC,
-            "OrficeA": OrficeA,
-            "OrficeE": OrficeE,
+            "OrificeC": OrificeC,
+            "OrificeA": OrificeA,
+            "OrificeE": OrificeE,
             "Dam_Length": Dam_Length,
             "ifd": ifd,
         },
         index=df.index,
     )
 
+    # correct any issues caused by mixing of data
+    # t-route will error if WeirE < OrificeE or LkMxE < WeirE. == is acceptable
+    out["WeirE"] = np.where(out["WeirE"] < out["OrificeE"], out["OrificeE"], out["WeirE"])
+    out["LkMxE"] = np.where(out["LkMxE"] < out["WeirE"]), out["WeirE"], out["LkMxE"]
+
     return out
-
-
-def populate_nwm_hydaulics(gdf_path: Path) -> gpd.GeoDataFrame:
-    """Populate hydaulics for NWM lakes"""
-    gdf = gpd.read_file(gdf_path)
-
-    gdf["WeirC"] = gdf["WeirC"].fillna(NWMDefaultHydraulics.WeirC.value)
-    gdf["WeirL"] = gdf["WeirL"].fillna(NWMDefaultHydraulics.WeirL.value)
-
-    gdf["OrificeC"] = gdf["OrificeC"].fillna(NWMDefaultHydraulics.OrificeC.value)
-    gdf["OrificeA"] = gdf["OrificeA"].fillna(NWMDefaultHydraulics.OrificeA.value)
-
-    gdf["Dam_Length"] = gdf["Dam_Length"].fillna(NWMDefaultHydraulics.WeirL.value)
-    gdf["ifd"] = gdf["ifd"].fillna(NWMDefaultHydraulics.ifd.value)
-
-    gdf["LkArea"] = np.where(gdf["LkArea"].isna(), gdf["Shape_Area"] / (1000 * 1000), gdf["LkArea"])
-
-    return gdf
