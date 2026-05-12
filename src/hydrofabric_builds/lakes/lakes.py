@@ -11,6 +11,8 @@ from hydrofabric_builds.helpers.flowpath_association import (
 )
 import geopandas as gpd
 from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_reference
+import pandas as pd
+import numpy as np
 logger = logging.getLogger(__name__)
 
 
@@ -106,3 +108,62 @@ def build_misc_lake(src, cfg):
             )
 
     gdf.to_file()
+
+
+def join_nid(nid_path, res_df):
+    """Join National Inventory Dams data to reservoirs"""
+    nid_path = Path(nid_path)
+    if nid_path.suffix.lower() == ".gpkg":
+        nid_df = gpd.read_file(nid_path)
+    elif nid_path.suffix.lower() in {".parquet", ".pq"}:
+        nid_df = pd.read_parquet(nid_path)
+    else:
+        nid_df = pd.read_csv(nid_path)
+
+    nid_df.columns = [col.lower() for col in nid_df.columns]
+
+    # cast types like R
+    for col in ("spillway_type", "dam_type"):
+        if col in nid_df.columns:
+            nid_df[col] = nid_df[col].astype("string")
+
+    for col in ("structural_height", "dam_height", "nid_height", "surface_area", "hydraulic_height"):
+        if col in nid_df.columns:
+            nid_df[col] = pd.to_numeric(nid_df[col], errors="coerce")
+
+    if "surface_area" not in nid_df.columns:
+        nid_df["surface_area"] = np.nan
+
+    # keep only needed columns (loosely matching R)
+    keep_cols = [
+        "nidid",
+        "dam_name",
+        "dam_type",
+        "spillway_type",
+        "spillway_width",
+        "dam_length",
+        "dam_height",
+        "structural_height",
+        "hydraulic_height",
+        "nid_height",
+        "surface_area",
+        "wb_areasqkm",
+        "nid_storage",
+        "normal_storage",
+        "max_storage",
+        "hazard",
+        "purposes",
+    ]
+
+    keep_cols = [c for c in keep_cols if c in nid_df.columns]
+    nid_df = nid_df[keep_cols].copy()
+
+    # restrict NID to NID IDs in da$nid
+    if "nid" not in res_df.columns:
+        raise ValueError("Expected 'nid' column in reference reservoirs (da).")
+    nid_ids = res_df["nid"].dropna().unique()
+    nid_df = nid_df[nid_df["nidid"].isin(nid_ids)].copy()
+
+    res_df = res_df[["dam_id", "nid", "ref_fab_wb", "x", "y"]].rename(columns={"nid": "nidid"}).copy()
+
+    res_df = res_df.merge(nid_df, on='nidid', how='left')

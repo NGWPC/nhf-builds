@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any, cast
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.lakes.lakes import build_nwm_lakes, build_misc_lake
-from hydrofabric_builds.lakes.helpers import polygon_elevation, extract_elev_at_points
+from hydrofabric_builds.lakes.lakes import build_nwm_lakes, build_misc_lake, join_nid
+from hydrofabric_builds.lakes.helpers import polygon_elevation, point_elevation
 
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +50,22 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
     # ----FILTER
     # filter out only nwm_lakes and reference reservoirs that meet criteria
     # TODO: cleanup
-    da = res[
-        ((res["distance_to_fp_m"] < max_waterbody_nearest_dist_m) & (res["wb_areasqkm"] >= min_area_sqkm))
-        | (res["dam_id"].isin(res_keep))
+    gdf = gdf[
+        ((gdf["distance_to_fp_m"] < cfg.lakes.max_waterbody_nearest_dist_m) & (gdf["wb_areasqkm"] >= cfg.lakes.min_area_sqkm))
+        | (gdf["dam_id"].isin(cfg.lakes.res_keep))
     ].copy()
 
-    ids = da["ref_fab_wb"].dropna().unique().tolist()
-    if not ids:
-        raise ValueError("No ref_fab_wb IDs found in candidate reservoirs.")
 
     # --- ELEVATION
     # elevations functions - toggleable
     # polygon area
     # dam points
-    gdf = polygon_elevation(dem, gdf)
-    gdf = point_elevation(dem, gdf)
+    if cfg.lakes.calculate_elevation:
+        gdf = polygon_elevation(cfg.lakes.dem_path, gdf)
+        gdf['dam_elev'] = point_elevation(cfg.lakes.dem_path, gdf)
+    else:
+        gdf['dam_elev'] = np.nan
+        gdf['ref_elev'] = np.nan
 
     # --- NID attributes
     # join to NID based on NID_ID
