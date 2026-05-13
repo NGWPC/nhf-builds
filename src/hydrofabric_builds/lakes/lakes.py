@@ -16,101 +16,72 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def build_nwm_lakes(cfg) -> gpd.GeoDataFrame:
-    """Processes NWM lakes
+def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame:
+    """Associate flowpaths and join attributes from source file if requested.
 
     """
+    cfg = getattr(main_cfg.lakes, lake_type)
+
     # Preprocess lakes by associating with flowpaths if requested or if processed path does not exist
-    if cfg.lakes.associate_flowpaths or not cfg.lakes.processed_path.exists():
+    if cfg.associate_flowpaths or not cfg.tmp_path.exists():
         # Use nearest point association method
-        if cfg.lakes.flowpath_association_method == "nearest_point":
+        if cfg.flowpath_association_method == "nearest_point":
             logger.info("Associating flowpath with points")
             gdf = associate_flowpaths_nearest_point(
-                points_path=cfg.lakes.input_path,
-                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-                search_radius_m=cfg.lakes.search_radius_m,
-                point_id=cfg.lakes.id_field,
-                flowpath_id="flowpath_id",
-                flowpath_id_out_field="ref_fp_id",
-                points_layer=cfg.lakes.input_layer,
+                points_path=cfg.input_path,
+                points_layer=cfg.input_layer,
+                flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
+                search_radius_m=cfg.search_radius_m,
+                point_id=cfg.id_field,
+                flowpath_id=cfg.fp_id,
+                flowpath_id_out_field=cfg.fp_out_id,
             )
         # use polygon flowpath outlet method
-        elif cfg.lakes.flowpath_association_method == "polygon_outlet":
+        elif cfg.flowpath_association_method == "polygon_outlet":
             logger.info("Associating flowpaths with polygons")
             gdf = associate_flowpaths_polygon_outlet(
-                polygon_path=cfg.lakes.input_path,
-                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-                search_radius_m=cfg.lakes.search_radius_m,
-                min_preferred_intersection_len_m=cfg.lakes.min_preferred_intersection_len_m,
-                flowpath_id="flowpath_id",
-                flowpath_id_out_field="ref_fp_id",
+                polygon_path=cfg.input_path,
                 polygon_layer=cfg.lakes.input_layer,
+                flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
+                search_radius_m=cfg.search_radius_m,
+                min_preferred_intersection_len_m=cfg.min_preferred_intersection_len_m,
+                flowpath_id=cfg.id_field,
+                flowpath_id_out_field=cfg.fp_out_id,
             )
-            if cfg.lakes.attrib_src_path:
-                gdf = join_attributes(
-                    gdf,
-                    attrib_dst_key=cfg.lakes.id_field,
-                    attrib_src_path=cfg.lakes.attrib_src_path,
-                    attrib_src_layer=cfg.lakes.attrib_src_layer,
-                    attrib_src_key=cfg.lakes.attrib_src_key,
-                    attrib_src_fields=cfg.lakes.fields.copy(),
-                    rename=True,
-                )
 
         # invalid method
         else:
             raise ValueError("Config contained invalid Lakes flowpath association method")
 
+        if cfg.attrib_src_path:
+                gdf = join_attributes(
+                    gdf,
+                    attrib_dst_key=cfg.id_field,
+                    attrib_src_path=cfg.attrib_src_path,
+                    attrib_src_layer=cfg.attrib_src_layer,
+                    attrib_src_key=cfg.attrib_src_key,
+                    attrib_src_fields=cfg.attrib_fields.copy(),
+                    rename=True,
+                )
+
     # Save nwm_lakes layer to NHF
-    gdf.to_file(cfg.lakes.nwm_lake_file_path, layer="lakes", driver="GPKG", overwrite=True)
+    gdf.to_file(cfg.tmp_path, layer="lakes", driver="GPKG", overwrite=True)
 
     return gdf
 
 # maybe this can be one function just with separate cfg for IDs?
 
-def build_misc_lake(src, cfg):
-    """Associates flowpaths for a lake file"""
-    gdf = gpd.read_file(src)
+def _improve_placement(cfg, gdf):
+    gdf['nid'] = None
+    gdf.to_file(cfg.lakes.nwm_lakes_tmp_path, driver='GPKG', overwrite=True)
 
-    # Use nearest point association method
-    if cfg.lakes.flowpath_association_method == "nearest_point":
-            logger.info(f"Associating flowpath with points for {src}")
-            gdf = associate_flowpaths_nearest_point(
-                points_path=cfg.lakes.input_path,
-                flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-                search_radius_m=cfg.lakes.search_radius_m,
-                point_id=cfg.lakes.id_field,
-                flowpath_id="flowpath_id",
-                flowpath_id_out_field="ref_fp_id",
-                points_layer=cfg.lakes.input_layer,
-            )
-        # use polygon flowpath outlet method
-    elif cfg.lakes.flowpath_association_method == "polygon_outlet":
-        logger.info(f"Associating flowpaths with polygons for {src}")
-        gdf = associate_flowpaths_polygon_outlet(
-            polygon_path=cfg.lakes.input_path,
-            flowpaths_path=Path(cfg.build.reference_flowpaths_path),
-            search_radius_m=cfg.lakes.search_radius_m,
-            min_preferred_intersection_len_m=cfg.lakes.min_preferred_intersection_len_m,
-            flowpath_id="flowpath_id",
-            flowpath_id_out_field="ref_fp_id",
-            polygon_layer=cfg.lakes.input_layer,
-        )
-        if cfg.lakes.attrib_src_path:
-            gdf = join_attributes(
-                gdf,
-                attrib_dst_key=cfg.lakes.id_field,
-                attrib_src_path=cfg.lakes.attrib_src_path,
-                attrib_src_layer=cfg.lakes.attrib_src_layer,
-                attrib_src_key=cfg.lakes.attrib_src_key,
-                attrib_src_fields=cfg.lakes.fields.copy(),
-                rename=True,
-            )
-
-    gdf.to_file()
+def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_res):
 
 
-def join_nid(nid_path, res_df):
+
+
+# TODO: Finish
+def _join_nid(nid_path, res_df):
     """Join National Inventory Dams data to reservoirs"""
     nid_path = Path(nid_path)
     if nid_path.suffix.lower() == ".gpkg":
@@ -164,6 +135,46 @@ def join_nid(nid_path, res_df):
     nid_ids = res_df["nid"].dropna().unique()
     nid_df = nid_df[nid_df["nidid"].isin(nid_ids)].copy()
 
-    res_df = res_df[["dam_id", "nid", "ref_fab_wb", "x", "y"]].rename(columns={"nid": "nidid"}).copy()
+    res_df = res_df.rename(columns={"nid": "nidid"}).copy()
 
-    res_df = res_df.merge(nid_df, on='nidid', how='left')
+    res_df = res_df.merge(nid_df, on='nid', how='left')
+
+    return res_df
+
+def _filter_ref_res(cfg):
+    res = gpd.read_file(cfg.lakes.ref_reservoirs_path)
+
+    gdf = res[
+        ((res["distance_to_fp_m"] < cfg.lakes.max_waterbody_nearest_dist_m) & (res["wb_areasqkm"] >= cfg.lakes.min_area_sqkm))
+        | (res["dam_id"].isin(cfg.lakes.res_keep))
+    ].copy()
+
+    try:
+        nwm_lakes = gpd.read_file(cfg.lakes.nwm_lakes_tmp_path)
+        gdf = gdf.loc[~gdf['nid'].isin(nwm_lakes['nid'])].copy()
+
+    except Exception as e:
+        logger.warning("Could not read nwm_lakes file. Reference reservoirs will not be filtered to exclude nwm_lakes with same NID")
+
+    return gdf
+
+
+
+def _filter_columns(gdf, fields):
+    # add nulls for any missing columns requested
+    for f in fields:
+        if f not in gdf.columns:
+            gdf[f] = None
+
+    out_columns = (
+        ["nhf_lake_id", "ref_fp_id", "fp_id", "virtual_fp_id", "dn_nex_id", "dn_virtual_nex_id", "div_id"]
+        + fields
+        + ["geometry"]
+    )
+
+    # select final attribute list
+    return gdf[out_columns]
+
+def _create_ids(gdf):
+    gdf["nhf_lake_id"] = range(1, gdf.shape[0] + 1)
+    return gdf
