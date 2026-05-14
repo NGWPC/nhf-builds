@@ -19,13 +19,12 @@ def build_nwm_soil(data_dir: Path, soilproperties_file: Path, crs: int) -> None:
     Parameters
     ----------
     data_dir : Path
-        Path to directory containing the superconus parameter raster and conus NWS raster
+        Path to directory containing the NWM soil properties netCDF file and where the
+        rasters will be written to.
     weights_file: Path
-        Filename of the NWM spatial weights netCDF file
-    gwbuckparm_file: Path
-        Filename of the NWM gwbuckparm netCDF file
+        Filename of the NWM soil properties full routing NetCDF file.
     crs: int
-        EPSG code for the NHF domain CRS used for the output raster, e.g., 5070 for CONUS
+        EPSG code for the NHF domain CRS used for the output raster, e.g., 5070 for CONUS.
 
 
     Returns
@@ -131,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_dir",
         type=str,
-        help="Path to directory containing input rasters where the output rasters will be written.",
+        help="Path to directory containing the NWM soil properties NetCDF file and where the output rasters will be written.",
     )
     parser.add_argument(
         "--soilproperties_file",
