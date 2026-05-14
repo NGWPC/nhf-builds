@@ -7,7 +7,7 @@ import geopandas as gpd
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_reference
-from hydrofabric_builds.lakes.hydraulics import populate_hydraulics
+from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
     _associate_lake_flowpaths,
     _calculate_elevation,
@@ -18,6 +18,7 @@ from hydrofabric_builds.lakes.lakes import (
     _filter_ref_res,
     _improve_placement,
     _join_nid,
+    _merge_ref_wb,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,13 +59,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
 
         # ---Reference Waterbodies - optional: these are reference waterbody polygons to be included if IDs are requested
         gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb")
-        gdf_ref_res = gpd.read_file(cfg.lakes.ref_res.input_file)
-        gdf_ref_wb = gdf_ref_wb.merge(
-            gdf_ref_res[["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"]],
-            left_on="comid",
-            right_on="ref_fab_wb",
-        )
-        del gdf_ref_res
+        gdf_ref_wb = _merge_ref_wb(gdf_ref_wb, cfg.lakes.ref_res.input_file)
 
         # ---Adhoc lakes - optional: these are point geometries to be associated with flowpath and added to lakes layer
         gdf_adhoc_lakes = _associate_lake_flowpaths(cfg, "adhoc")
@@ -77,7 +72,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
 
         # --- ELEVATION
         # Includes the elevation config setting to toggle if elevation will be calculated or if nulls returned
-        gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem_path, cfg.lakes.calculat_elevation)
+        gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem_path, cfg.lakes.calculate_elevation)
 
         # --- NID attributes
         # join to NID based on NID_ID
@@ -88,7 +83,7 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         # hydraulics
         # fill only what's missing
         # defaults if not enough data
-        populate_hydraulics(cfg, gdf_all_lks)
+        gdf_all_lks = _populate_hydraulics(cfg, gdf_all_lks)
 
         # --- FINALIZE
         # finalize

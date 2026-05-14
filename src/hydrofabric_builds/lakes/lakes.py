@@ -84,10 +84,21 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
     return gdf
 
 
-# TODO: fill out
+# TODO: fill out from Brodie
 def _improve_placement(cfg, gdf):
     gdf["nid"] = None
     return gdf
+
+
+def _merge_ref_wb(gdf_ref_wb, ref_res_path):
+    gdf_ref_res = gpd.read_file(ref_res_path)
+    gdf_ref_wb = gdf_ref_wb.merge(
+        gdf_ref_res[["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"]],
+        left_on="comid",
+        right_on="ref_fab_wb",
+    )
+    del gdf_ref_res
+    return gdf_ref_wb
 
 
 def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res):

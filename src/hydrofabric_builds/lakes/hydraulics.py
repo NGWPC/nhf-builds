@@ -67,7 +67,7 @@ def _coalesce_num(*cols: Iterable | pd.Series) -> np.ndarray:
     return out
 
 
-def populate_hydraulics(
+def _populate_hydraulics(
     df: pd.DataFrame,
     # parameterized fallbacks
     default_WeirC: float = 0.4,
