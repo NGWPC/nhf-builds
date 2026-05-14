@@ -3,30 +3,40 @@
 import logging
 from pathlib import Path
 
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import (
     associate_flowpaths_nearest_point,
     associate_flowpaths_polygon_outlet,
     join_attributes,
 )
-import geopandas as gpd
-from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_reference
-import pandas as pd
-import numpy as np
+from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
+
 logger = logging.getLogger(__name__)
 
 
 def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame:
-    """Associate flowpaths and join attributes from source file if requested.
-
-    """
+    """Associate flowpaths and join attributes from source file if requested."""
     cfg = getattr(main_cfg.lakes, lake_type)
+
+    try:
+        gdf = gpd.read_file(cfg.input_path, layer=cfg.input_layer)
+        del gdf
+    except Exception:
+        logger.info(
+            f"Input file for lake type {lake_type} could not be read. Skipping flowpath association for {lake_type}."
+        )
+        # Return empty dataframe to cause rest of pipeline to work
+        return gpd.GeoDataFrame(columns=["dam_id"])
 
     # Preprocess lakes by associating with flowpaths if requested or if processed path does not exist
     if cfg.associate_flowpaths or not cfg.tmp_path.exists():
         # Use nearest point association method
         if cfg.flowpath_association_method == "nearest_point":
-            logger.info("Associating flowpath with points")
+            logger.info(f"Associating {lake_type} flowpath with points")
             gdf = associate_flowpaths_nearest_point(
                 points_path=cfg.input_path,
                 points_layer=cfg.input_layer,
@@ -38,7 +48,7 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
             )
         # use polygon flowpath outlet method
         elif cfg.flowpath_association_method == "polygon_outlet":
-            logger.info("Associating flowpaths with polygons")
+            logger.info(f"Associating {lake_type} flowpaths with polygons")
             gdf = associate_flowpaths_polygon_outlet(
                 polygon_path=cfg.input_path,
                 polygon_layer=cfg.lakes.input_layer,
@@ -51,33 +61,49 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
 
         # invalid method
         else:
-            raise ValueError("Config contained invalid Lakes flowpath association method")
+            raise ValueError(f"Config contained invalid flowpath association method for {lake_type}")
 
         if cfg.attrib_src_path:
-                gdf = join_attributes(
-                    gdf,
-                    attrib_dst_key=cfg.id_field,
-                    attrib_src_path=cfg.attrib_src_path,
-                    attrib_src_layer=cfg.attrib_src_layer,
-                    attrib_src_key=cfg.attrib_src_key,
-                    attrib_src_fields=cfg.attrib_fields.copy(),
-                    rename=True,
-                )
+            gdf = join_attributes(
+                gdf,
+                attrib_dst_key=cfg.id_field,
+                attrib_src_path=cfg.attrib_src_path,
+                attrib_src_layer=cfg.attrib_src_layer,
+                attrib_src_key=cfg.attrib_src_key,
+                attrib_src_fields=cfg.attrib_fields.copy(),
+                rename=True,
+            )
 
-    # Save nwm_lakes layer to NHF
-    gdf.to_file(cfg.tmp_path, layer="lakes", driver="GPKG", overwrite=True)
+        # Save nwm_lakes layer to NHF
+        gdf.to_file(cfg.tmp_path, layer="lakes", driver="GPKG", overwrite=True)
+
+    else:
+        # read the pre-processed file to return
+        gdf = gpd.read_file(cfg.tmp_path)
 
     return gdf
 
-# maybe this can be one function just with separate cfg for IDs?
 
+# TODO: fill out
 def _improve_placement(cfg, gdf):
-    gdf['nid'] = None
-    gdf.to_file(cfg.lakes.nwm_lakes_tmp_path, driver='GPKG', overwrite=True)
-
-def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_res):
+    gdf["nid"] = None
+    return gdf
 
 
+def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res):
+    return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res], ignore_index=True)
+
+
+def _calculate_elevation(gdf, dem_path, calculate: bool = True):
+    if calculate:
+        # NOTE: it would be nicer if these both returned series
+        gdf_all_lks = polygon_elevation(dem_path, gdf_all_lks)
+        gdf_all_lks["dam_elev"] = point_elevation(dem_path, gdf_all_lks)
+    else:
+        gdf_all_lks["dam_elev"] = np.nan
+        gdf_all_lks["ref_elev"] = np.nan
+
+    return gdf_all_lks
 
 
 # TODO: Finish
@@ -137,27 +163,30 @@ def _join_nid(nid_path, res_df):
 
     res_df = res_df.rename(columns={"nid": "nidid"}).copy()
 
-    res_df = res_df.merge(nid_df, on='nid', how='left')
+    res_df = res_df.merge(nid_df, on="nidid", how="left")
 
     return res_df
 
-def _filter_ref_res(cfg):
+
+def _filter_ref_res(cfg, gdf_nwm, gdf_ref_wb):
     res = gpd.read_file(cfg.lakes.ref_reservoirs_path)
 
-    gdf = res[
-        ((res["distance_to_fp_m"] < cfg.lakes.max_waterbody_nearest_dist_m) & (res["wb_areasqkm"] >= cfg.lakes.min_area_sqkm))
+    # filter to exclude dam_id that have already been joined to nwm lakes or included wb
+    res = res.loc[
+        ~res["dam_id"].isin(gdf_nwm["dam_id"]) & ~res["dam_id"].isin(gdf_ref_wb["dam_id"]),
+        ["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"],
+    ].copy()
+
+    # filter to criteria
+    res = res[
+        (
+            (res["distance_to_fp_m"] < cfg.lakes.max_waterbody_nearest_dist_m)
+            & (res["wb_areasqkm"] >= cfg.lakes.min_area_sqkm)
+        )
         | (res["dam_id"].isin(cfg.lakes.res_keep))
     ].copy()
 
-    try:
-        nwm_lakes = gpd.read_file(cfg.lakes.nwm_lakes_tmp_path)
-        gdf = gdf.loc[~gdf['nid'].isin(nwm_lakes['nid'])].copy()
-
-    except Exception as e:
-        logger.warning("Could not read nwm_lakes file. Reference reservoirs will not be filtered to exclude nwm_lakes with same NID")
-
-    return gdf
-
+    return res
 
 
 def _filter_columns(gdf, fields):
@@ -175,6 +204,11 @@ def _filter_columns(gdf, fields):
     # select final attribute list
     return gdf[out_columns]
 
+
 def _create_ids(gdf):
     gdf["nhf_lake_id"] = range(1, gdf.shape[0] + 1)
     return gdf
+
+
+def _crosswalk_fp_lk():
+    pass

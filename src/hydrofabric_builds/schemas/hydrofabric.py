@@ -906,14 +906,20 @@ class WaterbodiesConfig(BaseModel):
         return self
 
 
-class NWMLakeInput(BaseModel):
+class ReferenceReservoirsInput(BaseModel):
     input_file: Path
     input_layer: str
+
+
+class NWMLakeInput(BaseModel):
+    input_file: Path = here() / "lakes/input/nwm_lakes.gpkg"
+    input_layer: str = "lakes"
+    tmp_path: Path
     associate_flowpaths: bool = True
-    flowpath_association_method: str
+    flowpath_association_method: str = "polygon_outlet"
     search_radius_m: float = 1000.0
     min_preferred_intersection_len_m: float = 10.0
-    id_field: str
+    id_field: str = "newId"
     fp_id_field: str = "flowpath_id"
     fp_id_out_field: str = "ref_fp_id"
     attrib_src_path: Path | None = None
@@ -945,11 +951,26 @@ class NWMLakeInput(BaseModel):
     )
 
 
+class RefWaterbodyInput(BaseModel):
+    input_file: Path
+    input_layer: str
+    tmp_path: Path
+    associate_flowpaths: bool = True
+    flowpath_association_method: str = "polygon_outlet"
+    search_radius_m: float = 1000.0
+    min_preferred_intersection_len_m: float = 10.0
+    id_field: str
+    fp_id_field: str = "flowpath_id"
+    fp_id_out_field: str = "ref_fp_id"
+    ref_wb_ids: list[int]
+
+
 class AdhocLakeInput(BaseModel):
     input_file: Path
     input_layer: str
+    tmp_path: Path
     associate_flowpaths: bool = True
-    flowpath_association_method: str
+    flowpath_association_method: str = "nearest_point"
     search_radius_m: float = 1000.0
     min_preferred_intersection_len_m: float = 10.0
     id_field: str
@@ -957,19 +978,32 @@ class AdhocLakeInput(BaseModel):
     fp_id_out_field: str = "ref_fp_id"
 
 
-class ReferenceReservoirsInput(BaseModel):
-    input_file: Path
-    input_layer: str
-
-
 class LakesConfig(BaseModel):
     """Config for NWM Lakes"""
 
+    input_dir: Path = here() / "data/lakes"
+    lakes_path: Path = "lakes_processed.gpkg"
+    use_cached_lakes: bool = False
     nwm = NWMLakeInput()
     adhoc = AdhocLakeInput()
+    ref_wb = RefWaterbodyInput()
     ref_res = ReferenceReservoirsInput()
+    dem_path: Path = ""
+    calculate_elevation: bool = True
+    nid_path: Path = "NID_2025_11_02.gpkg"
 
     id_field: str = Field(default="lake_id", description="ID field in input lakes file")
+
+    @model_validator(mode="after")
+    def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Inject input directories into each input config path"""
+        self.nid.path = self.input_dir / self.nid.path
+        self.osm.path = self.input_dir / self.osm.path
+        self.refwb.path = self.input_dir / self.refwb.path
+        self.refres.path = self.input_dir / self.refres.path
+        self.dem.path = self.input_dir / self.dem.path
+
+        return self
 
 
 ### fp_crosswalk  ###
