@@ -1,15 +1,13 @@
 """Contains all code for processing hydrofabric data"""
 
 import logging
+from collections.abc import Callable
 from typing import Any, cast
 
 import geopandas as gpd
 import openlocationcode.openlocationcode as olc
 import pandas as pd
-from shapely.geometry.point import Point
 from tqdm import tqdm
-
-from math import floor
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.aggregate import _aggregate_geometries
@@ -245,7 +243,7 @@ def map_build_hydrofabric(**context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-remap = {
+_OLC_CHARS = {
     "2": 0,
     "3": 1,
     "4": 2,
@@ -268,18 +266,80 @@ remap = {
     "X": 19,
 }
 
+_OLC_CODE_LENGTH = 12
+
 
 def _olc_to_int(code: str) -> int:
     code_int: int = 0
     for c in code:
-        if c in remap:
+        if c in _OLC_CHARS:
             code_int *= 20
-            code_int += remap[c]
+            code_int += _OLC_CHARS[c]
 
     return code_int
 
 
-def _bulk_replace(df, cols, replace_map: [int, int]):
+def _encode_unique(lat: float, lon: float, code_length: int, used_ints: set[int]) -> tuple[str, int]:
+    """Encode lat/lon to OLC, jittering to avoid collisions with used_ints."""
+    geo_id = olc.encode(lat, lon, codeLength=code_length)
+    olc_int = _olc_to_int(geo_id)
+    if olc_int not in used_ints:
+        return geo_id, olc_int
+
+    # Jitter: try 1m offsets in spiral pattern until unique
+    d = 9e-6  # ~1m in degrees
+    # Spiral outward: N, NE, E, SE, S, SW, W, NW, then 2m ring, etc.
+    jitter_dirs = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)]
+    for ring in range(1, 21):  # up to ~20m
+        for dlat, dlon in jitter_dirs:
+            new_lat = lat + dlat * ring * d
+            new_lon = lon + dlon * ring * d
+            new_geo_id = olc.encode(new_lat, new_lon, codeLength=code_length)
+            new_olc_int = _olc_to_int(new_geo_id)
+            if new_olc_int not in used_ints:
+                return new_geo_id, new_olc_int
+
+    raise ValueError(f"Could not find unique OLC for ({lat:.6f}, {lon:.6f})")
+
+
+def _build_olc_map(
+    gdf: gpd.GeoDataFrame,
+    id_col: str,
+    point_getter: Callable,
+    used_ints: set[int],
+) -> dict:
+    """Build {old_id: (olc_str, olc_int)} map from a GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf : gpd.GeoDataFrame
+        Features in EPSG:4326 to encode.
+    id_col : str
+        Column name to use as map key.
+    point_getter : callable
+        Function taking a geometry and returning a Point (e.g. lambda g: g.centroid).
+    used_ints : set[int]
+        Set of already-assigned OLC ints to avoid collisions.
+
+    Returns
+    -------
+    dict
+        Mapping of original ID to (olc_string, olc_int).
+    """
+    result: dict = {}
+    for _, row in gdf.iterrows():
+        pt = point_getter(row["geometry"])
+        geo_id, olc_int = _encode_unique(pt.y, pt.x, _OLC_CODE_LENGTH, used_ints)
+        used_ints.add(olc_int)
+        result[row[id_col]] = (geo_id, olc_int)
+    return result
+
+
+def _bulk_replace(
+    df: pd.DataFrame,
+    cols: list[str],
+    replace_map: dict,
+) -> pd.DataFrame:
     """Replace several columns in a DataFrame by looking their values up in a dict.
 
     There are a few odd decisions here that are more or less necessary due to how NULL/NA/NaN is handled in DataFrames
@@ -302,82 +362,6 @@ def _bulk_replace(df, cols, replace_map: [int, int]):
     return df
 
 
-def ___bulk_replace(df, cols, replace_map: [int, int]):
-    """Replace several columns in a DataFrame by looking their values up in a dict.
-
-    There are a few odd decisions here that are more or less necessary due to how NULL/NA/NaN is handled in DataFrames
-    as well as the need to comply with assumptions about datatypes made in later pipeline stages.
-
-    Parameters
-    ----------
-    df: DataFrame/GeoDataFrame whose columns will be transformed
-    cols: list of columns to replace
-    replace_map: dict for lookup-based transformation
-
-    Returns
-    -------
-    The transformed DataFrame/GeoDataFrame
-    """
-    for col in cols:
-        df[col] = df[col].apply(lambda e: None if pd.isna(e) else replace_map[int(e)])
-        df[col] = df[col].astype("float64") if df[col].isnull().values.any() else df[col].astype("int64")
-
-    return df
-
-
-# def __bulk_replace(df, cols, replace_map: [int, int], gid_map: [int, str]):
-#     """Replace several columns in a DataFrame by looking their values up in a dict.
-
-#     There are a few odd decisions here that are more or less necessary due to how NULL/NA/NaN is handled in DataFrames
-#     as well as the need to comply with assumptions about datatypes made in later pipeline stages.
-
-#     Parameters
-#     ----------
-#     df: DataFrame/GeoDataFrame whose columns will be transformed
-#     cols: list of columns to replace
-#     replace_map: dict for lookup-based transformation
-
-#     Returns
-#     -------
-#     The transformed DataFrame/GeoDataFrame
-#     """
-#     for col in cols:
-#         df[col] = df[col].apply(lambda e: None if pd.isna(e) else replace_map[int(e)][1])
-#         df[col] = df[col].astype("float64") if df[col].isnull().values.any() else df[col].astype("int64")
-
-#     return df
-
-
-def _geocode(lat: float, lon: float) -> int:
-    lat = floor((lat + 90) / 180 * 256)
-    lon = floor((lon + 180) / 360 * 512)
-    return (lat * 512 + lon) * 256 * 4
-
-
-def _insert_geocode(id, lat: float, lon: float, ids: [int, list]):
-    lat = floor((lat + 90) / 180 * 256)
-    lon = floor((lon + 180) / 360 * 512)
-    code = (lat * 512 + lon) * 256 * 256
-    if code not in ids:
-        ids[code] = []
-    ids[code].append((id, (lat, -lon)))
-
-
-# def _spatial_sort_ids(ids_dict):
-#     id_lookup = {}
-#     for geocode, ids in ids_dict:
-#         ids_dict[geocode] = sorted(ids, key=lambda e: e[1])
-
-
-def _build_reassign_map(ids_dict) -> dict:
-    reassign_map = {}
-    for geocode, ids in ids_dict.items():
-        ids_dict[geocode] = sorted(ids, key=lambda e: e[1])
-        for seq, idx in enumerate(ids_dict[geocode]):
-            reassign_map[idx[0]] = geocode + seq
-    return reassign_map
-
-
 def reassign_ids(
     base_hf: dict[str, (gpd.GeoDataFrame | pd.DataFrame)],
 ) -> dict[str, (gpd.GeoDataFrame | pd.DataFrame)]:
@@ -388,21 +372,16 @@ def reassign_ids(
     nexuses_wgs84 = gpd.GeoDataFrame(nexuses.copy()).to_crs("EPSG:4326")
     divides = base_hf["divides"]
 
-    fp_map = {}
-    nex_map = {}
+    used_ints: set[int] = set()
+    fp_map = _build_olc_map(
+        flowpaths_wgs84, "fp_id", lambda g: g.interpolate(0.5, normalized=True), used_ints
+    )
+    nex_map = _build_olc_map(nexuses_wgs84, "nex_id", lambda g: g.centroid, used_ints)
 
-    for _, row in flowpaths_wgs84.iterrows():
-        fp_point = row["geometry"].interpolate(0.5, normalized=True)
-
-        geo_id = olc.encode(fp_point.y, fp_point.x, codeLength=16)
-
-        fp_map[row["fp_id"]] = (geo_id, _olc_to_int(geo_id))
-
-    for _, row in nexuses_wgs84.iterrows():
-        nex_point = row["geometry"].centroid
-
-        geo_id = olc.encode(nex_point.y, nex_point.x, codeLength=12)
-        nex_map[row["nex_id"]] = (geo_id, _olc_to_int(geo_id))
+    # Add gid (OLC string) columns before replacing IDs
+    flowpaths["gid"] = flowpaths["fp_id"].copy().apply(lambda e: fp_map[int(e)][0])
+    nexuses["gid"] = nexuses["nex_id"].copy().apply(lambda e: nex_map[int(e)][0])
+    divides["gid"] = divides["div_id"].copy().apply(lambda e: fp_map[e][0])
 
     flowpaths = _bulk_replace(flowpaths, ["fp_id", "fp_to_id", "div_id"], fp_map)
     flowpaths = _bulk_replace(flowpaths, ["up_nex_id", "dn_nex_id"], nex_map)
@@ -419,50 +398,27 @@ def reassign_ids(
     virt_flowpaths = base_hf["virtual_flowpaths"]
     virt_nexuses = base_hf["virtual_nexus"]
 
-    virt_fp_map = {}
-    virt_nex_map = {}
+    virt_fp_map = _build_olc_map(
+        virt_flowpaths.copy().to_crs("EPSG:4326"),
+        "virtual_fp_id",
+        lambda g: g.interpolate(0.5, normalized=True),
+        used_ints,
+    )
+    virt_nex_map = _build_olc_map(
+        virt_nexuses.copy().to_crs("EPSG:4326"),
+        "virtual_nex_id",
+        lambda g: g.centroid,
+        used_ints,
+    )
 
-    for _, row in virt_flowpaths.copy().to_crs("EPSG:4326").iterrows():
-        # fp_centroid = row["geometry"].centroid
-        # virt_fp_ids_sorted.append((row["virtual_fp_id"], (-fp_centroid.x, fp_centroid.y)))
-        fp_point = row["geometry"].interpolate(0.5, normalized=True)
-        geo_id = olc.encode(fp_point.y, fp_point.x, codeLength=16)
-        # print(geo_id.__class__)
-        # flowpaths["gid", idx] = str(geo_id)
-        # gid_map[row["fp_id"]] = geo_id
-        virt_fp_map[row["virtual_fp_id"]] = (geo_id, _olc_to_int(geo_id))
-        # _insert_geocode(row["virtual_fp_id"], fp_point.y, fp_point.x, virt_fp_map)
+    # Add gid (OLC string) columns for virtual tables
+    virt_flowpaths["gid"] = virt_flowpaths["virtual_fp_id"].copy().apply(lambda e: virt_fp_map[int(e)][0])
+    virt_nexuses["gid"] = virt_nexuses["virtual_nex_id"].copy().apply(lambda e: virt_nex_map[e][0])
 
-    # virt_fp_map = _build_reassign_map(virt_fp_map)
-
-    for _, row in virt_nexuses.copy().to_crs("EPSG:4326").iterrows():
-        # nex_centroid = row["geometry"].centroid
-        # virt_fp_ids_sorted.append((row["virtual_nex_id"], (-nex_centroid.x, nex_centroid.y)))
-        nex_centroid = row["geometry"].centroid
-        geo_id = olc.encode(nex_centroid.y, nex_centroid.x, codeLength=14)
-        virt_nex_map[row["virtual_nex_id"]] = (geo_id, _olc_to_int(geo_id))
-        # _insert_geocode(row["virtual_nex_id"], nex_centroid.y, nex_centroid.x, virt_nex_map)
-
-    # virt_nex_map = _build_reassign_map(virt_nex_map)
-
-    # virt_fp_ids_sorted = sorted(virt_fp_ids_sorted, key=lambda e: e[1])
-
-    # virt_fp_reassign_map = {}
-    # for idx, virt_fp_id in enumerate(virt_fp_ids_sorted):
-    #     virt_fp_reassign_map[virt_fp_id[0]] = idx + virt_fp_id_offset
-
-    # base_hf["virtual_flowpaths"] = _bulk_replace(
-    #     virt_flowpaths, ["virtual_fp_id", "up_virtual_nex_id", "dn_virtual_nex_id"], virt_fp_reassign_map
-    # )
-    # base_hf["virtual_nexus"] = _bulk_replace(
-    #     virt_nexuses, ["virtual_nex_id", "dn_virtual_fp_id"], virt_fp_reassign_map
-    # )
-    # virt_flowpaths["gid"] = virt_flowpaths["virtual_fp_id"].copy().apply(lambda e: virt_fp_map[int(e)][0])
     base_hf["virtual_flowpaths"] = _bulk_replace(virt_flowpaths, ["virtual_fp_id"], virt_fp_map)
     base_hf["virtual_flowpaths"] = _bulk_replace(
         base_hf["virtual_flowpaths"], ["up_virtual_nex_id", "dn_virtual_nex_id"], virt_nex_map
     )
-    # # virt_nexuses["gid"] = virt_nexuses["virtual_nex_id"].copy().apply(lambda e: virt_nex_map[int(e)][0])
     base_hf["virtual_nexus"] = _bulk_replace(virt_nexuses, ["dn_virtual_fp_id"], virt_fp_map)
     base_hf["virtual_nexus"] = _bulk_replace(base_hf["virtual_nexus"], ["virtual_nex_id"], virt_nex_map)
 
