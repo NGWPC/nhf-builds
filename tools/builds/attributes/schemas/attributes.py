@@ -88,11 +88,11 @@ class NWMProjectionHI(Enum):
 class NWMProjectionPRVI(Enum):
     """Projection for NWM soilproperties for PRVI"""
 
-    PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=10.0 +lat_2=30.0 +lat_0=20.6 +lon_0=-157.42 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
-    XMIN = -295000.4746870845
-    XMAX = 294999.5253129155
-    YMIN = -194999.9185492387
-    YMAX = 195000.0814507613
+    PROJ4 = "+proj=lcc +units=m +a=6370000.0 +b=6370000.0 +lat_1=18.1 +lat_2=18.1 +lat_0=18.1 +lon_0=-65.91 +x_0=0 +y_0=0 +k_0=1.0 +nadgrids=@null +wktext  +no_defs"
+    XMIN = -149999.83
+    XMAX = 150000.17
+    YMIN = -54998.968
+    YMAX = 55001.032
     DX = 1000
     DY = 1000
 

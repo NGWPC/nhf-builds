@@ -71,6 +71,10 @@ def build_nwm_soil(data_dir: Path, soilproperties_file: Path, crs: int) -> None:
         "XXAJ",
     ]
 
+    # imperv is only in CONUS.  Remove for all other domains
+    if not crs == 5070:
+        nwm_soil_vars.remove("imperv")
+
     # Create coordinate value array for xarray
     x_coords = np.arange(domain_crs.XMIN.value, domain_crs.XMAX.value, domain_crs.DX.value)
     y_coords = np.arange(domain_crs.YMIN.value, domain_crs.YMAX.value, domain_crs.DY.value)
@@ -87,6 +91,9 @@ def build_nwm_soil(data_dir: Path, soilproperties_file: Path, crs: int) -> None:
     # to NA so that those pixels will be ignored by zonal statistics.
     no_zeros = ["bexp", "dksat", "psisat", "smcwlt", "vcmx25", "BXAJ", "XXAJ"]
 
+    # SMCMAX has ones for water.  Reset to NA as well.
+    no_ones = ["smcmax"]
+
     # Loop through variables and create rasters
     for name in nwm_soil_vars:
         print(f"processing {name}")
@@ -98,6 +105,9 @@ def build_nwm_soil(data_dir: Path, soilproperties_file: Path, crs: int) -> None:
             # change zeros to NA
             if name in no_zeros:
                 var = var.where(var != 0)
+            # change ones to NA
+            if name in no_ones:
+                var = var.where(var != 1)
             var = var.rio.write_crs(domain_crs.PROJ4.value)
             var = var.assign_coords(west_east=x_coords)
             var = var.assign_coords(south_north=y_coords)
@@ -115,6 +125,9 @@ def build_nwm_soil(data_dir: Path, soilproperties_file: Path, crs: int) -> None:
                 # change zeros to NA
                 if name in no_zeros:
                     layer = layer.where(layer != 0)
+                # change ones to NA
+                elif name in no_ones:
+                    layer = layer.where(layer != 1)
                 layer = layer.rio.write_crs(domain_crs.PROJ4.value)
                 layer = layer.assign_coords(west_east=x_coords)
                 layer = layer.assign_coords(south_north=y_coords)
