@@ -482,13 +482,13 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_nexus.csv",
-        dtype={"nex_id": "int64", "dn_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/no_divide_fp_upstream_most_reach_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"virtual_nex_id": "int64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -563,17 +563,39 @@ def test_no_divide_coastal_outlet(trace_case_no_divide_coastal_outlet: HFConfig)
 
     df = pd.DataFrame(
         {
-            "nex_id": pd.Series([1, 2], dtype="int64"),
-            "dn_fp_id": pd.Series([pd.NA, 1], dtype="Int64"),
+            "nex_id": pd.Series([1285290888194346, 1285290920810185], dtype="int64"),
+            "dn_fp_id": pd.Series([float("nan"), 1285290904356516.0], dtype="float64"),
             "vpu_id": pd.Series(["02", "02"], dtype="object"),
+            "gid": pd.Series(["87G8MG4H+67V8", "87G8MGJQ+37F7"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), df)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([3, 4, 5, 6, 7, 10], dtype="Int64"),
+            "virtual_nex_id": pd.Series(
+                [
+                    1285290888218129,
+                    1285290933941302,
+                    1285290934216316,
+                    1285290920810186,
+                    1285290888194347,
+                    1285290940535636,
+                ],
+                dtype="int64",
+            ),
             "vpu_id": pd.Series(["02", "02", "02", "02", "02", "02"], dtype="object"),
+            "gid": pd.Series(
+                [
+                    "87G8MG4H+978F",
+                    "87G8MGRV+4M74",
+                    "87G8MGRW+V2QR",
+                    "87G8MGJQ+37F8",
+                    "87G8MG4H+67V9",
+                    "87G8MGWW+8X3R",
+                ],
+                dtype="object",
+            ),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
@@ -649,17 +671,25 @@ def test_connector_no_divide_upstream(trace_case_bad_connector_no_divide_config:
 
     df = pd.DataFrame(
         {
-            "nex_id": pd.Series([1, 2], dtype="int64"),
-            "dn_fp_id": pd.Series([pd.NA, 1], dtype="Int64"),
+            "nex_id": pd.Series([1286899585923076, 1286899585877606], dtype="int64"),
+            "dn_fp_id": pd.Series([float("nan"), 1286899585807776.0], dtype="float64"),
             "vpu_id": pd.Series(["01", "01"], dtype="object"),
+            "gid": pd.Series(["87MFG82J+29MR", "87MFG82H+PP28"], dtype="object"),
         }
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), df)
 
     df = pd.DataFrame(
         {
-            "virtual_nex_id": pd.Series([4, 6, 10, 14, 15], dtype="Int64"),
+            "virtual_nex_id": pd.Series(
+                [1286899589221071, 1286899585460874, 1286899591299859, 1286899585877607, 1286899585923077],
+                dtype="int64",
+            ),
             "vpu_id": pd.Series(["01", "01", "01", "01", "01"], dtype="object"),
+            "gid": pd.Series(
+                ["87MFG83J+JJMH", "87MFG82F+4J5P", "87MFG847+JFJX", "87MFG82H+PP29", "87MFG82J+29MV"],
+                dtype="object",
+            ),
         }
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry", "dn_virtual_fp_id"]), df)
@@ -735,13 +765,13 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_nexus.csv",
-        dtype={"nex_id": "int64", "dn_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/hudson_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"virtual_nex_id": "int64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -816,13 +846,13 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_nexus.csv",
-        dtype={"nex_id": "int64", "dn_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/sioux_falls_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"virtual_nex_id": "int64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -897,13 +927,13 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_nexus.csv",
-        dtype={"nex_id": "int64", "dn_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/large_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"virtual_nex_id": "int64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -977,13 +1007,13 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_nexus.csv",
-        dtype={"nex_id": "int64", "dn_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
         here() / "tests/data/trace_cases/small_braided_river_virtual_nexus.csv",
-        dtype={"virtual_nex_id": "Int64", "dn_virtual_fp_id": "Int64", "vpu_id": "object"},
+        dtype={"virtual_nex_id": "int64", "vpu_id": "object"},
     )
     pd.testing.assert_frame_equal(final_virtual_nexus.drop(columns=["geometry"]), expected_df)
 

@@ -552,4 +552,3 @@ class TestIntegration:
             assert confluence_count > 0, (
                 f"Expected at least one confluence in network of {len(flowpaths)} flowpaths, found none"
             )
-        assert 1 == 0
