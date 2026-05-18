@@ -166,9 +166,6 @@ def _build_upstream_dict_from_nexus(
     """
     fp_pl = flowpaths_pl.with_columns(
         [
-            # pl.col(edge_id).cast(pl.Int32),
-            # pl.col(f"up_{node_id}").cast(pl.Int32),
-            # pl.col(f"dn_{node_id}").cast(pl.Int32),
             pl.col(edge_id).cast(pl.Int64),
             pl.col(f"up_{node_id}").cast(pl.Int64),
             pl.col(f"dn_{node_id}").cast(pl.Int64),

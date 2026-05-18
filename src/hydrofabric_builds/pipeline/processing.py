@@ -307,7 +307,7 @@ def _build_olc_map(
     id_col: str,
     point_getter: Callable,
     used_ints: set[int],
-) -> dict:
+) -> dict[int, tuple[str, int]]:
     """Build {old_id: (olc_str, olc_int)} map from a GeoDataFrame.
 
     Parameters
@@ -326,24 +326,21 @@ def _build_olc_map(
     dict
         Mapping of original ID to (olc_string, olc_int).
     """
-    result: dict = {}
+    result: dict[int, tuple[str, int]] = {}
     for _, row in gdf.iterrows():
         pt = point_getter(row["geometry"])
         geo_id, olc_int = _encode_unique(pt.y, pt.x, _OLC_CODE_LENGTH, used_ints)
         used_ints.add(olc_int)
-        result[row[id_col]] = (geo_id, olc_int)
+        result[int(row[id_col])] = (geo_id, olc_int)
     return result
 
 
 def _bulk_replace(
     df: pd.DataFrame,
     cols: list[str],
-    replace_map: dict,
+    replace_map: dict[int, tuple[str, int]],
 ) -> pd.DataFrame:
     """Replace several columns in a DataFrame by looking their values up in a dict.
-
-    There are a few odd decisions here that are more or less necessary due to how NULL/NA/NaN is handled in DataFrames
-    as well as the need to comply with assumptions about datatypes made in later pipeline stages.
 
     Parameters
     ----------
@@ -357,7 +354,7 @@ def _bulk_replace(
     """
     for col in cols:
         df[col] = df[col].apply(lambda e: None if pd.isna(e) else replace_map[int(e)][1])
-        df[col] = df[col].astype("float64") if df[col].isnull().values.any() else df[col].astype("int64")
+        df[col] = df[col].astype("Int64") if df[col].isnull().values.any() else df[col].astype("Int64")
 
     return df
 
@@ -379,9 +376,9 @@ def reassign_ids(
     nex_map = _build_olc_map(nexuses_wgs84, "nex_id", lambda g: g.centroid, used_ints)
 
     # Add gid (OLC string) columns before replacing IDs
-    flowpaths["gid"] = flowpaths["fp_id"].copy().apply(lambda e: fp_map[int(e)][0])
-    nexuses["gid"] = nexuses["nex_id"].copy().apply(lambda e: nex_map[int(e)][0])
-    divides["gid"] = divides["div_id"].copy().apply(lambda e: fp_map[e][0])
+    flowpaths["gid"] = flowpaths["fp_id"].copy().apply(lambda e: None if pd.isna(e) else fp_map[int(e)][0])
+    nexuses["gid"] = nexuses["nex_id"].copy().apply(lambda e: None if pd.isna(e) else nex_map[int(e)][0])
+    divides["gid"] = divides["div_id"].copy().apply(lambda e: None if pd.isna(e) else fp_map[int(e)][0])
 
     flowpaths = _bulk_replace(flowpaths, ["fp_id", "fp_to_id", "div_id"], fp_map)
     flowpaths = _bulk_replace(flowpaths, ["up_nex_id", "dn_nex_id"], nex_map)
@@ -412,8 +409,12 @@ def reassign_ids(
     )
 
     # Add gid (OLC string) columns for virtual tables
-    virt_flowpaths["gid"] = virt_flowpaths["virtual_fp_id"].copy().apply(lambda e: virt_fp_map[int(e)][0])
-    virt_nexuses["gid"] = virt_nexuses["virtual_nex_id"].copy().apply(lambda e: virt_nex_map[e][0])
+    virt_flowpaths["gid"] = (
+        virt_flowpaths["virtual_fp_id"].copy().apply(lambda e: None if pd.isna(e) else virt_fp_map[int(e)][0])
+    )
+    virt_nexuses["gid"] = (
+        virt_nexuses["virtual_nex_id"].copy().apply(lambda e: None if pd.isna(e) else virt_nex_map[int(e)][0])
+    )
 
     base_hf["virtual_flowpaths"] = _bulk_replace(virt_flowpaths, ["virtual_fp_id"], virt_fp_map)
     base_hf["virtual_flowpaths"] = _bulk_replace(
