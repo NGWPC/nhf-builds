@@ -422,6 +422,17 @@ def reassign_ids(
     base_hf["virtual_nexus"] = _bulk_replace(virt_nexuses, ["dn_virtual_fp_id"], virt_fp_map)
     base_hf["virtual_nexus"] = _bulk_replace(base_hf["virtual_nexus"], ["virtual_nex_id"], virt_nex_map)
 
+    # Process reference_flowpaths: remap ID columns to OLC integers
+    reference_fps = base_hf.get("reference_flowpaths")
+    if reference_fps is not None and len(reference_fps) > 0:
+        # Add gid BEFORE replacing IDs (gid uses the fp_map lookup with old IDs)
+        reference_fps["gid"] = (
+            reference_fps["fp_id"].copy().apply(lambda e: None if pd.isna(e) else fp_map[int(e)][0])
+        )
+        reference_fps = _bulk_replace(reference_fps, ["fp_id", "div_id"], fp_map)
+        reference_fps = _bulk_replace(reference_fps, ["virtual_fp_id", "mainstem_virtual_fp_id"], virt_fp_map)
+        base_hf["reference_flowpaths"] = reference_fps
+
     return base_hf
 
 
