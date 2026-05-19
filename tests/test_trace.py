@@ -485,6 +485,7 @@ def test_no_divide_fp_upstream_most_reach(trace_case_upstream_no_divide_config: 
         dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
     expected_df["dn_fp_id"] = expected_df["dn_fp_id"].astype("Int64")
+    expected_df["nex_id"] = expected_df["nex_id"].astype("Int64")
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
     expected_df = pd.read_csv(
@@ -769,6 +770,7 @@ def test_hudson_river_large_scale(trace_case_hudson_river_large_scale: HFConfig)
         here() / "tests/data/trace_cases/hudson_river_nexus.csv",
         dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
+    expected_df["nex_id"] = expected_df["nex_id"].astype("Int64")
     expected_df["dn_fp_id"] = expected_df["dn_fp_id"].astype("Int64")
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -852,6 +854,7 @@ def test_sioux_falls(trace_case_sioux_falls: HFConfig) -> None:
         here() / "tests/data/trace_cases/sioux_falls_nexus.csv",
         dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
+    expected_df["nex_id"] = expected_df["nex_id"].astype("Int64")
     expected_df["dn_fp_id"] = expected_df["dn_fp_id"].astype("Int64")
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -935,6 +938,7 @@ def test_large_braided_river(trace_case_large_braided: HFConfig) -> None:
         here() / "tests/data/trace_cases/large_braided_river_nexus.csv",
         dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
+    expected_df["nex_id"] = expected_df["nex_id"].astype("Int64")
     expected_df["dn_fp_id"] = expected_df["dn_fp_id"].astype("Int64")
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
@@ -1017,6 +1021,7 @@ def test_small_braided_river(trace_case_small_braided: HFConfig) -> None:
         here() / "tests/data/trace_cases/small_braided_river_nexus.csv",
         dtype={"nex_id": "int64", "dn_fp_id": "float64", "vpu_id": "object"},
     )
+    expected_df["nex_id"] = expected_df["nex_id"].astype("Int64")
     expected_df["dn_fp_id"] = expected_df["dn_fp_id"].astype("Int64")
     pd.testing.assert_frame_equal(final_nexus.drop(columns=["geometry"]), expected_df)
 
