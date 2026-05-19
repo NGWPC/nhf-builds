@@ -223,3 +223,47 @@ def _create_ids(gdf):
 
 def _crosswalk_fp_lk():
     pass
+
+
+def fold_ref_resrevoirs_to_nwm_lakes(nwm_lakes: gpd.GeoDataFrame, config: HFConfig) -> gpd.GeoDataFrame:
+    """Takes in nwm_lakes GeoDataFrame with polygons and and returns a GeoDataFrame with points derived from reference reservoirs OR centroid if no reference available.
+
+    Attempts to find the most downstream reference reservoir candidate by searching in proximity of the most downstream
+    intersecting flowpath rather than searching in proximity of lake polygon.
+
+    If reference point is available, also retains "dam_id", "dam_name" and "nid" columns from reference datapoint.
+    """
+    nwm_lakes = nwm_lakes.copy().to_crs(5070)
+
+    fp = gpd.read_file(config.output_file_path, layer="flowpaths").to_crs(5070)
+    ref_res = gpd.read_file(config.waterbodies.refres.path).to_crs(5070)
+
+    max_distance = config.nwm_lakes.max_search_distance_m
+
+    # I don't know if this is actually worthwhile
+    nwm_lakes[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
+
+    # for each lake
+    for idx, _ in nwm_lakes.iterrows():
+        # Limit FPs to those that intersect with *this* lake
+        fps = fp[nwm_lakes["geometry"][idx].intersects(fp.geometry)]
+        # Skip and replace w/ centroid if no intersections
+        if len(fps) == 0:
+            nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
+            continue
+        # Keep min hydroseq of all intersected FPs
+        outlet_fp_id = fps["fp_id"][fps["hydroseq"].idxmin()]
+        nwm_lakes.loc[idx, "outlet_fp_id"] = outlet_fp_id
+        # Find nearest ref_res to most downstream fp_id
+        candidates = ref_res.sindex.nearest(
+            fps["geometry"][fps["hydroseq"].idxmin()], max_distance=max_distance
+        )
+        # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, replace w/ centroid
+        if candidates.shape[1] != 0:
+            nwm_lakes.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
+                candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
+            ]
+        else:
+            nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
+
+    return nwm_lakes
