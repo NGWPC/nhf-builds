@@ -16,7 +16,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     GagesConfig,
     LakesConfig,
     ValidateHFConfig,
-    WaterbodiesConfig,
+    # WaterbodiesConfig,
 )
 
 
@@ -88,9 +88,9 @@ class HFConfig(BaseModel):
         default=FlowpathAttributesModelConfig(),
     )
 
-    waterbodies: WaterbodiesConfig = Field(
-        default=WaterbodiesConfig(), description="Settings for building waterbodies"
-    )
+    # waterbodies: WaterbodiesConfig = Field(
+    #     default=WaterbodiesConfig(), description="Settings for building waterbodies"
+    # )
 
     lakes: LakesConfig = Field(default=LakesConfig(), description="Settings for building NWM lakes")
 

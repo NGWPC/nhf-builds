@@ -16,7 +16,8 @@ from hydrofabric_builds.pipeline.build_gages import build_gages
 from hydrofabric_builds.pipeline.build_graph import build_graph
 from hydrofabric_builds.pipeline.build_hydrolocations import build_hydrolocations
 from hydrofabric_builds.pipeline.build_lakes import build_lakes
-from hydrofabric_builds.pipeline.build_waterbodies import build_waterbodies
+
+# from hydrofabric_builds.pipeline.build_waterbodies import build_waterbodies
 from hydrofabric_builds.pipeline.download import download_reference_data
 from hydrofabric_builds.pipeline.processing import (
     map_build_hydrofabric,
@@ -191,8 +192,8 @@ def main() -> int:
         if config.tasks.gages:
             runner.run_task("gages", python_callable=build_gages, op_kwargs={})
 
-        if config.tasks.waterbodies:
-            runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
+        # if config.tasks.waterbodies:
+        #     runner.run_task("waterbodies", python_callable=build_waterbodies, op_kwargs={})
 
         if config.tasks.lakes:
             runner.run_task("lakes", python_callable=build_lakes, op_kwargs={})
