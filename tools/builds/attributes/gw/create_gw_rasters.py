@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from hydrofabric_builds.schemas.hydrofabric import (
+from tools.builds.attributes.schemas.attributes import (
     GroundWaterProjectionAK,
     GroundWaterProjectionCONUS,
     GroundWaterProjectionHI,
