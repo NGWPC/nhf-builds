@@ -225,7 +225,7 @@ def _crosswalk_fp_lk():
     pass
 
 
-def fold_ref_resrevoirs_to_nwm_lakes(nwm_lakes: gpd.GeoDataFrame, config: HFConfig) -> gpd.GeoDataFrame:
+def _fold_ref_res_to_nwm_lakes(nwm_lakes: gpd.GeoDataFrame, config: HFConfig) -> gpd.GeoDataFrame:
     """Takes in nwm_lakes GeoDataFrame with polygons and and returns a GeoDataFrame with points derived from reference reservoirs OR centroid if no reference available.
 
     Attempts to find the most downstream reference reservoir candidate by searching in proximity of the most downstream
@@ -236,11 +236,10 @@ def fold_ref_resrevoirs_to_nwm_lakes(nwm_lakes: gpd.GeoDataFrame, config: HFConf
     nwm_lakes = nwm_lakes.copy().to_crs(5070)
 
     fp = gpd.read_file(config.output_file_path, layer="flowpaths").to_crs(5070)
-    ref_res = gpd.read_file(config.waterbodies.refres.path).to_crs(5070)
+    ref_res = gpd.read_file(config.lakes.ref_res.path).to_crs(5070)
 
-    max_distance = config.nwm_lakes.max_search_distance_m
+    max_distance = config.lakes.nwm.max_search_distance_m
 
-    # I don't know if this is actually worthwhile
     nwm_lakes[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
 
     # for each lake

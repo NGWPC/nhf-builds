@@ -16,7 +16,7 @@ from hydrofabric_builds.lakes.lakes import (
     _crosswalk_fp_lk,
     _filter_columns,
     _filter_ref_res,
-    _improve_placement,
+    _fold_ref_res_to_nwm_lakes,
     _join_nid,
     _merge_ref_wb,
 )
@@ -55,11 +55,11 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         # ---IMPROVE NWM LAKES PLACEMENT
         # read reference reservoirs
         # will return gdf with all sources and improved placements and ref res fields
-        gdf_nwm_lakes = _improve_placement(gdf_nwm_lakes, cfg.lakes.ref_res)
+        gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(gdf_nwm_lakes, cfg)
 
         # ---Reference Waterbodies - optional: these are reference waterbody polygons to be included if IDs are requested
         gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb")
-        gdf_ref_wb = _merge_ref_wb(gdf_ref_wb, cfg.lakes.ref_res.input_file)
+        gdf_ref_wb = _merge_ref_wb(gdf_ref_wb, cfg.lakes.ref_res.path)
 
         # ---Adhoc lakes - optional: these are point geometries to be associated with flowpath and added to lakes layer
         gdf_adhoc_lakes = _associate_lake_flowpaths(cfg, "adhoc")

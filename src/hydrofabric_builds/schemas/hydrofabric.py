@@ -790,43 +790,29 @@ class ResReferenceWaterbodiesInputs(BaseModel):
     id_col: str = Field(default="comid", description="Reference waterbodies ID column")
 
 
-class ResReferenceReservoirsInputs(BaseModel):
-    """Reference reservoirs inputs to generate RFC-DA"""
+# class ResReferenceReservoirsInputs(BaseModel):
+#     """Reference reservoirs inputs to generate RFC-DA"""
 
-    path: Path = Field(
-        default="reference_reservoirs/reference-reservoirs-v1.gpkg",
-        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
-    )
-    layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
-    src_crs: str | None = Field(None, description="Source CRS")
-    output_crs: str = Field(default="EPSG:5070", description="Output CRS")
-    distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
-    wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
-    ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
-    min_wb_area_sqkm: float = Field(
-        default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
-    )
-    max_distance_m: float = Field(
-        default=1000.0,
-        description="max distance of reference reservoir points from column 'distance_to_fp_m'",
-    )
-    ref_res_keep: list[str] = Field(
-        default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
-    )
-
-
-class ResOSMInputs(BaseModel):
-    """OSM inputs to generate RFC-DA"""
-
-    path: Path = Field(
-        default="source_files/osm_dams_all.gpkg",
-        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
-    )
-    layer: str = Field(default="osm_dams_all", description="GPKG layer")
-    filter_col: str = Field(
-        default="waterway", description="column's name which has dam and non-dam infrastructures"
-    )
-    filter_val: str = Field(default="dam", description="value used to filter column")
+#     path: Path = Field(
+#         default="reference_reservoirs/reference-reservoirs-v1.gpkg",
+#         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+#     )
+#     layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
+#     src_crs: str | None = Field(None, description="Source CRS")
+#     output_crs: str = Field(default="EPSG:5070", description="Output CRS")
+#     distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
+#     wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
+#     ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
+#     min_wb_area_sqkm: float = Field(
+#         default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
+#     )
+#     max_distance_m: float = Field(
+#         default=1000.0,
+#         description="max distance of reference reservoir points from column 'distance_to_fp_m'",
+#     )
+#     ref_res_keep: list[str] = Field(
+#         default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
+#     )
 
 
 class ResDEMInputs(BaseModel):
@@ -843,16 +829,16 @@ class ResDEMInputs(BaseModel):
     nodata: int | float | None = Field(None, description="Nodata value. Let rasterio infer if null")
 
 
-class ResRules(BaseModel):
-    """Rules for generating RFC-DA"""
+# class ResRules(BaseModel):
+#     """Rules for generating RFC-DA"""
 
-    max_waterbody_nearest_dist_m: float = Field(
-        default=1000.0, description="Max waterbdody nearest distance (m) for nearest WB ↔ dam selection"
-    )
-    min_area_sqkm: float = Field(
-        default=0.2,
-        description="Removes waterbodies smaller than this threshold. Use 0 to remove none.",
-    )
+#     max_waterbody_nearest_dist_m: float = Field(
+#         default=1000.0, description="Max waterbdody nearest distance (m) for nearest WB ↔ dam selection"
+#     )
+#     min_area_sqkm: float = Field(
+#         default=0.2,
+#         description="Removes waterbodies smaller than this threshold. Use 0 to remove none.",
+#     )
 
 
 class WaterbodiesConfig(BaseModel):
@@ -907,17 +893,33 @@ class WaterbodiesConfig(BaseModel):
 
 
 class ReferenceReservoirsInput(BaseModel):
-    input_file: Path
-    input_layer: str
+    path: Path
+    layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
+    src_crs: str | None = Field(None, description="Source CRS")
+    output_crs: str = Field(default="EPSG:5070", description="Output CRS")
+    distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
+    wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
+    ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
+    min_wb_area_sqkm: float = Field(
+        default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
+    )
+    max_distance_m: float = Field(
+        default=1000.0,
+        description="max distance of reference reservoir points from column 'distance_to_fp_m'",
+    )
+    ref_res_keep: list[str] = Field(
+        default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
+    )
 
 
 class NWMLakeInput(BaseModel):
-    input_file: Path = here() / "lakes/input/nwm_lakes.gpkg"
-    input_layer: str = "lakes"
+    path: Path = here() / "lakes/input/nwm_lakes.gpkg"
+    layer: str = "lakes"
     tmp_path: Path
     associate_flowpaths: bool = True
     flowpath_association_method: str = "polygon_outlet"
     search_radius_m: float = 1000.0
+    max_search_distance_m: float = 500.0
     min_preferred_intersection_len_m: float = 10.0
     id_field: str = "newId"
     fp_id_field: str = "flowpath_id"
@@ -952,8 +954,8 @@ class NWMLakeInput(BaseModel):
 
 
 class RefWaterbodyInput(BaseModel):
-    input_file: Path
-    input_layer: str
+    path: Path
+    layer: str
     tmp_path: Path
     associate_flowpaths: bool = True
     flowpath_association_method: str = "polygon_outlet"
@@ -966,8 +968,8 @@ class RefWaterbodyInput(BaseModel):
 
 
 class AdhocLakeInput(BaseModel):
-    input_file: Path
-    input_layer: str
+    path: Path
+    layer: str
     tmp_path: Path
     associate_flowpaths: bool = True
     flowpath_association_method: str = "nearest_point"
@@ -998,10 +1000,11 @@ class LakesConfig(BaseModel):
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Inject input directories into each input config path"""
         self.nid.path = self.input_dir / self.nid.path
-        self.osm.path = self.input_dir / self.osm.path
-        self.refwb.path = self.input_dir / self.refwb.path
-        self.refres.path = self.input_dir / self.refres.path
+        self.nwm.path = self.input_dir / self.osm.path
+        self.ref_wb.path = self.input_dir / self.ref_wb.path
+        self.ref_res.path = self.input_dir / self.ref_res.path
         self.dem.path = self.input_dir / self.dem.path
+        self.adhoc.path = self.input_dir / self.adhoc.path
 
         return self
 
