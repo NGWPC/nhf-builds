@@ -8,9 +8,12 @@ import geopandas as gpd
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.lakes.lakes import (
     _associate_lake_flowpaths,
-    _crosswalk_fp_lk,
+    _calculate_elevation,
+    _concat_lakes,
     _filter_adhoc_lakes,
+    _filter_ref_res,
     _fold_ref_res_to_nwm_lakes,
+    _join_nid,
     _merge_ref_wb,
 )
 
@@ -52,27 +55,27 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
 
         # ---Adhoc lakes - optional: these are point geometries to be associated with flowpath and added to lakes layer
         gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
-        gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc")
+        gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
 
-        # # ---Reference Waterbodies - optional: these are reference waterbody polygons to be included if IDs are requested
-        # TODO: choose list
-        gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb")
+        # --ref wb - any lakes needed in the reference waterbodies dataset
+        gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_adhoc_ref_wb)
         gdf_ref_wb = _merge_ref_wb(cfg, gdf_ref_wb)
 
         # # ----Filter ref res to candidates and exclude res already used by nwm lakes and waterbodies
-        # gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
+        gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
 
         # # ----CONCAT concat all tables
-        # gdf_all_lks = _concat_lakes(gdf_nwm_lakes, gdf_adhoc_lakes, gdf_ref_wb, gdf_ref_res)
-
+        gdf_all_lks = _concat_lakes(gdf_nwm_lakes, gdf_missing_adhoc, gdf_ref_wb, gdf_ref_res)
         # # --- ELEVATION
         # # Includes the elevation config setting to toggle if elevation will be calculated or if nulls returned
-        # gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem_path, cfg.lakes.calculate_elevation)
+        gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem.path, cfg.lakes.calculate_elevation)
+        gdf_all_lks.to_file("data/lakes/tmp_all_lks.gpkg")
 
         # # --- NID attributes
         # # join to NID based on NID_ID
         # # keep NID cols / process [build_rfc_da_locs]
-        # gdf_all_lks = _join_nid(gdf_all_lks, cfg.lakes.nid_path)
+        gdf_all_lks = _join_nid(gdf_all_lks, cfg.lakes.nid.path)
+        gdf_all_lks.to_file("data/lakes/tmp_all_lks2.gpkg")
 
         # # --- Hydraulics
         # # hydraulics
@@ -94,8 +97,10 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         # gdf_all_lks.to_file(cfg.lakes.lakes_path, layer="lakes", driver="GPKG", overwrite=True)
         # gdf_all_lks.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)
 
-    if cfg.lakes.fp_lk_crosswalk:
-        gdf_fp_lk_crosswalk = _crosswalk_fp_lk(cfg)
-        gdf_fp_lk_crosswalk.to_file(
-            cfg.output_file_path, layer="lakes_flowpaths", driver="GPKG", overwrite=True
-        )
+    # if cfg.lakes.fp_lk_crosswalk:
+    #     gdf_fp_lk_crosswalk = _crosswalk_fp_lk(cfg)
+    #     gdf_fp_lk_crosswalk.to_file(
+    #         cfg.output_file_path, layer="lakes_flowpaths", driver="GPKG", overwrite=True
+    #     )
+
+    return {"lakes": "done"}

@@ -6,14 +6,15 @@ import geopandas as gpd
 
 
 def associate_flowpaths_nearest_point(
-    points_path: Path,
+    # points_path: Path,
     flowpaths_path: Path,
+    gdf_points: gpd.GeoDataFrame,
     search_radius_m: int | float,
     point_id: str,
     flowpath_id: str,
     flowpath_id_out_field: str,
     flowpath_layer: str | None = None,
-    points_layer: str | None = None,
+    # points_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate point geometries with flowpath lines by buffering by a search radius and selecting mimnium distance
 
@@ -49,11 +50,11 @@ def associate_flowpaths_nearest_point(
         if ".parquet" in flowpaths_path.name
         else gpd.read_file(flowpaths_path, layer=flowpath_layer)
     )
-    gdf_points = (
-        gpd.read_file(points_path, layer=points_layer)
-        if points_layer is not None
-        else gpd.read_file(points_path)
-    )
+    # gdf_points = (
+    #     gpd.read_file(points_path, layer=points_layer)
+    #     if points_layer is not None
+    #     else gpd.read_file(points_path)
+    # )
 
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
@@ -163,13 +164,14 @@ def join_attributes(
 
 
 def associate_flowpaths_polygon_outlet(
-    polygon_path: Path,
+    # polygon_path: Path,
+    gdf_poly: gpd.GeoDataFrame,
     flowpaths_path: Path,
     search_radius_m: int | float,
     min_preferred_intersection_len_m: float,
     flowpath_id: str,
     flowpath_id_out_field: str = "fp_id",
-    polygon_layer: str | None = None,
+    # polygon_layer: str | None = None,
     flowpath_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate the intersection of waterbody polygons and their flowpath outlets
@@ -202,9 +204,9 @@ def associate_flowpaths_polygon_outlet(
         if ".parquet" in flowpaths_path.name
         else gpd.read_file(flowpaths_path, layer=flowpath_layer)
     )
-    gdf_poly = (
-        gpd.read_file(polygon_path, layer=polygon_layer) if polygon_layer else gpd.read_file(polygon_path)
-    )
+    # gdf_poly = (
+    #     gpd.read_file(polygon_path, layer=polygon_layer) if polygon_layer else gpd.read_file(polygon_path)
+    # )
 
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()

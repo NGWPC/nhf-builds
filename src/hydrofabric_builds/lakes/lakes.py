@@ -18,19 +18,22 @@ from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
 logger = logging.getLogger(__name__)
 
 
-def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame:
+def _associate_lake_flowpaths(
+    main_cfg: HFConfig, lake_type, gdf: gpd.GeoDataFrame | None = None
+) -> gpd.GeoDataFrame:
     """Associate flowpaths and join attributes from source file if requested."""
     cfg = getattr(main_cfg.lakes, lake_type)
 
-    try:
-        gdf = gpd.read_file(cfg.path, layer=cfg.layer)
-        del gdf
-    except Exception as e:
-        logger.info(
-            f"Input file for lake type {lake_type} could not be read. Skipping flowpath association for {lake_type}. Exception: {e}"
-        )
-        # Return empty dataframe to cause rest of pipeline to work
-        return gpd.GeoDataFrame(columns=["geometry", "lake_id"])
+    # if a gdf is passed in, use it, if not read from config
+    if gdf is None:
+        try:
+            gdf = gpd.read_file(cfg.path, layer=cfg.layer)
+        except Exception as e:
+            logger.info(
+                f"Input file for lake type {lake_type} could not be read. Skipping flowpath association for {lake_type}. Exception: {e}"
+            )
+            # Return empty dataframe to cause rest of pipeline to work
+            return gpd.GeoDataFrame(columns=["geometry", "lake_id"])
 
     # Preprocess lakes by associating with flowpaths if requested or if processed path does not exist
     if cfg.associate_flowpaths or not cfg.tmp_path.exists():
@@ -38,8 +41,9 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
         if cfg.flowpath_association_method == "nearest_point":
             logger.info(f"Associating {lake_type} flowpath with points")
             gdf = associate_flowpaths_nearest_point(
-                points_path=cfg.path,
-                points_layer=cfg.layer,
+                # points_path=cfg.path,
+                # points_layer=cfg.layer,
+                gdf_points=gdf,
                 flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.search_radius_m,
                 point_id=cfg.id_field,
@@ -50,8 +54,9 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
         elif cfg.flowpath_association_method == "polygon_outlet":
             logger.info(f"Associating {lake_type} flowpaths with polygons")
             gdf = associate_flowpaths_polygon_outlet(
-                polygon_path=cfg.path,
-                polygon_layer=cfg.layer,
+                # polygon_path=cfg.path,
+                # polygon_layer=cfg.layer,
+                gdf_poly=gdf,
                 flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.search_radius_m,
                 min_preferred_intersection_len_m=cfg.min_preferred_intersection_len_m,
@@ -88,24 +93,34 @@ def _associate_lake_flowpaths(main_cfg: HFConfig, lake_type) -> gpd.GeoDataFrame
 
 def _merge_ref_wb(cfg: HFConfig, gdf_ref_wb):
     gdf_ref_res = gpd.read_file(cfg.lakes.ref_res.path)
+
+    if pd.api.types.is_object_dtype(gdf_ref_res[cfg.lakes.ref_res.ref_wb_id_col]):
+        gdf_ref_wb[cfg.lakes.ref_wb.output_id_field] = (
+            gdf_ref_wb[cfg.lakes.ref_wb.output_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+        )
+
     gdf_ref_wb = gdf_ref_wb.merge(
-        gdf_ref_res[["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"]],
-        left_on="comid",
-        right_on="ref_fab_wb",
+        gdf_ref_res[["ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"]],
+        left_on=cfg.lakes.ref_wb.output_id_field,
+        right_on=cfg.lakes.ref_res.ref_wb_id_col,
+        how="left",
     )
+
     del gdf_ref_res
     return gdf_ref_wb
 
 
 def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res):
-    return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res], ignore_index=True)
+    # TODO: DELETE SMALL FOR ADEBUG
+    return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res.iloc[0:5]], ignore_index=True)
+    # return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res], ignore_index=True)
 
 
 def _calculate_elevation(gdf, dem_path, calculate: bool = True):
     if calculate:
         # NOTE: it would be nicer if these both returned series
-        gdf_all_lks = polygon_elevation(dem_path, gdf_all_lks)
-        gdf_all_lks["dam_elev"] = point_elevation(dem_path, gdf_all_lks)
+        gdf_all_lks = polygon_elevation(dem_path, gdf)
+        gdf_all_lks["dam_elev"] = point_elevation(dem_path, gdf)
     else:
         gdf_all_lks["dam_elev"] = np.nan
         gdf_all_lks["ref_elev"] = np.nan
@@ -114,7 +129,7 @@ def _calculate_elevation(gdf, dem_path, calculate: bool = True):
 
 
 # TODO: Finish
-def _join_nid(nid_path, res_df):
+def _join_nid(nid_path, res_df) -> gpd.GeoDataFrame:
     """Join National Inventory Dams data to reservoirs"""
     nid_path = Path(nid_path)
     if nid_path.suffix.lower() == ".gpkg":
@@ -178,26 +193,26 @@ def _join_nid(nid_path, res_df):
 def _filter_adhoc_lakes(cfg: HFConfig):
     gdf = gpd.read_file(cfg.lakes.adhoc.path)
     missing = gdf.loc[gdf[cfg.lakes.adhoc.id_field] == -99999, :].copy()
-    ref_wb = gdf.loc[gdf[cfg.lakes.adhoc.ref_wb_field] is True, :].copy()
+    ref_wb = gdf.loc[gdf[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()
     return missing, ref_wb
 
 
-def _filter_ref_res(cfg, gdf_nwm, gdf_ref_wb):
-    res = gpd.read_file(cfg.lakes.ref_reservoirs_path)
+def _filter_ref_res(cfg: HFConfig, gdf_nwm, gdf_ref_wb):
+    res = gpd.read_file(cfg.lakes.ref_res.path)
 
     # filter to exclude dam_id that have already been joined to nwm lakes or included wb
     res = res.loc[
         ~res["dam_id"].isin(gdf_nwm["dam_id"]) & ~res["dam_id"].isin(gdf_ref_wb["dam_id"]),
-        ["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm"],
+        ["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm", "distance_to_fp_m"],
     ].copy()
 
     # filter to criteria
     res = res[
         (
-            (res["distance_to_fp_m"] < cfg.lakes.max_waterbody_nearest_dist_m)
-            & (res["wb_areasqkm"] >= cfg.lakes.min_area_sqkm)
+            (res["distance_to_fp_m"] < cfg.lakes.ref_res.max_distance_m)
+            & (res["wb_areasqkm"] >= cfg.lakes.ref_res.min_wb_area_sqkm)
         )
-        | (res["dam_id"].isin(cfg.lakes.res_keep))
+        | (res["dam_id"].isin(cfg.lakes.ref_res.ref_res_keep))
     ].copy()
 
     return res

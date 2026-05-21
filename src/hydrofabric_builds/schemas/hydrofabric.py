@@ -767,7 +767,7 @@ class ResNIDInputs(BaseModel):
     """NID inputs to generate RFC-DA"""
 
     path: Path = Field(
-        default="source_files/NID2019_U.csv",
+        default="lakes/input/NID_2025_11_02.gpkg",
         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
     )
     src_crs: str | None = Field(default="EPSG:4326", description="Source CRS")
@@ -819,7 +819,7 @@ class ResDEMInputs(BaseModel):
     """DEM inputs to generate RFC-DA"""
 
     path: Path = Field(
-        default="source_files/USGS_Seamless_DEM_13.vrt",
+        default="input/DEM_SuperCONUS.tif",
         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
     )
     prefer_crs_of_dem: bool = Field(
@@ -957,6 +957,18 @@ class NWMLakeInput(BaseModel):
 class RefWaterbodyInput(BaseModel):
     path: Path = "input/reference_waterbodies.gpkg"
     id_field: str = "comid"
+    tmp_path: Path = "input/refwb_tmp.gpkg"
+    associate_flowpaths: bool = True
+    flowpath_association_method: str = "polygon_outlet"
+    id_field: str = "comid"
+    output_id_field: str = "lake_id"
+    fp_id_field: str = "lake_id"
+    fp_id_out_field: str = "ref_fp_id"
+    search_radius_m: float = 1000.0
+    min_preferred_intersection_len_m: float = 10.0
+    attrib_src_path: Path | None = None
+    attrib_src_layer: Path | None = None
+    attrib_src_key: str | None = None
 
 
 class AdhocLakeInput(BaseModel):
@@ -973,6 +985,8 @@ class AdhocLakeInput(BaseModel):
     fp_id_out_field: str = "ref_fp_id"
     ref_wb_field: str = "ref_waterbodies_only"
     attrib_src_path: Path | None = None
+    attrib_src_layer: Path | None = None
+    attrib_src_key: str | None = None
 
 
 class LakesConfig(BaseModel):
@@ -997,6 +1011,7 @@ class LakesConfig(BaseModel):
         self.nwm.path = self.input_dir / self.nwm.path
         self.nwm.tmp_path = self.input_dir / self.nwm.tmp_path
         self.ref_wb.path = self.input_dir / self.ref_wb.path
+        self.ref_wb.tmp_path = self.input_dir / self.ref_wb.tmp_path
         self.ref_res.path = self.input_dir / self.ref_res.path
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
