@@ -141,7 +141,49 @@ divide_attributes:
       file_name: gw/zmax.tif
       agg_type: mean
       field_name: max_gw_storage
-
+      file_name: sac-sma/LZFPM.tif
+      agg_type: mean
+      field_name: lzfpm_mean
+    lzpk:
+      file_name: sac-sma/LZPK.tif
+      agg_type: mean
+      field_name: lzpk_mean
+    lztwm:
+      file_name: sac-sma/LZTWM.tif
+      agg_type: mean
+      field_name: lztwm_mean
+    rexp:
+      file_name: sac-sma/REXP.tif
+      agg_type: mean
+      field_name: rexp_mean
+    uzk:
+      file_name: sac-sma/UZK.tif
+      agg_type: mean
+      field_name: uzk_mean
+    zperc:
+      file_name: sac-sma/ZPERC.tif
+      agg_type: mean
+      field_name: zperc_mean
+    lzfsm:
+      file_name: sac-sma/LZFSM.tif
+      agg_type: mean
+      field_name: lzfsm_mean
+    lzsk:
+      file_name: sac-sma/LZSK.tif
+      agg_type: mean
+      field_name: lzsk_mean
+    pfree:
+      file_name: sac-sma/PFREE.tif
+      agg_type: mean
+      field_name: pfree_mean
+    uzfwm:
+      file_name: sac-sma/UZFWM.tif
+      agg_type: mean
+      field_name: uzfwm_mean
+    uztwm:
+      file_name: sac-sma/UZTWM.tif
+      agg_type: mean
+      field_name: uztwm_mean
 
 
 gages:
