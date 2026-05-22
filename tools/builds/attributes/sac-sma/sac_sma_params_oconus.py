@@ -10,10 +10,7 @@ import os
 from pathlib import Path
 
 import geopandas as gpd
-import numpy as np
 import rasterio
-import rioxarray
-import xarray as xr
 from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 
@@ -50,7 +47,6 @@ def get_extent(
     list[float]
         list of extent coordinates
     """
-
     gdf = gpd.read_file(os.path.join(data_dir, filename), layer=layer)
     gdf = gdf.to_crs(source_crs)
     bounds = gdf.total_bounds
@@ -65,7 +61,7 @@ def get_extent(
 
 def clip_reproject(
     data_dir: Path, filename: Path, bounds: list[float], dst_res: list[float], dst_crs: str
-):
+) -> None:
     """Clips global sac-sma parameter raster to the domain and reprojects to the NHF oconus domain and saves raster"
 
     Parameters
@@ -82,12 +78,10 @@ def clip_reproject(
         Output raster CRS in EPSG, e.g., EPSG:3338
 
     """
-
     dst_crs = f"EPSG:{dst_crs}"
 
     with rasterio.open(os.path.join(data_dir, filename)) as src:
         # Create transform for new crs.
-        print(src.crs)
         dst_transform, dst_width, dst_height = calculate_default_transform(
             src.crs,
             dst_crs,
@@ -127,7 +121,7 @@ def clip_reproject(
                 dst_crs=dst_crs,
                 resampling=Resampling.bilinear,
                 tiled=True,
-                compress="deflate"
+                compress="deflate",
             )
 
 
@@ -150,20 +144,31 @@ if __name__ == "__main__":
         type=str,
         help="CRS in EPSG for the OCONUS NHF domain, for example 3338",
     )
+    parser.add_argument(
+        "--resolution",
+        type=str,
+        help="optional output raster resolution in meters, e.g., 1000.  Defaults to 250",
+    )
 
     args = parser.parse_args()
 
     extent = get_extent(
         data_dir=Path(args.data_dir),
-        filename=Path(args.extent_file) if args.extent_file else None,
+        filename=Path(args.extent_file),
         layer="divides",
         buffer=1,
     )
 
-    filename = clip_reproject(
+    # use 250m resolution if not specified in command line
+    if args.resolution:
+        dst_res = [float(args.resolution), float(args.resolution)]
+    else:
+        dst_res = [250.0, 250.0]
+
+    clip_reproject(
         data_dir=Path(args.data_dir),
         filename=Path(args.global_raster_file),
         bounds=extent,
-        dst_res=[250,250],
-        dst_crs=args.crs
+        dst_res=dst_res,
+        dst_crs=args.crs,
     )
