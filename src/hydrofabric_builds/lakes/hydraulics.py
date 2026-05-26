@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 
@@ -68,7 +69,7 @@ def _coalesce_num(*cols: Iterable | pd.Series) -> np.ndarray:
 
 
 def _populate_hydraulics(
-    df: pd.DataFrame,
+    df: pd.DataFrame | gpd.GeoDataFrame,
     # parameterized fallbacks
     default_WeirC: float = 0.4,
     default_WeirL: float = 10.0,  # m
@@ -134,9 +135,6 @@ def _populate_hydraulics(
         slightly increase weir length, Orifice area, and sometimes Orifice coefficient for higher-hazard dams (more conservative hydraulics). If False, no hazard-based adjustment is applied.
     :return: a Dataframe
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("df must be a pandas DataFrame")
-
     n = len(df)
 
     # These columns likely already exist from importing previous data, but if they do not exist, create them and fill with nan
@@ -392,9 +390,12 @@ def _populate_hydraulics(
     # ---- return DataFrame ----
     out = pd.DataFrame(
         {
+            "geometry": df.get("geometry"),
             "dam_id": df.get("dam_id"),
             "nidid": df.get("nidid"),
             "ref_wb_id": df.get("ref_fab_wb"),
+            "ref_fp_id": df.get("ref_fp_id"),
+            "lake_id": df.get("lake_id"),
             "H_m": H,
             "LkArea": LkArea,
             "LkMxE": LkMxE,
@@ -412,7 +413,9 @@ def _populate_hydraulics(
 
     # correct any issues caused by mixing of data
     # t-route will error if WeirE < OrificeE or LkMxE < WeirE. == is acceptable
+    # OrificeE can be null if there is no dam information - set it to WeirE
     out["WeirE"] = np.where(out["WeirE"] < out["OrificeE"], out["OrificeE"], out["WeirE"])
-    out["LkMxE"] = np.where(out["LkMxE"] < out["WeirE"]), out["WeirE"], out["LkMxE"]
+    out["LkMxE"] = np.where(out["LkMxE"] < out["WeirE"], out["WeirE"], out["LkMxE"])
+    out["OrificeE"] = np.where(out["OrificeE"].isnull(), out["WeirE"], out["OrificeE"])
 
     return out

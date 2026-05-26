@@ -6,27 +6,28 @@ import rasterio
 from rasterstats import zonal_stats
 
 
-def polygon_elevation(dem_path: str | Path, ref_wbs: gpd.GeoDataFrame):
+def polygon_elevation(dem_path: str | Path, polygons: gpd.GeoDataFrame, field_name: str) -> gpd.GeoDataFrame:
     with rasterio.open(dem_path) as src:
         if src.crs is None:
             raise ValueError("DEM has no CRS.")
-        if ref_wbs.crs is None:
+        if polygons.crs is None:
             raise ValueError("ref_wbs has no CRS; cannot reproject.")
 
-        if ref_wbs.crs.to_string().upper() != src.crs.to_string().upper():
-            ref_wbs = ref_wbs.to_crs(src.crs)
+        if polygons.crs.to_string().upper() != src.crs.to_string().upper():
+            polygons = polygons.to_crs(src.crs)
             stats = zonal_stats(
-                vectors=ref_wbs,  # GeoDataFrame or shapes
+                vectors=polygons,  # GeoDataFrame or shapes
                 raster=str(dem_path),  # path to your DEM
                 stats="mean",
+                # TODO: add no data to raster
                 nodata=src.nodata if src.nodata is not None else None,
                 all_touched=False,  # or True if you want a more inclusive mask
             )
-            ref_wbs["ref_elev"] = [s["mean"] for s in stats]
+            polygons[field_name] = [s["mean"] for s in stats]
         else:
-            ref_wbs["ref_elev"] = np.nan
+            polygons[field_name] = np.nan
 
-    return ref_wbs
+    return polygons
 
 
 def point_elevation(dem_path: str | Path, gdf: gpd.GeoDataFrame) -> np.ndarray:

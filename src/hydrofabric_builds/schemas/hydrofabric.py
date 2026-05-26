@@ -767,7 +767,7 @@ class ResNIDInputs(BaseModel):
     """NID inputs to generate RFC-DA"""
 
     path: Path = Field(
-        default="lakes/input/NID_2025_11_02.gpkg",
+        default="input/NID2019_U.csv",
         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
     )
     src_crs: str | None = Field(default="EPSG:4326", description="Source CRS")
@@ -893,8 +893,9 @@ class ResDEMInputs(BaseModel):
 
 
 class ReferenceReservoirsInput(BaseModel):
-    path: Path = "input/reference-reservoirs-v1.gpkg"
+    path: Path = Path("input/reference-reservoirs-v1.gpkg")
     layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
+    run: bool = True
     src_crs: str | None = Field(None, description="Source CRS")
     output_crs: str = Field(default="EPSG:5070", description="Output CRS")
     distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
@@ -913,9 +914,10 @@ class ReferenceReservoirsInput(BaseModel):
 
 
 class NWMLakeInput(BaseModel):
-    path: Path = "input/nwm_lakes.gpkg"
+    path: Path = Path("input/nwm_lakes.gpkg")
     layer: str = "lakes"
-    tmp_path: Path = "input/nwm_lakes_tmp.gpkg"
+    run: bool = True
+    tmp_path: Path = Path("input/nwm_lakes_tmp.gpkg")
     associate_flowpaths: bool = True
     flowpath_association_method: str = "polygon_outlet"
     search_radius_m: float = 1000.0
@@ -955,9 +957,9 @@ class NWMLakeInput(BaseModel):
 
 
 class RefWaterbodyInput(BaseModel):
-    path: Path = "input/reference_waterbodies.gpkg"
-    id_field: str = "comid"
-    tmp_path: Path = "input/refwb_tmp.gpkg"
+    path: Path = Path("input/reference_waterbodies.gpkg")
+    run: bool = True
+    tmp_path: Path = Path("input/refwb_tmp.gpkg")
     associate_flowpaths: bool = True
     flowpath_association_method: str = "polygon_outlet"
     id_field: str = "comid"
@@ -972,9 +974,10 @@ class RefWaterbodyInput(BaseModel):
 
 
 class AdhocLakeInput(BaseModel):
-    path: Path = "input/adhoc_lakes.gpkg"
+    path: Path = Path("input/adhoc_lakes.gpkg")
     layer: str = "adhoc_lakes"
-    tmp_path: Path = "input/adhoc_lakes_tmp.gpkg"
+    run: bool = True
+    tmp_path: Path = Path("input/adhoc_lakes_tmp.gpkg")
     associate_flowpaths: bool = True
     flowpath_association_method: str = "nearest_point"
     search_radius_m: float = 1000.0
@@ -993,7 +996,7 @@ class LakesConfig(BaseModel):
     """Config for NWM Lakes"""
 
     input_dir: Path = here() / "data/lakes"
-    lakes_path: Path = "lakes_processed.gpkg"
+    lakes_path: Path = Path("data/lakes/output/lakes_processed.gpkg")
     use_cached_lakes: bool = False
     nwm: NWMLakeInput = NWMLakeInput()
     adhoc: AdhocLakeInput = AdhocLakeInput()
@@ -1003,6 +1006,25 @@ class LakesConfig(BaseModel):
     calculate_elevation: bool = True
     nid: ResNIDInputs = Field(default=ResNIDInputs(), description="NID config")
     fp_lk_crosswalk: bool = True
+    fields: list[str] = [
+        "lake_id",
+        "res_id",
+        "LkArea",
+        "LkMxE",
+        "WeirC",
+        "WeirL",
+        "WeirE",
+        "OrificeC",
+        "OrificeA",
+        "OrificeE",
+        "Dam_Length",
+        "ifd",
+        "reservoir_index_AnA",
+        "reservoir_index_Extended_AnA",
+        "reservoir_index_GDL_AK",
+        "reservoir_index_Medium_Range",
+        "reservoir_index_Short_Range",
+    ]
 
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
