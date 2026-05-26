@@ -116,9 +116,12 @@ def _concat_lakes(gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res):
     # return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res], ignore_index=True)
 
 
-def _calculate_elevation(gdf, dem_path, calculate: bool = True):
+def _calculate_elevation(cfg: HFConfig, gdf, dem_path, calculate: bool = True):
     if calculate:
         # NOTE: it would be nicer if these both returned series
+
+        # gdf_lakeid = gdf_all_lks
+        # gdf_all_lks = gdf_all_lks.merge(gdf_wb, left_on='ref_wb_id', right_on='comid')
         gdf_all_lks = polygon_elevation(dem_path, gdf)
         gdf_all_lks["dam_elev"] = point_elevation(dem_path, gdf)
     else:
@@ -126,6 +129,26 @@ def _calculate_elevation(gdf, dem_path, calculate: bool = True):
         gdf_all_lks["ref_elev"] = np.nan
 
     return gdf_all_lks
+
+def _calculate_elevation__nwm(cfg: HFConfig, gdf):
+    if cfg.lakes.calculate_elevation:
+        # polygons - join nwm lake polygons for polygon elevation (ref_elev)
+        gdf_nwm_poly = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer).to_crs(cfg.crs)
+        logger.info('polygon eleve start')
+        gdf_nwm_poly = polygon_elevation(cfg.lakes.dem.path, gdf_nwm_poly)
+        logger.info('polygon elev end')
+        gdf_nwm_poly = gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field:cfg.lakes.nwm.output_id_field})
+        gdf = gdf.merge(gdf_nwm_poly[[cfg.lakes.nwm.output_id_field, 'ref_elev']].copy(), on = cfg.lakes.nwm.output_id_field, how='left')
+
+        # point 
+        logger.info('point elev start')
+        gdf["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf)
+        logger.info('point elev end')
+    else:
+        gdf["dam_elev"] = np.nan
+        gdf["ref_elev"] = np.nan
+
+    return gdf
 
 
 # TODO: Finish
@@ -203,7 +226,7 @@ def _filter_ref_res(cfg: HFConfig, gdf_nwm, gdf_ref_wb):
     # filter to exclude dam_id that have already been joined to nwm lakes or included wb
     res = res.loc[
         ~res["dam_id"].isin(gdf_nwm["dam_id"]) & ~res["dam_id"].isin(gdf_ref_wb["dam_id"]),
-        ["dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm", "distance_to_fp_m"],
+        ["geometry","dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm", "distance_to_fp_m"],
     ].copy()
 
     # filter to criteria
@@ -281,6 +304,7 @@ def _fold_ref_res_to_nwm_lakes(config: HFConfig, nwm_lakes_pt) -> gpd.GeoDataFra
                 candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
             ]
         else:
+            # TODO: most downstream flowpath interesction
             nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
 
     # join updated geometries and reference reservoir info back to nwm lakes points with associate flowpaths dataframe

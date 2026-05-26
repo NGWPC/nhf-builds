@@ -8,7 +8,7 @@ import geopandas as gpd
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.lakes.lakes import (
     _associate_lake_flowpaths,
-    _calculate_elevation,
+    _calculate_elevation__nwm,
     _concat_lakes,
     _filter_adhoc_lakes,
     _filter_ref_res,
@@ -47,35 +47,41 @@ def build_lakes(**context: dict[str, Any]) -> dict[str, Any]:
         # associate flowpaths with nwm_lakes - poly or point option
         # retain attributes
         gdf_nwm_lakes = _associate_lake_flowpaths(cfg, "nwm")
+        
 
         # ---IMPROVE NWM LAKES PLACEMENT
         # read reference reservoirs
         # will return gdf with all sources and improved placements and ref res fields
         gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(cfg, gdf_nwm_lakes)
+        gdf_nwm_lakes = _calculate_elevation__nwm(cfg, gdf_nwm_lakes)
+        gdf_nwm_lakes.to_file('data/lakes/tmp_nwm_lakes_elev.gpkg')
 
-        # ---Adhoc lakes - optional: these are point geometries to be associated with flowpath and added to lakes layer
-        gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
-        gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
+        # # ---Adhoc lakes - optional: these are point geometries to be associated with flowpath and added to lakes layer
+        # gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
+        # gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
+        
 
-        # --ref wb - any lakes needed in the reference waterbodies dataset
-        gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_adhoc_ref_wb)
-        gdf_ref_wb = _merge_ref_wb(cfg, gdf_ref_wb)
+        # # --ref wb - any lakes needed in the reference waterbodies dataset
+        # gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_adhoc_ref_wb)
+        # gdf_ref_wb = _merge_ref_wb(cfg, gdf_ref_wb)
+        # gdf_missing_adhoc.to_file('data/lakes/tmp_adhoc.gpkg')
 
-        # # ----Filter ref res to candidates and exclude res already used by nwm lakes and waterbodies
-        gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
+        # # # # ----Filter ref res to candidates and exclude res already used by nwm lakes and waterbodies
+        # gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
+        # gdf_ref_res.to_file('data/lakes/tmp_refres.gpkg')
 
-        # # ----CONCAT concat all tables
-        gdf_all_lks = _concat_lakes(gdf_nwm_lakes, gdf_missing_adhoc, gdf_ref_wb, gdf_ref_res)
-        # # --- ELEVATION
-        # # Includes the elevation config setting to toggle if elevation will be calculated or if nulls returned
-        gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem.path, cfg.lakes.calculate_elevation)
-        gdf_all_lks.to_file("data/lakes/tmp_all_lks.gpkg")
+        # # # ----CONCAT concat all tables
+        # gdf_all_lks = _concat_lakes(gdf_nwm_lakes, gdf_missing_adhoc, gdf_ref_wb, gdf_ref_res)
+        # # # --- ELEVATION
+        # # # Includes the elevation config setting to toggle if elevation will be calculated or if nulls returned
+        # gdf_all_lks = _calculate_elevation(gdf_all_lks, cfg.lakes.dem.path, cfg.lakes.calculate_elevation)
+        # gdf_all_lks.to_file("data/lakes/tmp_all_lks.gpkg")
 
-        # # --- NID attributes
-        # # join to NID based on NID_ID
-        # # keep NID cols / process [build_rfc_da_locs]
-        gdf_all_lks = _join_nid(gdf_all_lks, cfg.lakes.nid.path)
-        gdf_all_lks.to_file("data/lakes/tmp_all_lks2.gpkg")
+        # # # --- NID attributes
+        # # # join to NID based on NID_ID
+        # # # keep NID cols / process [build_rfc_da_locs]
+        # gdf_all_lks = _join_nid(gdf_all_lks, cfg.lakes.nid.path)
+        # gdf_all_lks.to_file("data/lakes/tmp_all_lks2.gpkg")
 
         # # --- Hydraulics
         # # hydraulics
