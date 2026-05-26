@@ -7,6 +7,7 @@ from rasterstats import zonal_stats
 
 
 def polygon_elevation(dem_path: str | Path, polygons: gpd.GeoDataFrame, field_name: str) -> gpd.GeoDataFrame:
+    """Zonal stats of a DEM with column appended to input dataframe with field_name specified"""
     with rasterio.open(dem_path) as src:
         if src.crs is None:
             raise ValueError("DEM has no CRS.")
