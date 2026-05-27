@@ -41,27 +41,23 @@ def _associate_lake_flowpaths(
         if cfg.flowpath_association_method == "nearest_point":
             logger.info(f"Associating {lake_type} flowpath with points")
             gdf = associate_flowpaths_nearest_point(
-                # points_path=cfg.path,
-                # points_layer=cfg.layer,
                 gdf_points=gdf,
                 flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.search_radius_m,
                 point_id=cfg.id_field,
-                flowpath_id="flowpath_id",
-                flowpath_id_out_field="ref_fp_id",
+                flowpath_id=main_cfg.lakes.fp_id_field,
+                flowpath_id_out_field=main_cfg.lakes.fp_id_out_field,
             )
         # use polygon flowpath outlet method
         elif cfg.flowpath_association_method == "polygon_outlet":
             logger.info(f"Associating {lake_type} flowpaths with polygons")
             gdf = associate_flowpaths_polygon_outlet(
-                # polygon_path=cfg.path,
-                # polygon_layer=cfg.layer,
                 gdf_poly=gdf,
                 flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
                 search_radius_m=cfg.search_radius_m,
                 min_preferred_intersection_len_m=cfg.min_preferred_intersection_len_m,
-                flowpath_id="flowpath_id",
-                flowpath_id_out_field="ref_fp_id",
+                flowpath_id=main_cfg.lakes.fp_id_field,
+                flowpath_id_out_field=main_cfg.lakes.fp_id_out_field,
             )
 
         # invalid method
@@ -103,7 +99,7 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
     fp = gpd.read_parquet(cfg.build.reference_flowpaths_path).to_crs(cfg.crs)
     ref_res = gpd.read_file(cfg.lakes.ref_res.path).to_crs(cfg.crs)
 
-    max_distance = cfg.lakes.nwm.max_search_distance_m
+    max_distance = cfg.lakes.nwm.max_refres_search_distance_m
 
     nwm_lakes[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
     nwm_lakes.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.nwm.output_id_field}, inplace=True)
@@ -116,8 +112,8 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
         if len(fps) == 0:
             nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
             continue
-        # Keep min hydroseq of all intersected FPs
-        outlet_fp_id = fps[cfg.lakes.nwm.fp_id_field][fps["hydroseq"].idxmin()]
+        # Keep min hydroseq of all intersected FPs (ref fp)
+        outlet_fp_id = fps[cfg.lakes.fp_id_field][fps["hydroseq"].idxmin()]
         nwm_lakes.loc[idx, "outlet_fp_id"] = outlet_fp_id
         # Find nearest ref_res to most downstream fp_id
         candidates = ref_res.sindex.nearest(
@@ -129,7 +125,6 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
                 candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
             ]
         else:
-            # TODO: most downstream flowpath interesction
             nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
 
     # join updated geometries and reference reservoir info back to nwm lakes points with associate flowpaths dataframe
@@ -141,7 +136,7 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
     )
 
     # replace associated fp id with better match
-    nwm_lakes_pt.loc[~nwm_lakes_pt["outlet_fp_id"].isna(), cfg.lakes.nwm.fp_id_out_field] = nwm_lakes_pt[
+    nwm_lakes_pt.loc[~nwm_lakes_pt["outlet_fp_id"].isna(), cfg.lakes.fp_id_out_field] = nwm_lakes_pt[
         "outlet_fp_id"
     ]
 
@@ -173,20 +168,20 @@ def _calculate_elevation__nwm(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDa
     return gdf
 
 
-def _calculate_elevation__adhoc(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Calculate elevation for Adhoc Lakes
+# def _calculate_elevation__adhoc(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+#     """Calculate elevation for Adhoc Lakes
 
-    Adhoc lakes only have points. Point elevation is used for both `dam_elev` and `ref_elev`
-    """
-    if cfg.lakes.calculate_elevation:
-        # adhoc lakes are only points so use point elevation for both
-        gdf["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf)
-        gdf["ref_elev"] = gdf["dam_elev"].copy()
-    else:
-        gdf["dam_elev"] = np.nan
-        gdf["ref_elev"] = np.nan
+#     Adhoc lakes only have points. Point elevation is used for both `dam_elev` and `ref_elev`
+#     """
+#     if cfg.lakes.calculate_elevation:
+#         # adhoc lakes are only points so use point elevation for both
+#         gdf["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf)
+#         gdf["ref_elev"] = gdf["dam_elev"].copy()
+#     else:
+#         gdf["dam_elev"] = np.nan
+#         gdf["ref_elev"] = np.nan
 
-    return gdf
+#     return gdf
 
 
 def _calculate_elevation__refwb(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -195,8 +190,6 @@ def _calculate_elevation__refwb(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.Geo
     Polygon elevation is used for `ref_elev`.
     """
     if cfg.lakes.calculate_elevation:
-        # TODO: give ref wbes better point placement
-        # refwb are only polygon right now so use polygon for both
         gdf = polygon_elevation(cfg.lakes.dem.path, gdf, "ref_elev")
         gdf["dam_elev"] = gdf["ref_elev"].copy()
     else:
@@ -214,15 +207,16 @@ def _calculate_elevation__refres(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.Ge
     """
     if cfg.lakes.calculate_elevation:
         # polygons - join ref wb polygons for polygon elevation (ref_elev)
+        # ref wb ID was changed to final output ID in filter step
         gdf_wb_poly = gpd.read_file(cfg.lakes.ref_wb.path).to_crs(cfg.crs)
-        gdf_wb_poly = gdf_wb_poly.rename(columns={cfg.lakes.ref_wb.id_field: cfg.lakes.ref_res.ref_wb_id_col})
+        gdf_wb_poly = gdf_wb_poly.rename(columns={cfg.lakes.ref_wb.id_field: cfg.lakes.nwm.output_id_field})
         gdf_wb_poly = gdf_wb_poly.loc[
-            gdf_wb_poly[cfg.lakes.ref_res.ref_wb_id_col].isin(gdf[cfg.lakes.ref_res.ref_wb_id_col])
+            gdf_wb_poly[cfg.lakes.nwm.output_id_field].isin(gdf[cfg.lakes.nwm.output_id_field])
         ].copy()
         gdf_wb_poly = polygon_elevation(cfg.lakes.dem.path, gdf_wb_poly, "ref_elev")
         gdf = gdf.merge(
-            gdf_wb_poly[[cfg.lakes.ref_res.ref_wb_id_col, "ref_elev"]].copy(),
-            on=cfg.lakes.ref_res.ref_wb_id_col,
+            gdf_wb_poly[[cfg.lakes.nwm.output_id_field, "ref_elev"]].copy(),
+            on=cfg.lakes.nwm.output_id_field,
             how="left",
         )
 
@@ -235,21 +229,20 @@ def _calculate_elevation__refres(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.Ge
     return gdf
 
 
-def _filter_adhoc_lakes(cfg: HFConfig) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """Filters adhoc lakes to 1) null lake ID and 2) lake ID only in reference waterbodies
+def _prep_ref_wb(cfg: HFConfig) -> gpd.GeoDataFrame:
+    """Filters adhoc lakes to lake ID only in reference waterbodies
 
-    Returns tuple of 1) missing null lakes and 2) required reference waterbodies
+    Merge reference reservoirs data into reference waterbodies (e.g. flowpath IDs, NID, area)
+
+    Returns required reference waterbodies with attributes
     """
-    gdf = gpd.read_file(cfg.lakes.adhoc.path)
-    missing = gdf.loc[gdf[cfg.lakes.adhoc.id_field] == -99999, :].copy()
-    ref_wb = gdf.loc[gdf[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()
-    return missing, ref_wb
-
-
-def _merge_ref_wb(cfg: HFConfig, gdf_ref_wb: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Merge reference reservoirs data into reference waterbodies (e.g. flowpath IDs, NID, area)"""
+    gdf_adhoc = gpd.read_file(cfg.lakes.adhoc.path)
     gdf_ref_res = gpd.read_file(cfg.lakes.ref_res.path)
 
+    # select where reference waterbody is required
+    gdf_ref_wb = gdf_adhoc.loc[gdf_adhoc[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()
+
+    # cast to string if ref wb to string
     if pd.api.types.is_object_dtype(gdf_ref_res[cfg.lakes.ref_res.ref_wb_id_col]):
         gdf_ref_wb[cfg.lakes.ref_wb.output_id_field] = (
             gdf_ref_wb[cfg.lakes.ref_wb.output_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
@@ -262,7 +255,6 @@ def _merge_ref_wb(cfg: HFConfig, gdf_ref_wb: gpd.GeoDataFrame) -> gpd.GeoDataFra
         how="left",
     )
 
-    del gdf_ref_res
     return gdf_ref_wb
 
 
@@ -300,24 +292,19 @@ def _filter_ref_res(
         | (res["dam_id"].isin(cfg.lakes.ref_res.ref_res_keep))
     ].copy()
 
-    res = res.rename(columns={"ref_fab_fp": "ref_fp_id", "ref_wb_wb": cfg.lakes.nwm.output_id_field})
+    res = res.rename(columns={"ref_fab_fp": "ref_fp_id", "ref_fab_wb": cfg.lakes.nwm.output_id_field})
 
     return res
 
 
-def _concat_lakes(
-    cfg: HFConfig,
-    gdf_nwm: gpd.GeoDataFrame,
-    gdf_adhoc: gpd.GeoDataFrame,
-    gdf_ref_wb: gpd.GeoDataFrame,
-    gdf_ref_res: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
+def _concat_lakes(cfg: HFConfig, gdfs: list[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
     """Concat all available lakes and force final CRS."""
-    gdf_nwm = gdf_nwm.to_crs(cfg.crs)
-    gdf_adhoc = gdf_adhoc.to_crs(cfg.crs)
-    gdf_ref_wb = gdf_ref_wb.to_crs(cfg.crs)
-    gdf_ref_res = gdf_ref_res.to_crs(cfg.crs)
-    return pd.concat([gdf_nwm, gdf_adhoc, gdf_ref_wb, gdf_ref_res], ignore_index=True)
+    # gdf_nwm = gdf_nwm.to_crs(cfg.crs)
+    # gdf_ref_wb = gdf_ref_wb.to_crs(cfg.crs)
+    # gdf_ref_res = gdf_ref_res.to_crs(cfg.crs)
+    for i, gdf in enumerate(gdfs):
+        gdfs[i] = gdf.to_crs(cfg.crs)
+    return pd.concat(gdfs, ignore_index=True)
 
 
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:

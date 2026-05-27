@@ -7,18 +7,16 @@ from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_re
 from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
     _associate_lake_flowpaths,
-    _calculate_elevation__adhoc,
     _calculate_elevation__nwm,
     _calculate_elevation__refres,
     _calculate_elevation__refwb,
     _concat_lakes,
     _create_ids,
-    _filter_adhoc_lakes,
     _filter_columns,
     _filter_ref_res,
     _fold_ref_res_to_nwm_lakes,
     _join_nid,
-    _merge_ref_wb,
+    _prep_ref_wb,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +71,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
 
     # else run pipeline
     else:
+        gdf_list = []
         # ------------------------------------------------------
         # NWM lakes
         # ------------------------------------------------------
@@ -82,32 +81,30 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             # improve placement
             gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(cfg, gdf_nwm_lakes)
             gdf_nwm_lakes = _calculate_elevation__nwm(cfg, gdf_nwm_lakes)
-        else:
-            gdf_nwm_lakes = gpd.GeoDataFrame(columns=["geometry", "dam_id"], crs=cfg.crs)
+            gdf_list.append(gdf_nwm_lakes)
 
         # ------------------------------------------------------
         # Adhoc lakes
         # Optional: these are point geometries to be associated with flowpath and added to lakes layer
         # ------------------------------------------------------
-        if cfg.lakes.adhoc.run:
-            logger.info("Running adhoc lakes")
-            gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
-            gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
-            gdf_missing_adhoc = _calculate_elevation__adhoc(cfg, gdf_missing_adhoc)
-        else:
-            gdf_missing_adhoc = gpd.GeoDataFrame({"geometry": []}, crs=cfg.crs)
+        # if cfg.lakes.adhoc.run:
+        #     logger.info("Running adhoc lakes")
+        #     gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
+        #     gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
+        #     gdf_missing_adhoc = _calculate_elevation__adhoc(cfg, gdf_missing_adhoc)
+        # else:
+        #     gdf_missing_adhoc = gpd.GeoDataFrame({"geometry": []}, crs=cfg.crs)
 
         # ------------------------------------------------------
         # Reference Waterbodies
-        # Any lakes needed from the reference waterbodies dataset
+        # Any lakes needed from the reference waterbodies dataset as defined by Adhoc Table
         # ------------------------------------------------------
         if cfg.lakes.ref_wb.run:
             logger.info("Running adhoc lakes found only in reference waterbodies")
-            gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_adhoc_ref_wb)
-            gdf_ref_wb = _merge_ref_wb(cfg, gdf_ref_wb)
+            gdf_ref_wb = _prep_ref_wb(cfg)
+            gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_ref_wb)
             gdf_ref_wb = _calculate_elevation__refwb(cfg, gdf_ref_wb)
-        else:
-            gdf_ref_wb = gpd.GeoDataFrame({"geometry": []}, crs=cfg.crs)
+            gdf_list.append(gdf_ref_wb)
 
         # ------------------------------------------------------
         # Reference Reservoirs
@@ -117,14 +114,13 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             logger.info("Running reference reservoirs")
             gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
             gdf_ref_res = _calculate_elevation__refres(cfg, gdf_ref_res)
-        else:
-            gdf_ref_res = gpd.GeoDataFrame({"geometry": []}, crs=cfg.crs)
+            gdf_list.append(gdf_ref_res)
 
         # ------------------------------------------------------
         # Concat all lakes
         # ------------------------------------------------------
         logger.info("All lakes source files run. Concatenating lakes.")
-        gdf_all_lks = _concat_lakes(cfg, gdf_nwm_lakes, gdf_missing_adhoc, gdf_ref_wb, gdf_ref_res)
+        gdf_all_lks = _concat_lakes(cfg, gdf_list)
 
         # ------------------------------------------------------
         # Join National Inventory of Dams (NID) Attributes

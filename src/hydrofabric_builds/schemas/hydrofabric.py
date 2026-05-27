@@ -740,31 +740,9 @@ class GagesConfig(BaseModel):
         return self
 
 
-# RFC-DA Configs
-# class ResNWMLakesInputs(BaseModel):
-#     """NWM preparation inputs to generate RFC-DA"""
-
-#     prep_nwm_lakes: bool = Field(
-#         default=False,
-#         description="Prepare NWM/HF 2.2 lakes to be used in RFCDA. Generally, this file will be available on s3 and synced.",
-#     )
-#     input_path: Path = Field(
-#         default=Path("source_files/nwm_patch_conus_nextgen.gpkg"),
-#         description="Source path if preparing NWM lakes from scratch. When using defaults, WaterbodiesConfig will inject preceding input path.",
-#     )
-#     layer: str = Field(default="lakes")
-#     buffer_size_m: int | float = Field(
-#         default=500, description="Buffer size for waterbodies when matching to lakes"
-#     )
-#     output_path: Path = Field(
-#         default=Path("source_files/nwm_lakes.gpkg"),
-#         description="Output path if creating or file to use in pipeline if not creating. When using defaults, WaterbodiesConfig will inject preceding input path.",
-#     )
-#     lakes_keep: list[int] = Field(default=[], description="List of lake_id's to keep in RFCDA")
-
-
-class ResNIDInputs(BaseModel):
-    """NID inputs to generate RFC-DA"""
+### Lakes ###
+class NIDInputs(BaseModel):
+    """Lakes: National Inventory of Dams (NID) inputs to improve hydaulic paramters. NID is available for Reference Reservoirs data."""
 
     path: Path = Field(
         default="input/NID2019_U.csv",
@@ -777,50 +755,12 @@ class ResNIDInputs(BaseModel):
     )
 
 
-# class ResReferenceWaterbodiesInputs(BaseModel):
-#     """Reference waterbodies inputs to generate RFC-DA"""
-
-#     path: Path = Field(
-#         default="reference_reservoirs/reference_waterbodies.gpkg",
-#         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
-#     )
-#     layer: str = Field(default="reference_waterbodies", description="GPKG layer")
-#     src_crs: str | None = Field(None, description="Source CRS")
-#     output_crs: str = Field(default="EPSG:5070", description="Output CRS")
-#     id_col: str = Field(default="comid", description="Reference waterbodies ID column")
-
-
-# # class ResReferenceReservoirsInputs(BaseModel):
-# #     """Reference reservoirs inputs to generate RFC-DA"""
-
-# #     path: Path = Field(
-# #         default="reference_reservoirs/reference-reservoirs-v1.gpkg",
-# #         description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
-# #     )
-# #     layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
-# #     src_crs: str | None = Field(None, description="Source CRS")
-# #     output_crs: str = Field(default="EPSG:5070", description="Output CRS")
-# #     distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
-# #     wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
-# #     ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
-# #     min_wb_area_sqkm: float = Field(
-# #         default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
-# #     )
-# #     max_distance_m: float = Field(
-# #         default=1000.0,
-# #         description="max distance of reference reservoir points from column 'distance_to_fp_m'",
-# #     )
-# #     ref_res_keep: list[str] = Field(
-# #         default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
-# #     )
-
-
-class ResDEMInputs(BaseModel):
-    """DEM inputs to generate RFC-DA"""
+class LakesDEMInputs(BaseModel):
+    """Lakes: DEM inputs for Lakes"""
 
     path: Path = Field(
         default="input/DEM_SuperCONUS.tif",
-        description="Source path. When using defaults, WaterbodiesConfig will inject preceding input path.",
+        description="Source path. LakesConfig will inject preceding input path.",
     )
     prefer_crs_of_dem: bool = Field(
         default=True, description="Reproject polygons to DEM CRS before sampling of True"
@@ -829,74 +769,19 @@ class ResDEMInputs(BaseModel):
     nodata: int | float | None = Field(None, description="Nodata value. Let rasterio infer if null")
 
 
-# # class ResRules(BaseModel):
-# #     """Rules for generating RFC-DA"""
-
-# #     max_waterbody_nearest_dist_m: float = Field(
-# #         default=1000.0, description="Max waterbdody nearest distance (m) for nearest WB ↔ dam selection"
-# #     )
-# #     min_area_sqkm: float = Field(
-# #         default=0.2,
-# #         description="Removes waterbodies smaller than this threshold. Use 0 to remove none.",
-# #     )
-
-
-# class WaterbodiesConfig(BaseModel):
-#     """Config for waterbodies. Includes RFC-DA configs."""
-
-#     input_dir: Path = Field(
-#         default=here() / Path("data/reservoirs"),
-#         description="Input data directory. For defaults, this will be prepended to datasets.",
-#     )
-#     output_dir: Path = Field(
-#         default=here() / Path("data/reservoirs/output"),
-#         description="Output directory. For defaults, will be prepended to output RFCDA name",
-#     )
-#     rfcda_output_name: str = Field(default="rfc-da-hydraulics-v1.gpkg", description="Output gpkg name")
-#     rfcda_file: Path = Field(
-#         default_factory=lambda data: data["output_dir"] / data["rfcda_output_name"],
-#         description="Full file path. By default will concatenate output dir and file name",
-#     )
-#     default_src_crs: str = Field(default="EPSG:4326", description="Default source CRS")
-#     work_crs: str = Field(
-#         default="EPSG:5070",
-#         description="CRS for projected ops, distances, buffers. area-equal crs for SuperCONUS",
-#     )
-
-#     nid: ResNIDInputs = Field(default=ResNIDInputs(), description="NID config")
-#     refwb: ResReferenceWaterbodiesInputs = Field(
-#         default=ResReferenceWaterbodiesInputs(), description="Reference waterbodies config"
-#     )
-#     refres: ResReferenceReservoirsInputs = Field(
-#         default=ResReferenceReservoirsInputs(), description="Reference reservoirs configs"
-#     )
-#     osm: ResOSMInputs = Field(default=ResOSMInputs(), description="OSM configs")
-#     dem: ResDEMInputs = Field(default=ResDEMInputs(), description="DEM configs")
-#     nwm_lakes: ResNWMLakesInputs = Field(
-#         default=ResNWMLakesInputs(),
-#         description="NWM Lakes configuration. Includes if data prep should be run.",
-#     )
-#     rules: ResRules = Field(default=ResRules(), description="Rules")
-
-#     @model_validator(mode="after")
-#     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
-#         """Inject input directories into each input config path"""
-#         self.nid.path = self.input_dir / self.nid.path
-#         self.osm.path = self.input_dir / self.osm.path
-#         self.refwb.path = self.input_dir / self.refwb.path
-#         self.refres.path = self.input_dir / self.refres.path
-#         self.dem.path = self.input_dir / self.dem.path
-#         self.nwm_lakes.input_path = self.input_dir / self.nwm_lakes.input_path
-#         self.nwm_lakes.output_path = self.input_dir / self.nwm_lakes.output_path
-
-#         return self
-
-
 class ReferenceReservoirsInput(BaseModel):
-    path: Path = Path("input/reference-reservoirs-v1.gpkg")
+    """Lakes: Reference Reservoirs is a point dataset of dams including hydraulic parameters from the National Inventory of Dams (NID)."""
+
+    path: Path = Field(
+        default=Path("input/reference-reservoirs-v1.gpkg"),
+        description="Source path. When using defaults, LakesConfig will inject preceding input path.",
+    )
     layer: str = Field(default="reference-reservoirs-v1", description="GPKG layer")
-    run: bool = True
-    src_crs: str | None = Field(None, description="Source CRS")
+    run: bool = Field(
+        default=True,
+        description="Flag to run reference reservoirs input. Must be set to false if file is not present.",
+    )
+    src_crs: str | None = Field(default=None, description="Source CRS")
     output_crs: str = Field(default="EPSG:5070", description="Output CRS")
     distance_to_fp_col: str = Field(default="distance_to_fp_m", description="Distance to flowpath (m) column")
     wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
@@ -914,21 +799,45 @@ class ReferenceReservoirsInput(BaseModel):
 
 
 class NWMLakeInput(BaseModel):
-    path: Path = Path("input/nwm_lakes.gpkg")
-    layer: str = "lakes"
-    run: bool = True
-    tmp_path: Path = Path("input/nwm_lakes_tmp.gpkg")
-    associate_flowpaths: bool = True
-    flowpath_association_method: str = "polygon_outlet"
-    search_radius_m: float = 1000.0
-    max_search_distance_m: float = 500.0
-    min_preferred_intersection_len_m: float = 10.0
-    id_field: str = "newId"
-    output_id_field: str = "lake_id"
-    fp_id_field: str = "flowpath_id"
-    fp_id_out_field: str = "ref_fp_id"
-    attrib_src_path: Path | None = None
-    attrib_src_layer: str | None = None
+    """Lakes: NWM Lakes is a polygon dataset with COMID. This is the operational lakes layer provided by OWP."""
+
+    path: Path = Field(
+        default=Path("input/nwm_lakes.gpkg"),
+        description="Source path. LakesConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="lakes", description="GPKG layer")
+    tmp_path: Path = Path(
+        "input/tmp_nwmlakes.gpkg",
+        description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
+    )
+    run: bool = Field(
+        default=True, description="Flag to run NWM lakes input. Must be set to false if file is not present."
+    )
+    associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
+    flowpath_association_method: str = Field(
+        default="polygon_outlet",
+        description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
+    )
+    search_radius_m: float = Field(
+        default=1000.0, description="Distance from flowpath to search when associating flowpaths."
+    )
+    max_refres_search_distance_m: float = Field(
+        default=500.0,
+        description="Distance between NWM lake and reference reservoirs used when improving NWM lake placement.",
+    )
+    min_preferred_intersection_len_m: float = Field(
+        default=10.0,
+        description="Minimum prefered intersection lenght when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
+    )
+    id_field: str = Field(default="newId", description="ID field for NWM lakes input")
+    output_id_field: str = Field(default="lake_id", description="ID field for NWM lakes output")
+    attrib_src_path: Path | None = Field(
+        default=None,
+        description="Source file for joining attributes from another file. It will be skipped if null.",
+    )
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
+    )
     attrib_src_key: str = Field(
         default="lake_id", description="Source file key to match when importing attributes"
     )
@@ -952,79 +861,175 @@ class NWMLakeInput(BaseModel):
             "reservoir_index_Medium_Range",
             "reservoir_index_Short_Range",
         ],
-        description="Fields to retain in final layer. IDs and geometry will be kept by default.",
+        description="Fields to retain from NWM lakes data. IDs and geometry will be kept by default.",
     )
 
 
 class RefWaterbodyInput(BaseModel):
-    path: Path = Path("input/reference_waterbodies.gpkg")
-    run: bool = True
-    tmp_path: Path = Path("input/refwb_tmp.gpkg")
-    associate_flowpaths: bool = True
-    flowpath_association_method: str = "polygon_outlet"
-    id_field: str = "comid"
-    output_id_field: str = "lake_id"
-    fp_id_field: str = "lake_id"
-    fp_id_out_field: str = "ref_fp_id"
-    search_radius_m: float = 1000.0
-    min_preferred_intersection_len_m: float = 10.0
-    attrib_src_path: Path | None = None
-    attrib_src_layer: Path | None = None
-    attrib_src_key: str | None = None
+    """Lakes: Reference Waterbodies is a polygon dataset with COMID. Reference waterbodies will be used for Adhoc Lakes that are only found in Reference Waterbodies. The entire Reference Waterbodies file is not run."""
+
+    path: Path = Field(
+        default=Path("input/reference_waterbodies.gpkg"),
+        description="Source path. LakesConfig will inject preceding input path.",
+    )
+    run: bool = Field(
+        default=True,
+        description="Flag to run Reference Waterbodies input. Must be set to false if file is not present.",
+    )
+    tmp_path: Path = Field(
+        default=Path("input/refwb_tmp.gpkg"),
+        description="A temporary layer to read waterbodies from where flowpaths have been associated and attributes joined. Skips flowpath association.",
+    )
+    associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
+    flowpath_association_method: str = Field(
+        default="polygon_outlet",
+        description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
+    )
+    search_radius_m: float = Field(
+        default=1000.0, description="Distance from flowpath to search when associating flowpaths."
+    )
+    id_field: str = Field(default="comid", description="ID field for reference waterbodies")
+    output_id_field: str = Field(
+        default="lake_id", description="ID field to change name to for reference waterbodies"
+    )
+    min_preferred_intersection_len_m: float = Field(
+        default=10.0,
+        description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
+    )
+    attrib_src_path: Path | None = Field(
+        default=None,
+        description="Source file for joining attributes from another file. It will be skipped if null.",
+    )
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
+    )
+    attrib_src_key: str = Field(
+        default=None, description="Source file key to match when importing attributes"
+    )
 
 
 class AdhocLakeInput(BaseModel):
-    path: Path = Path("input/adhoc_lakes.gpkg")
+    """Lakes: Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon. Adhoc lakes that are only in reference waterbodies are flagged to force inclusion."""
+
+    path: Path = Field(
+        default=Path("input/adhoc_lakes.gpkg"),
+        description="Source path. LakesConfig will inject preceding input path.",
+    )
     layer: str = "adhoc_lakes"
-    run: bool = True
-    tmp_path: Path = Path("input/adhoc_lakes_tmp.gpkg")
-    associate_flowpaths: bool = True
-    flowpath_association_method: str = "nearest_point"
-    search_radius_m: float = 1000.0
-    min_preferred_intersection_len_m: float = 10.0
-    id_field: str = "lake_id"
-    output_id_field: str = "lake_id"
-    fp_id_field: str = "flowpath_id"
-    fp_id_out_field: str = "ref_fp_id"
-    ref_wb_field: str = "ref_waterbodies_only"
-    attrib_src_path: Path | None = None
-    attrib_src_layer: Path | None = None
-    attrib_src_key: str | None = None
+    run: bool = Field(
+        default=True, description="Flag to run Adhoc Lake input. Must be set to false if file is not present."
+    )
+    # tmp_path: Path = Field(
+    #     Path("input/adhoc_lakes_tmp.gpkg"),
+    #     description="A temporary layer to read adhoc lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
+    # )
+    # associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
+    # flowpath_association_method: str = Field(
+    #     default="polygon_outlet",
+    #     description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
+    # )
+    # search_radius_m: float = Field(
+    #     default=1000.0, description="Distance from flowpath to search when associating flowpaths."
+    # )
+    # min_preferred_intersection_len_m: float = Field(
+    #     default=10.0,
+    #     description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
+    # )
+    # id_field: str = Field(default="lake_id", description="ID field for adhoc lakes")
+    # output_id_field: str = Field(
+    #     default="lake_id", description="ID field to change name to for reference waterbodies"
+    # )
+    ref_wb_field: str = Field(
+        default="ref_waterbodies_only",
+        description="Field in the adhoc lakes table that flags if a lake is only in the reference waterbodies dataset (not in NWM lakes)",
+    )
+    # attrib_src_path: Path | None = Field(
+    #     default=None,
+    #     description="Source file for joining attributes from another file. It will be skipped if null.",
+    # )
+    # attrib_src_layer: str | None = Field(
+    #     default=None, description="Source file layer for importing attributes"
+    # )
+    # attrib_src_key: str = Field(
+    #     default=None, description="Source file key to match when importing attributes"
+    # )
 
 
 class LakesConfig(BaseModel):
-    """Config for NWM Lakes"""
+    """Main Config for Lakes"""
 
-    input_dir: Path = here() / "data/lakes"
-    lakes_path: Path = Path("data/lakes/output/lakes_processed.gpkg")
-    use_cached_lakes: bool = False
-    nwm: NWMLakeInput = NWMLakeInput()
-    adhoc: AdhocLakeInput = AdhocLakeInput()
-    ref_wb: RefWaterbodyInput = RefWaterbodyInput()
-    ref_res: ReferenceReservoirsInput = ReferenceReservoirsInput()
-    dem: ResDEMInputs = Field(default=ResDEMInputs(), description="DEM configs")
-    calculate_elevation: bool = True
-    nid: ResNIDInputs = Field(default=ResNIDInputs(), description="NID config")
-    fp_lk_crosswalk: bool = True
-    fields: list[str] = [
-        "lake_id",
-        "res_id",
-        "LkArea",
-        "LkMxE",
-        "WeirC",
-        "WeirL",
-        "WeirE",
-        "OrificeC",
-        "OrificeA",
-        "OrificeE",
-        "Dam_Length",
-        "ifd",
-        "reservoir_index_AnA",
-        "reservoir_index_Extended_AnA",
-        "reservoir_index_GDL_AK",
-        "reservoir_index_Medium_Range",
-        "reservoir_index_Short_Range",
-    ]
+    input_dir: Path = Field(
+        default=here() / "data/lakes",
+        description="Input directory. This will be prepended to all paths for other inputs",
+    )
+    lakes_path: Path = Field(
+        default=Path("data/lakes/output/lakes_processed.gpkg"),
+        description="Output process lakes file. This can be used to cache a completed lakes run and use in an NHF build.",
+    )
+    use_cached_lakes: bool = Field(
+        default=False,
+        description="Flag to use the file stored at `lakes_path` for lakes building. This will skip pipeline run. Note: IDs and flowpath association will not be changed.",
+    )
+    nwm: NWMLakeInput = Field(
+        default=NWMLakeInput(),
+        description="All NWM Lakes Input configs. NWM Lakes is a polygon dataset with COMID. This is the operational lakes layer provided by OWP.",
+    )
+    adhoc: AdhocLakeInput = Field(
+        default=AdhocLakeInput(),
+        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon.",
+    )
+    ref_wb: RefWaterbodyInput = Field(
+        default=RefWaterbodyInput(),
+        description="All Reference Waterbody Input configs. Reference Waterbodies is a polygon dataset with COMID. Reference waterbodies will be used for Adhoc Lakes that are only found in Reference Waterbodies. The entire Reference Waterbodies file is not run.",
+    )
+    ref_res: ReferenceReservoirsInput = Field(
+        default=ReferenceReservoirsInput(),
+        description="All Reference Reservoirs Input configs. Reference Reservoirs is a point dataset of dams including hydraulic parameters from the National Inventory of Dams (NID).",
+    )
+    dem: LakesDEMInputs = Field(
+        default=LakesDEMInputs(), description="DEM configs to use when getting elevations for lakes."
+    )
+    calculate_elevation: bool = Field(
+        default=True,
+        description="Flag to calculate elevation. This shold be turned on for production runs but can be turned off for faster debugging.",
+    )
+    nid: NIDInputs = Field(
+        default=NIDInputs(),
+        description="All National Inventory of Dams (NID) configs. NID is a point dataset of dam information that is joined to Reference Reservoirs.",
+    )
+    fp_lk_crosswalk: bool = Field(
+        default=True,
+        description="Flag to perform flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon when available.",
+    )
+    fp_id_field: str = Field(
+        default="flowpath_id",
+        description="Name of flowpath ID in dataset from which flowpaths are associated.",
+    )
+    fp_id_out_field: str = Field(
+        default="ref_fp_id", description="Name of flowpath ID field for output after flowpaths are identified"
+    )
+    fields: list[str] = Field(
+        default=[
+            "lake_id",
+            "res_id",
+            "LkArea",
+            "LkMxE",
+            "WeirC",
+            "WeirL",
+            "WeirE",
+            "OrificeC",
+            "OrificeA",
+            "OrificeE",
+            "Dam_Length",
+            "ifd",
+            "reservoir_index_AnA",
+            "reservoir_index_Extended_AnA",
+            "reservoir_index_GDL_AK",
+            "reservoir_index_Medium_Range",
+            "reservoir_index_Short_Range",
+        ],
+        description="Final fields. IDs and geometry will be kept by default.",
+    )
 
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
@@ -1037,7 +1042,6 @@ class LakesConfig(BaseModel):
         self.ref_res.path = self.input_dir / self.ref_res.path
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
-        self.adhoc.tmp_path = self.input_dir / self.adhoc.tmp_path
 
         if self.nwm.attrib_src_path:
             self.nwm.attrib_src_path = self.input_dir / self.nwm.attrib_src_path

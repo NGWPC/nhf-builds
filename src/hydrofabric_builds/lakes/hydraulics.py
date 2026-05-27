@@ -387,15 +387,38 @@ def _populate_hydraulics(
     ifd = df["OrificeE"].to_numpy()
     ifd = np.where(np.isnan(ifd), default_ifd, ifd)
 
-    # ---- return DataFrame ----
+    # # ---- return DataFrame ----
+    # out = pd.DataFrame(
+    #     {
+    #         "geometry": df.get("geometry"),
+    #         "dam_id": df.get("dam_id"),
+    #         "nidid": df.get("nidid"),
+    #         "ref_wb_id": df.get("ref_fab_wb"),
+    #         "ref_fp_id": df.get("ref_fp_id"),
+    #         "lake_id": df.get("lake_id"),
+    #         "res_id": df.get('res_id'),
+    #         "H_m": H,
+    #         "LkArea": LkArea,
+    #         "LkMxE": LkMxE,
+    #         "WeirC": WeirC,
+    #         "WeirL": WeirL,
+    #         "WeirE": WeirE,
+    #         "OrificeC": OrificeC,
+    #         "OrificeA": OrificeA,
+    #         "OrificeE": OrificeE,
+    #         "Dam_Length": Dam_Length,
+    #         "ifd": ifd,
+    #         "reservoir_index_AnA": df.get("reservoir_index_AnA"),
+    #         "reservoir_index_Extended_AnA": df.get("reservoir_index_Extended_AnA"),
+    #         "reservoir_index_GDL_AK": df.get( "reservoir_index_GDL_AK"),
+    #         "reservoir_index_Medium_Range": df.get("reservoir_index_Medium_Range"),
+    #         "reservoir_index_Short_Range": df.get("reservoir_index_Short_Range")
+
+    #     },
+    #     index=df.index,
+    # )
     out = pd.DataFrame(
         {
-            "geometry": df.get("geometry"),
-            "dam_id": df.get("dam_id"),
-            "nidid": df.get("nidid"),
-            "ref_wb_id": df.get("ref_fab_wb"),
-            "ref_fp_id": df.get("ref_fp_id"),
-            "lake_id": df.get("lake_id"),
             "H_m": H,
             "LkArea": LkArea,
             "LkMxE": LkMxE,
@@ -417,5 +440,8 @@ def _populate_hydraulics(
     out["WeirE"] = np.where(out["WeirE"] < out["OrificeE"], out["OrificeE"], out["WeirE"])
     out["LkMxE"] = np.where(out["LkMxE"] < out["WeirE"], out["WeirE"], out["LkMxE"])
     out["OrificeE"] = np.where(out["OrificeE"].isnull(), out["WeirE"], out["OrificeE"])
+
+    df = df.drop(columns=param_columns)
+    out = df.merge(out, left_index=True, right_index=True, how="left")
 
     return out
