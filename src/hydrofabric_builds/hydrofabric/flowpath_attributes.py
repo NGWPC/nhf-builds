@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def _compute_geom_attributes(geom: Any, elev_dict: dict, min_slope: float) -> pd.Series:
-    if geom.type == "LineString":
+    if geom.geom_type == "LineString":
         p1, p2 = geom.coords[0], geom.coords[-1]
         e1_: Any | None = elev_dict.get(p1)
         e2_: Any | None = elev_dict.get(p2)
@@ -38,7 +38,7 @@ def _compute_geom_attributes(geom: Any, elev_dict: dict, min_slope: float) -> pd
 
         return pd.Series([mean_elev, slope], index=["mean_elevation", "slope"])
 
-    elif geom.type == "MultiLineString":
+    elif geom.geom_type == "MultiLineString":
         endpoints = []
         degree: dict[tuple[float, float], int] = {}
         for line in geom.geoms:
@@ -111,9 +111,9 @@ def _dem_attributes(model_cfg: FlowpathAttributesModelConfig, gdf: gpd.GeoDataFr
     # Collect line endpoint coords
     coords_to_sample = set()
     for geom in gdf.geometry:
-        if geom.type == "LineString":
+        if geom.geom_type == "LineString":
             coords_to_sample.update([geom.coords[0], geom.coords[-1]])
-        elif geom.type == "MultiLineString":
+        elif geom.geom_type == "MultiLineString":
             for line in geom.geoms:
                 coords_to_sample.update([line.coords[0], line.coords[-1]])
 
