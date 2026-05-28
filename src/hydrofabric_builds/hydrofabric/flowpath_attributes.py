@@ -207,6 +207,7 @@ def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFra
     gdf_ref = gpd.read_file(model_cfg.hf_path, layer="reference_flowpaths")
     df_ref = pl.from_pandas(gdf_ref)
     df_ref = df_ref.cast({pl.Float64: pl.Int64})
+    df = df.with_columns(pl.col("fp_id").cast(pl.Int64))
     df_refj = df.join(df_ref, on="fp_id", how="left")
 
     # join predictions to fp with ref fp and calculate mean for fp_id (multiple ref_fp_id) for each ML field
