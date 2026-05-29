@@ -806,8 +806,8 @@ class NWMLakeInput(BaseModel):
         description="Source path. LakesConfig will inject preceding input path.",
     )
     layer: str = Field(default="lakes", description="GPKG layer")
-    tmp_path: Path = Path(
-        "input/tmp_nwmlakes.gpkg",
+    tmp_path: Path = Field(
+        default=Path("input/tmp_nwmlakes.gpkg"),
         description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
     )
     run: bool = Field(
@@ -829,8 +829,7 @@ class NWMLakeInput(BaseModel):
         default=10.0,
         description="Minimum prefered intersection lenght when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
     )
-    id_field: str = Field(default="newId", description="ID field for NWM lakes input")
-    output_id_field: str = Field(default="lake_id", description="ID field for NWM lakes output")
+    id_field: str = Field(default="newID", description="ID field for NWM lakes input")
     attrib_src_path: Path | None = Field(
         default=None,
         description="Source file for joining attributes from another file. It will be skipped if null.",
@@ -919,40 +918,10 @@ class AdhocLakeInput(BaseModel):
     run: bool = Field(
         default=True, description="Flag to run Adhoc Lake input. Must be set to false if file is not present."
     )
-    # tmp_path: Path = Field(
-    #     Path("input/adhoc_lakes_tmp.gpkg"),
-    #     description="A temporary layer to read adhoc lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
-    # )
-    # associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
-    # flowpath_association_method: str = Field(
-    #     default="polygon_outlet",
-    #     description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
-    # )
-    # search_radius_m: float = Field(
-    #     default=1000.0, description="Distance from flowpath to search when associating flowpaths."
-    # )
-    # min_preferred_intersection_len_m: float = Field(
-    #     default=10.0,
-    #     description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
-    # )
-    # id_field: str = Field(default="lake_id", description="ID field for adhoc lakes")
-    # output_id_field: str = Field(
-    #     default="lake_id", description="ID field to change name to for reference waterbodies"
-    # )
     ref_wb_field: str = Field(
         default="ref_waterbodies_only",
         description="Field in the adhoc lakes table that flags if a lake is only in the reference waterbodies dataset (not in NWM lakes)",
     )
-    # attrib_src_path: Path | None = Field(
-    #     default=None,
-    #     description="Source file for joining attributes from another file. It will be skipped if null.",
-    # )
-    # attrib_src_layer: str | None = Field(
-    #     default=None, description="Source file layer for importing attributes"
-    # )
-    # attrib_src_key: str = Field(
-    #     default=None, description="Source file key to match when importing attributes"
-    # )
 
 
 class LakesConfig(BaseModel):
@@ -1008,8 +977,13 @@ class LakesConfig(BaseModel):
     fp_id_out_field: str = Field(
         default="ref_fp_id", description="Name of flowpath ID field for output after flowpaths are identified"
     )
+    output_comid_field: str = Field(
+        default="lake_id", description="The common name of 'comid' field that is present in various datasets"
+    )
     fields: list[str] = Field(
         default=[
+            "dam_id",
+            "nidid",
             "lake_id",
             "res_id",
             "LkArea",

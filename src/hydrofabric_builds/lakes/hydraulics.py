@@ -136,6 +136,7 @@ def _populate_hydraulics(
     :return: a Dataframe
     """
     n = len(df)
+    df = df.reset_index(drop=True)
 
     # These columns likely already exist from importing previous data, but if they do not exist, create them and fill with nan
     param_columns = [
@@ -176,6 +177,7 @@ def _populate_hydraulics(
     # ---- Area (km²): ref_area_sqkm >  surface_area ----
     LkArea = _coalesce_num(
         _num(df.get("LkArea")),
+        _num(df.get("wb_areasqkm")),
         _num(df.get("ref_area_sqkm")),
         _num(df.get("surface_area")) / 1e6,
     )
@@ -214,8 +216,9 @@ def _populate_hydraulics(
     # Dam_Length = WeirL.copy()   ## the original R code uses this logic but I changed it.
 
     # Dam_Length: prefer original dam_length; else use WeirL
-    dam_len_raw = pd.to_numeric(df.get("dam_length"), errors="coerce")
-    Dam_Length = dam_len_raw.astype("float32")
+    # dam_len_raw = pd.to_numeric(df.get("dam_length"), errors="coerce")
+    Dam_Length = _coalesce_num(_num(df.get("Dam_Length")), _num(df.get("dam_length")))
+    # Dam_Length = dam_len_raw.astype("float32")
 
     mask = np.isnan(Dam_Length) | (Dam_Length == 0)
     Dam_Length[mask] = WeirL[mask]
@@ -384,7 +387,7 @@ def _populate_hydraulics(
     )
 
     # ---- constant ifd ----
-    ifd = df["OrificeE"].to_numpy()
+    ifd = df["ifd"].to_numpy()
     ifd = np.where(np.isnan(ifd), default_ifd, ifd)
 
     # # ---- return DataFrame ----

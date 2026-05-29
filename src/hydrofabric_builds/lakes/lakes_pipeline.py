@@ -6,6 +6,7 @@ from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_reference
 from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
+    _assert_nwm_lakes,
     _associate_lake_flowpaths,
     _calculate_elevation__nwm,
     _calculate_elevation__refres,
@@ -65,9 +66,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
 
     # if no lake types were selected to run, write blank layer
     elif (cfg.lakes.nwm.run or cfg.lakes.adhoc.run or cfg.lakes.ref_wb.run or cfg.lakes.ref_res.run) is False:
-        logger.info("No lake types were selected to run. Writing blank layer to lakes.")
-        gdf = gpd.GeoDataFrame(columns=cfg.lakes.fields, crs=cfg.crs)
+        gdf = gpd.GeoDataFrame(columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs)
         gdf.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)
+        logger.info("No lake types were selected to run. Wrote blank layer to lakes.")
 
     # else run pipeline
     else:
@@ -82,18 +83,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(cfg, gdf_nwm_lakes)
             gdf_nwm_lakes = _calculate_elevation__nwm(cfg, gdf_nwm_lakes)
             gdf_list.append(gdf_nwm_lakes)
-
-        # ------------------------------------------------------
-        # Adhoc lakes
-        # Optional: these are point geometries to be associated with flowpath and added to lakes layer
-        # ------------------------------------------------------
-        # if cfg.lakes.adhoc.run:
-        #     logger.info("Running adhoc lakes")
-        #     gdf_missing_adhoc, gdf_adhoc_ref_wb = _filter_adhoc_lakes(cfg)
-        #     gdf_missing_adhoc = _associate_lake_flowpaths(cfg, "adhoc", gdf=gdf_missing_adhoc)
-        #     gdf_missing_adhoc = _calculate_elevation__adhoc(cfg, gdf_missing_adhoc)
-        # else:
-        #     gdf_missing_adhoc = gpd.GeoDataFrame({"geometry": []}, crs=cfg.crs)
+        else:
+            # an empty dataframe including dam_id column is needed to filter the reference reservoirs
+            gdf_nwm_lakes = gpd.GeoDataFrame(columns=["dam_id"])
 
         # ------------------------------------------------------
         # Reference Waterbodies
@@ -105,6 +97,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_ref_wb)
             gdf_ref_wb = _calculate_elevation__refwb(cfg, gdf_ref_wb)
             gdf_list.append(gdf_ref_wb)
+        else:
+            # an empty dataframe including dam_id column is needed to filter the reference reservoirs
+            gdf_ref_wb = gpd.GeoDataFrame(columns=["dam_id"])
 
         # ------------------------------------------------------
         # Reference Reservoirs
@@ -121,6 +116,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         logger.info("All lakes source files run. Concatenating lakes.")
         gdf_all_lks = _concat_lakes(cfg, gdf_list)
+        gdf_all_lks.to_file("data/lakes/after_concat_main5.gpkg")
 
         # ------------------------------------------------------
         # Join National Inventory of Dams (NID) Attributes
@@ -145,4 +141,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
 
         # cache lakes file and save to NHF
         gdf_all_lks.to_file(cfg.lakes.lakes_path, layer="lakes", driver="GPKG", overwrite=True)
+
+        # assert all NWM lakes included if run
+        if cfg.lakes.nwm.run:
+            _assert_nwm_lakes(cfg, gdf_all_lks)
+
         gdf_all_lks.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)

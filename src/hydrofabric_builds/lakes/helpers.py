@@ -20,7 +20,6 @@ def polygon_elevation(dem_path: str | Path, polygons: gpd.GeoDataFrame, field_na
                 vectors=polygons,  # GeoDataFrame or shapes
                 raster=str(dem_path),  # path to your DEM
                 stats="mean",
-                # TODO: add no data to raster
                 nodata=src.nodata if src.nodata is not None else None,
                 all_touched=False,  # or True if you want a more inclusive mask
             )

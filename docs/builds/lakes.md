@@ -1,15 +1,6 @@
-# Lakes vs Waterbodies
+# Lakes
 
-Separate "lakes" and "waterbodies" layers are currently retained to reflect separate workstreams. These workstreams will be fused in future work for a single "lakes" layer.
-
-## Lakes
-The "lakes" layer is built to retain all active NWM lakes. These are derived from `nwm_lakes.gpkg` polygons and Hydrofabric v2.2 attributes. Lakes are spatially placed at the most downstream nexus intersecting the waterbody. Attributes are retained from Hydrofabric 2.2 when available. If not available, defaults are used.
-
-## Waterbodies
-The "waterbodies" layer includes both active NWM lakes and potential RFC-DA candidates based on the "reference reservoirs" dataset. The waterbodies layer may not include all NWM lakes. Spatial placement may differ.
-
-## Future Work
-The workstreams will be fused to create one lakes layer including all active NWM lakes and additional RFC-DA candidates identified in waterbodies. New data collected in waterbodies will improve NWM lake attributes where available.
+## Explanation
 
 ## Data sources
 ### Inputs
@@ -37,3 +28,27 @@ The output of the flowpath-associated and merged file is saved when flowpath_ass
 - SuperCONUS: `sconus_lakes_fp_associated.gpkg`
 
 These outputs are used to create the final `lakes` layer in the NHF gpkg.
+
+## Adding a new data source
+Data sources can be added to the lakes pipeline.
+1. Create a pydantic model in hydrofabric_builds.hydrofabric.schemas. Follow the templates like NWMLakeInput, RefWaterbodyInput, ReferenceReservoirs Input
+2. If new lakes are in reference waterbodies, add them to adhoc_lakes.gpkg and flag as true. These will be picked up by the Reference Waterbody step
+3. New polygon sources may need to be associated with flowpaths. The `polygon_outlet` flowpath association method requires the fields:
+- path
+- layer
+- tmp_path - will save out associated flowpaths
+- run - Flag to run input. Must be set to false if file is not present.
+- id_field - ID field in input
+- output_id_field - The ID field will be changed to this. Leave the same if it will not change. For example, some datasets refer to "comid" as different valus - "comid", "lake_id", and "newId". These will all be changed to the same output.
+- associate_flowpaths - Flag to run flowpath association
+- flowpath_association_method - Type of flowpath association. Options are `polygon_outlet` or `nearest_point`
+- search_radius_m - Distance from flowpath to search when associating flowpaths
+- min_preferred_intersection_len_m - Minimum prefered intersection lenght when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.
+- attrib_src_path (If none, set it to null but keep field. If using an attribute source, also add attrib_src_layer, attrib_src_key)
+- fields - Optional. If you need to retain fields from attributes.
+4. Add the new config to LakesConfig.[name] and set the default to the instantiate the class.
+5. Add file paths to LakesConfig.inject_dirs. If attrib path is optional, make it optional.
+6. Add functions related to processing the code to hydrofabric_builds.lakes.lakes.
+7. Add a function to handle elevation called `_calcuate_elevation__[name]`. Look at other elevation functions to determine how elevation should be calculated.
+You will need to fill out `ref_elev` and `dam_elev`. `ref_elev` is a normal pool proxy. It is the mean of the lake polygon. `dam_elev` is the elevation of the point outlet/dam.
+8. In hydrofabric_builds.lakes.lakes_pipeline, add a step before `concat all lakes`. The step should check if `run` is set to true. It should append the completed geodataframe to the geodataframe list. This list will pick up the geodataframe when lakes are concatenated.
