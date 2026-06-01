@@ -115,7 +115,6 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         logger.info("All lakes source files run. Concatenating lakes.")
         gdf_all_lks = _concat_lakes(cfg, gdf_list)
-        gdf_all_lks.to_file("data/lakes/after_concat_main5.gpkg")
 
         # ------------------------------------------------------
         # Join National Inventory of Dams (NID) Attributes
