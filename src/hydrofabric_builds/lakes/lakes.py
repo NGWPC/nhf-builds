@@ -74,8 +74,8 @@ def _associate_lake_flowpaths(
                 attrib_src_fields=cfg.fields.copy(),
                 rename=True,
             )
-        if cfg.output_id_field not in gdf.columns:
-            gdf = gdf.rename(columns={cfg.id_field: cfg.output_id_field})
+        if main_cfg.lakes.output_comid_field not in gdf.columns:
+            gdf = gdf.rename(columns={cfg.id_field: main_cfg.lakes.output_comid_field})
 
         # Save nwm_lakes layer to NHF
         gdf.to_file(cfg.tmp_path, layer="lakes", driver="GPKG", overwrite=True)
@@ -95,60 +95,68 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
 
     If reference point is available, also retains "dam_id", "dam_name" and "nid" columns from reference datapoint.
     """
-    nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer).to_crs(cfg.crs)
-    fp = gpd.read_parquet(cfg.build.reference_flowpaths_path).to_crs(cfg.crs)
-    ref_res = gpd.read_file(cfg.lakes.ref_res.path).to_crs(cfg.crs)
+    # only reun if reference reservoirs are present
+    if cfg.lakes.nwm.improve_placement_ref_res:
+        nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer).to_crs(cfg.crs)
+        fp = gpd.read_parquet(cfg.build.reference_flowpaths_path).to_crs(cfg.crs)
+        try:
+            ref_res = gpd.read_file(cfg.lakes.ref_res.path).to_crs(cfg.crs)
+        except Exception:  # noqa: BLE001
+            logger.info("Reference reservoirs could not be read. NWM lake placement was not adjusted.")
+            nwm_lakes_pt[["nid", "dam_id"]] = None
+            return gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
 
-    max_distance = cfg.lakes.nwm.max_refres_search_distance_m
+        max_distance = cfg.lakes.nwm.max_refres_search_distance_m
 
-    nwm_lakes[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
-    nwm_lakes.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field}, inplace=True)
+        nwm_lakes[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
+        nwm_lakes.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field}, inplace=True)
 
-    # for each lake
-    for idx, _ in nwm_lakes.iterrows():
-        # buffer lakes and make a subset of releavant datasets
-        # lake_buffer = nwm_lakes["geometry"][idx].buffer(max_distance + 1000)
-        # fp_clip = fp.clip(mask=lake_buffer)
-        # ref_res_clip = ref_res.clip(mask=lake_buffer)
+        # for each lake
+        for idx, _ in nwm_lakes.iterrows():
+            # Limit FPs to those that intersect with *this* lake
+            fps = fp[nwm_lakes["geometry"][idx].intersects(fp.geometry)]
 
-        # Limit FPs to those that intersect with *this* lake
-        fps = fp[nwm_lakes["geometry"][idx].intersects(fp.geometry)]
+            # Skip and replace w/ centroid if no intersections
+            if len(fps) == 0:
+                nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
+                continue
 
-        # Skip and replace w/ centroid if no intersections
-        if len(fps) == 0:
-            nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
-            continue
+            # Keep min hydroseq of all intersected FPs (ref fp)
+            outlet_fp_id = fps[cfg.lakes.fp_id_field][fps["hydroseq"].idxmin()]
+            nwm_lakes.loc[idx, "outlet_fp_id"] = outlet_fp_id
 
-        # Keep min hydroseq of all intersected FPs (ref fp)
-        outlet_fp_id = fps[cfg.lakes.fp_id_field][fps["hydroseq"].idxmin()]
-        nwm_lakes.loc[idx, "outlet_fp_id"] = outlet_fp_id
+            # Find nearest ref_res to most downstream fp_id
+            candidates = ref_res.sindex.nearest(
+                fps["geometry"][fps["hydroseq"].idxmin()], max_distance=max_distance
+            )
+            # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, replace w/ centroid
+            if candidates.shape[1] != 0:
+                nwm_lakes.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
+                    candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
+                ]
+            else:
+                nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
 
-        # Find nearest ref_res to most downstream fp_id
-        candidates = ref_res.sindex.nearest(
-            fps["geometry"][fps["hydroseq"].idxmin()], max_distance=max_distance
+        # join updated geometries and reference reservoir info back to nwm lakes points with associate flowpaths dataframe
+        nwm_lakes_pt.drop(columns=["geometry"], inplace=True)
+        nwm_lakes_pt = nwm_lakes_pt.merge(
+            nwm_lakes[
+                ["geometry", cfg.lakes.output_comid_field, "dam_name", "nid", "dam_id", "outlet_fp_id"]
+            ],
+            on=cfg.lakes.output_comid_field,
+            how="left",
         )
-        # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, replace w/ centroid
-        if candidates.shape[1] != 0:
-            nwm_lakes.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
-                candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
-            ]
-        else:
-            nwm_lakes.loc[idx, "geometry"] = nwm_lakes["geometry"][idx].centroid
 
-    # join updated geometries and reference reservoir info back to nwm lakes points with associate flowpaths dataframe
-    nwm_lakes_pt.drop(columns=["geometry"], inplace=True)
-    nwm_lakes_pt = nwm_lakes_pt.merge(
-        nwm_lakes[["geometry", cfg.lakes.output_comid_field, "dam_name", "nid", "dam_id", "outlet_fp_id"]],
-        on=cfg.lakes.output_comid_field,
-        how="left",
-    )
+        # replace associated fp id with better match
+        nwm_lakes_pt.loc[~nwm_lakes_pt["outlet_fp_id"].isna(), cfg.lakes.fp_id_out_field] = nwm_lakes_pt[
+            "outlet_fp_id"
+        ]
 
-    # replace associated fp id with better match
-    nwm_lakes_pt.loc[~nwm_lakes_pt["outlet_fp_id"].isna(), cfg.lakes.fp_id_out_field] = nwm_lakes_pt[
-        "outlet_fp_id"
-    ]
+        return gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
 
-    return gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
+    else:
+        nwm_lakes_pt[["nid", "dam_id"]] = None
+        return gpd.GeoDataFrame(nwm_lakes_pt)
 
 
 def _calculate_elevation__nwm(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -162,13 +170,11 @@ def _calculate_elevation__nwm(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDa
         logger.info("Calculating NWM elevations")
         gdf_nwm_poly = polygon_elevation(cfg.lakes.dem.path, gdf_nwm_poly, "ref_elev")
         gdf_nwm_poly = gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field})
-
         gdf = gdf.merge(
             gdf_nwm_poly[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
             on=cfg.lakes.output_comid_field,
             how="left",
         )
-
         # point
         gdf["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf)
 
@@ -214,7 +220,6 @@ def _calculate_elevation__refres(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.Ge
             on=cfg.lakes.output_comid_field,
             how="left",
         )
-        print(gdf["ref_elev"])
 
         # point
         gdf["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf)
@@ -237,7 +242,7 @@ def _prep_ref_wb(cfg: HFConfig) -> gpd.GeoDataFrame:
     gdf_wb_polys = gpd.read_file(cfg.lakes.ref_wb.path)
 
     # select where reference waterbody is required
-    gdf_adhoc = gdf_adhoc.loc[gdf_adhoc[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()
+    gdf_adhoc = gdf_adhoc.loc[gdf_adhoc[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()  # noqa: E712
     # cast ID to string if ref wb to string
     if pd.api.types.is_object_dtype(gdf_ref_res[cfg.lakes.ref_res.ref_wb_id_col]):
         gdf_adhoc[cfg.lakes.ref_wb.output_id_field] = (
@@ -284,8 +289,7 @@ def _filter_ref_res(
     res = res.loc[
         ~res["dam_id"].isin(gdf_nwm["dam_id"])
         & ~res["dam_id"].isin(gdf_ref_wb["dam_id"])
-        & res["ref_fab_wb"].isnull()
-        == False,
+        & (res["ref_fab_wb"].isnull() == False),  # noqa: E712
         ["geometry", "dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm", "distance_to_fp_m"],
     ].copy()
 
@@ -316,10 +320,50 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     This follows R code for reference-reservoirs.
     NID can be read from csv, parquet, or gpkg.
     Columns are all cast to snake_case.
-    If `nid` is not a column, the process is skipped.
+    If `nid` is not a column or reference reservoirs is not run, the process is skipped.
+
+    Deduplication:
+    There can be multiple NID dams for a single NID ID. There can also be multiple reference reservoirs and NWM lakes
+    that share a NID ID.
+    First, the preferered point is the NWM lake location and attributes. It is picked over any other dams and
+    exclude from deduplication calculations.
+    Choose the dam that is spatially nearest to a NID dam to keep when there are multiple options.
     """
-    nid_path = Path(cfg.lakes.nid.path)
-    nid_df = pd.read_csv(nid_path)
+    # Needed columns
+    keep_cols = [
+        "nidid",
+        "dam_name",
+        "dam_type",
+        "spillway_type",
+        "spillway_width",
+        "dam_length",
+        "dam_height",
+        "structural_height",
+        "hydraulic_height",
+        "nid_height",
+        "surface_area",
+        "wb_areasqkm",
+        "nid_storage",
+        "normal_storage",
+        "max_storage",
+        "hazard",
+        "purposes",
+    ]
+
+    if not cfg.lakes.ref_res.run:
+        logger.info("Reference reservoirs not ran so skipping NID join")
+        # return with required columns
+        res_df[keep_cols] = None
+        return res_df
+
+    try:
+        nid_path = Path(cfg.lakes.nid.path)
+        nid_df = pd.read_csv(nid_path)
+    except Exception as e:  # noqa: BLE001
+        logger.info(f"NID table not read, skipping NID. Exception: {e}")
+        # return with required columns
+        res_df[keep_cols] = None
+        return res_df
 
     nid_df.columns = [col.lower() for col in nid_df.columns]
 
@@ -342,35 +386,13 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     )
     nid_df = nid_df.to_crs(res_df.crs)
 
-    # keep only needed columns (loosely matching R)
-    keep_cols = [
-        "nidid",
-        "dam_name",
-        "dam_type",
-        "spillway_type",
-        "spillway_width",
-        "dam_length",
-        "dam_height",
-        "structural_height",
-        "hydraulic_height",
-        "nid_height",
-        "surface_area",
-        "wb_areasqkm",
-        "nid_storage",
-        "normal_storage",
-        "max_storage",
-        "hazard",
-        "purposes",
-    ]
-
-    keep_cols = [c for c in keep_cols if c in nid_df.columns]
-
     # restrict NID to NID IDs in da$nid
     if "nid" not in res_df.columns:
-        print(
+        logger.info(
             "'nid'column was not found in lakes during NID join. NID data will not be used in hydraulics calculation"
         )
         res_df[keep_cols] = None
+        return res_df
 
     # keep only NID in reservoirs
     nid_df = nid_df.rename(columns={"nidid": "nid", "dam_name": "dam_name_nid"})
@@ -466,6 +488,8 @@ def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFram
         + ["geometry"]
     )
 
+    gdf.replace(pd.NA, None, inplace=True)
+
     # select final attribute list
     return gpd.GeoDataFrame(gdf[out_columns])
 
@@ -477,7 +501,7 @@ def _create_ids(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf
 
 
-def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks) -> gpd.GeoDataFrame:
+def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf_nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer)
 
     if gdf_nwm_lakes[cfg.lakes.nwm.id_field].dtype != gdf_all_lks[cfg.lakes.output_comid_field].dtype:

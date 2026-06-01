@@ -813,13 +813,16 @@ class NWMLakeInput(BaseModel):
     run: bool = Field(
         default=True, description="Flag to run NWM lakes input. Must be set to false if file is not present."
     )
+    improve_placement_ref_res: bool = Field(
+        default=True, description="Flag to use reference reservoirs to improve placement of lakes."
+    )
     associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
     flowpath_association_method: str = Field(
         default="polygon_outlet",
         description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
     )
     search_radius_m: float = Field(
-        default=1000.0, description="Distance from flowpath to search when associating flowpaths."
+        default=1000.0, description="Distance from flowpath to search when associating flowpaths with points."
     )
     max_refres_search_distance_m: float = Field(
         default=500.0,
@@ -932,7 +935,7 @@ class LakesConfig(BaseModel):
         description="Input directory. This will be prepended to all paths for other inputs",
     )
     lakes_path: Path = Field(
-        default=Path("data/lakes/output/lakes_processed.gpkg"),
+        default=Path("output/lakes_processed.gpkg"),
         description="Output process lakes file. This can be used to cache a completed lakes run and use in an NHF build.",
     )
     use_cached_lakes: bool = Field(
@@ -1008,6 +1011,7 @@ class LakesConfig(BaseModel):
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Inject input directories into each input config path"""
+        self.lakes_path = self.input_dir / self.lakes_path
         self.nid.path = self.input_dir / self.nid.path
         self.nwm.path = self.input_dir / self.nwm.path
         self.nwm.tmp_path = self.input_dir / self.nwm.tmp_path
@@ -1019,6 +1023,8 @@ class LakesConfig(BaseModel):
 
         if self.nwm.attrib_src_path:
             self.nwm.attrib_src_path = self.input_dir / self.nwm.attrib_src_path
+
+        self.lakes_path.parent.mkdir(exist_ok=True)
 
         return self
 

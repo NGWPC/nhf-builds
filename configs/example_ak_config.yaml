@@ -297,12 +297,31 @@ fp_crosswalk:
     path: data/nhd-crosswalk/nhd_crosswalk_ak.parquet
 
 #---------------------------------------------------
-# nwm lakes
-#--------------------------------------------------
+# lakes
+#---------------------------------------------------
 lakes:
-  input_path: "data/lakes/input/ak_lakeparm.gpkg"
-  processed_path: "data/lakes/output/ak_lakes_fp_associated.gpkg"
-  associate_flowpaths: True
-  flowpath_association_method: "nearest_point"
-  populate_hydaulics: False
-  id_field: "lake_id"
+  input_dir: "./data/ak/lakes/"
+  fp_lake_crosswalk: False
+  calculate_elevation: False # AK is joined to existing data and does not need new elevation
+  use_cached_lakes: False
+  output_comid_field: "lake_id"
+  nwm:
+    run: True
+    associate_flowpaths: True # this will run the flowpath association
+    path: "input/ak_lakeparm.gpkg"
+    layer: "ak_lakeparm"
+    tmp_path: "output/ak_lakes_fp_associated.gpkg" # can be empty or populated
+    flowpath_association_method:  "nearest_point"
+    improve_placement_ref_res: False
+    id_field: "lake_id"
+    search_radius_m: 25000.0
+  adhoc:
+    run: False
+  ref_res:
+    run: False # No reference reservoirs in AK
+  ref_wb:
+    run: False # No reference waterbodies in AK
+  nid:
+    path: input/NID2019_U.csv
+  dem:
+    path: input/ak_dem_250.tif # Generally AK does not need elevation, but store DEM here if so
