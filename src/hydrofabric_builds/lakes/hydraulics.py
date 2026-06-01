@@ -254,8 +254,7 @@ def _populate_hydraulics(
     Anything that doesn’t match those patterns falls back to default_WeirC (0.4 in the original workflow,
     matching current NWM default).
     """
-    # WeirC = np.full(n, np.nan, dtype="float32")
-    WeirC = df["WeirC"].to_numpy()
+    WeirC = df["WeirC"].to_numpy(dtype="float32")
     WeirC[is_broad.to_numpy() & np.isnan(WeirC)] = 1.6
     WeirC[is_ogee.to_numpy() & np.isnan(WeirC)] = 1.7
     WeirC[is_sharp.to_numpy() & np.isnan(WeirC)] = 1.84
@@ -306,8 +305,7 @@ def _populate_hydraulics(
     All of these numbers are heuristic but grounded in common ranges from standard hydraulics
     references (e.g., Chow’s Open-Channel Hydraulics, USACE manuals, etc.).
     """
-    # OrificeC = np.full(n, np.nan, dtype="float32")
-    OrificeC = df["OrificeC"].to_numpy()
+    OrificeC = df["OrificeC"].to_numpy(dtype="float32")
     OrificeC[looks_Orifice.to_numpy() & np.isnan(OrificeC)] = 0.62
     mask = np.isnan(OrificeC) & looks_rounded.to_numpy()
     OrificeC[mask] = 0.80
@@ -316,8 +314,7 @@ def _populate_hydraulics(
     OrificeC[np.isnan(OrificeC)] = default_OrificeC
 
     # ---- Orifice area OrificeA (m²) ----
-    OrificeA = np.full(n, np.nan, dtype="float32")
-    OrificeA = df["OrificeA"].to_numpy()
+    OrificeA = df["OrificeA"].to_numpy(dtype="float32")
     H_valid = ~np.isnan(H)
     OrificeA[H_valid & (H < 10) & np.isnan(OrificeA)] = OrificeA_small
     OrificeA[H_valid & (H >= 10) & (H < 30) & np.isnan(OrificeA)] = OrificeA_med
@@ -384,7 +381,7 @@ def _populate_hydraulics(
     )
 
     # ---- constant ifd ----
-    ifd = df["ifd"].to_numpy()
+    ifd = df["ifd"].to_numpy(dtype=np.float32)
     ifd = np.where(np.isnan(ifd), default_ifd, ifd)
 
     out = pd.DataFrame(
