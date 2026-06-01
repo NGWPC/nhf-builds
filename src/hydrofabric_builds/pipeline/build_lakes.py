@@ -4,7 +4,7 @@ import logging
 from typing import Any, cast
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.lakes.lakes_pipeline import lakes_pipeline
+from hydrofabric_builds.hydrofabric.lakes import lakes_pipeline
 
 logger = logging.getLogger(__name__)
 

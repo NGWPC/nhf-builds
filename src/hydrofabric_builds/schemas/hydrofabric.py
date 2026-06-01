@@ -759,13 +759,9 @@ class LakesDEMInputs(BaseModel):
     """Lakes: DEM inputs for Lakes"""
 
     path: Path = Field(
-        default="input/DEM_SuperCONUS.tif",
+        default="input/COP90_DEM_SuperCONUS.tif",
         description="Source path. LakesConfig will inject preceding input path.",
     )
-    prefer_crs_of_dem: bool = Field(
-        default=True, description="Reproject polygons to DEM CRS before sampling of True"
-    )
-    band: int = Field(default=1, description="Band of raster as opened in rasterio")
     nodata: int | float | None = Field(None, description="Nodata value. Let rasterio infer if null")
 
 

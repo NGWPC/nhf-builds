@@ -6,7 +6,6 @@ import geopandas as gpd
 
 
 def associate_flowpaths_nearest_point(
-    # points_path: Path,
     flowpaths_path: Path,
     gdf_points: gpd.GeoDataFrame,
     search_radius_m: int | float,
@@ -14,7 +13,6 @@ def associate_flowpaths_nearest_point(
     flowpath_id: str,
     flowpath_id_out_field: str,
     flowpath_layer: str | None = None,
-    # points_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate point geometries with flowpath lines by buffering by a search radius and selecting mimnium distance
 
@@ -50,11 +48,6 @@ def associate_flowpaths_nearest_point(
         if ".parquet" in flowpaths_path.name
         else gpd.read_file(flowpaths_path, layer=flowpath_layer)
     )
-    # gdf_points = (
-    #     gpd.read_file(points_path, layer=points_layer)
-    #     if points_layer is not None
-    #     else gpd.read_file(points_path)
-    # )
 
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
