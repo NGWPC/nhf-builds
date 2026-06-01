@@ -241,7 +241,7 @@ lakes:
     associate_flowpaths: True # this will run the flowpath association
     path: "input/nwm_lakes_hi_input.gpkg"
     layer: "nwm_lakes"
-    tmp_path: "output/tmp_nwmlakes_hi.gpkg" # can be empty or populated
+    tmp_path: "output/hi_lakes_fp_associated.gpkg" # can be empty or populated
     improve_placement_ref_res: False
     flowpath_association_method: "polygon_outlet"
     populate_hydaulics: True

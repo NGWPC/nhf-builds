@@ -216,10 +216,7 @@ def _populate_hydraulics(
     # Dam_Length = WeirL.copy()   ## the original R code uses this logic but I changed it.
 
     # Dam_Length: prefer original dam_length; else use WeirL
-    # dam_len_raw = pd.to_numeric(df.get("dam_length"), errors="coerce")
     Dam_Length = _coalesce_num(_num(df.get("Dam_Length")), _num(df.get("dam_length")))
-    # Dam_Length = dam_len_raw.astype("float32")
-
     mask = np.isnan(Dam_Length) | (Dam_Length == 0)
     Dam_Length[mask] = WeirL[mask]
 
@@ -390,36 +387,6 @@ def _populate_hydraulics(
     ifd = df["ifd"].to_numpy()
     ifd = np.where(np.isnan(ifd), default_ifd, ifd)
 
-    # # ---- return DataFrame ----
-    # out = pd.DataFrame(
-    #     {
-    #         "geometry": df.get("geometry"),
-    #         "dam_id": df.get("dam_id"),
-    #         "nidid": df.get("nidid"),
-    #         "ref_wb_id": df.get("ref_fab_wb"),
-    #         "ref_fp_id": df.get("ref_fp_id"),
-    #         "lake_id": df.get("lake_id"),
-    #         "res_id": df.get('res_id'),
-    #         "H_m": H,
-    #         "LkArea": LkArea,
-    #         "LkMxE": LkMxE,
-    #         "WeirC": WeirC,
-    #         "WeirL": WeirL,
-    #         "WeirE": WeirE,
-    #         "OrificeC": OrificeC,
-    #         "OrificeA": OrificeA,
-    #         "OrificeE": OrificeE,
-    #         "Dam_Length": Dam_Length,
-    #         "ifd": ifd,
-    #         "reservoir_index_AnA": df.get("reservoir_index_AnA"),
-    #         "reservoir_index_Extended_AnA": df.get("reservoir_index_Extended_AnA"),
-    #         "reservoir_index_GDL_AK": df.get( "reservoir_index_GDL_AK"),
-    #         "reservoir_index_Medium_Range": df.get("reservoir_index_Medium_Range"),
-    #         "reservoir_index_Short_Range": df.get("reservoir_index_Short_Range")
-
-    #     },
-    #     index=df.index,
-    # )
     out = pd.DataFrame(
         {
             "H_m": H,

@@ -1,4 +1,4 @@
-"""Contains all code for building active NWM lakes in task"""
+"""Contains all functions for building lakes"""
 
 import logging
 from pathlib import Path
@@ -21,7 +21,26 @@ logger = logging.getLogger(__name__)
 def _associate_lake_flowpaths(
     main_cfg: HFConfig, lake_type: str, gdf: gpd.GeoDataFrame | None = None
 ) -> gpd.GeoDataFrame:
-    """Associate flowpaths and join attributes from source file if requested."""
+    """Associate flowpaths and join attributes from source file if requested.
+
+    An attribute file can be supplied to join pre-computed attributes to lakes.
+    The associated file will be saved so that it can be picked up in pipeline runs.
+
+    Parameters
+    ----------
+    main_cfg : HFConfig
+        Main HF Config
+    lake_type : str
+        The string representing the name of the lake type in the LakesConfig (e.g. 'nwm', 'ref_wb')
+    gdf : gpd.GeoDataFrame | None, optional
+        An in memory GFF. If None, will read from the lake type config, by default None
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        FP-associated geodataframe
+    """
+    # Get the cfg for the requested lake type
     cfg = getattr(main_cfg.lakes, lake_type)
 
     # if a gdf is passed in, use it, if not read from config
@@ -95,7 +114,7 @@ def _fold_ref_res_to_nwm_lakes(cfg: HFConfig, nwm_lakes_pt: gpd.GeoDataFrame) ->
 
     If reference point is available, also retains "dam_id", "dam_name" and "nid" columns from reference datapoint.
     """
-    # only reun if reference reservoirs are present
+    # only run if reference reservoirs are present
     if cfg.lakes.nwm.improve_placement_ref_res:
         nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer).to_crs(cfg.crs)
         fp = gpd.read_parquet(cfg.build.reference_flowpaths_path).to_crs(cfg.crs)
@@ -325,8 +344,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     Deduplication:
     There can be multiple NID dams for a single NID ID. There can also be multiple reference reservoirs and NWM lakes
     that share a NID ID.
-    First, the preferered point is the NWM lake location and attributes. It is picked over any other dams and
-    exclude from deduplication calculations.
+    An NWM lake point is picked first and exclude from deduplication calculations.
     Choose the dam that is spatially nearest to a NID dam to keep when there are multiple options.
     """
     # Needed columns
@@ -350,12 +368,14 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         "purposes",
     ]
 
+    # Don't run if reference reservoirs were not run as this is the dataset with the NID ID
     if not cfg.lakes.ref_res.run:
         logger.info("Reference reservoirs not ran so skipping NID join")
         # return with required columns
         res_df[keep_cols] = None
         return res_df
 
+    # Return guard in case NID is not found (e.g. oCONUS)
     try:
         nid_path = Path(cfg.lakes.nid.path)
         nid_df = pd.read_csv(nid_path)
@@ -425,9 +445,6 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     # remove all duplicates being evaluated from original df, do not keep any (keep=false)
     res_df = res_df.drop_duplicates(subset=["dam_id", "nid"], keep=False)
-
-    # get all the duplicated of dam id nidid subset out of main df
-    res_df = res_df.drop_duplicates(subset=["dam_id", "nid"])
 
     # get only the NIDs that are duplicated to reduce spatial search
     nid_subset = nid_df.loc[nid_df["nid"].isin(duplicated["nid"])].copy()
@@ -502,8 +519,10 @@ def _create_ids(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Assert all NWM lakes are present in the final output"""
     gdf_nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer)
 
+    # check that the fields are the same name in NWM as output and cast if needed
     if gdf_nwm_lakes[cfg.lakes.nwm.id_field].dtype != gdf_all_lks[cfg.lakes.output_comid_field].dtype:
         gdf_nwm_lakes[cfg.lakes.nwm.id_field] = gdf_nwm_lakes[cfg.lakes.nwm.id_field].astype(pd.StringDtype())
         gdf_all_lks[cfg.lakes.output_comid_field] = gdf_all_lks[cfg.lakes.output_comid_field].astype(
