@@ -1025,7 +1025,7 @@ class LakesConfig(BaseModel):
             self.input_dir / self.ref_wb.attrib_src_path if self.ref_wb.attrib_src_path else None
         )
 
-        self.lakes_path.parent.mkdir(exist_ok=True)
+        self.lakes_path.parent.mkdir(parents=True, exist_ok=True)
 
         return self
 
