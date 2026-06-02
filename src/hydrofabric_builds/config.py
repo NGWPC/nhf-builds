@@ -16,7 +16,6 @@ from hydrofabric_builds.schemas.hydrofabric import (
     GagesConfig,
     LakesConfig,
     ValidateHFConfig,
-    WaterbodiesConfig,
 )
 
 
@@ -34,8 +33,6 @@ class TaskSelection(BaseModel):
     flowpath_attributes: bool = Field(
         default=True, description="Decides if we want to run the flowpath attributes task"
     )
-
-    waterbodies: bool = Field(default=True, description="Decides if we want to run the waterbodies task")
 
     lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
 
@@ -86,10 +83,6 @@ class HFConfig(BaseModel):
     flowpath_attributes: FlowpathAttributesModelConfig = Field(
         description="Settings for building flowpath attributes",
         default=FlowpathAttributesModelConfig(),
-    )
-
-    waterbodies: WaterbodiesConfig = Field(
-        default=WaterbodiesConfig(), description="Settings for building waterbodies"
     )
 
     lakes: LakesConfig = Field(default=LakesConfig(), description="Settings for building NWM lakes")
