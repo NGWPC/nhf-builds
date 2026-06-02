@@ -283,14 +283,14 @@ def test_join_nid__nwm(main_cfg: HFConfig) -> None:
             "dam_id": [
                 "ls-1",
             ],
-            "nid": ["A1"],
+            "nidid": ["A1"],
             "latitude": [np.nan],
             "longitude": [np.nan],
         },
     )
 
     gdf = _join_nid(main_cfg, res_df, nid_df)
-    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "latitude", "longitude", "geometry"]].copy()
     assert_geodataframe_equal(gdf, expected, check_like=True)
 
 
@@ -318,7 +318,7 @@ def test_join_nid__nearest(main_cfg: HFConfig) -> None:
             "dam_id": [
                 "ls-1",
             ],
-            "nid": ["A1"],
+            "nidid": ["A1"],
             "latitude": [33.79988],
             "longitude": [-114.80959],
         },
@@ -327,7 +327,7 @@ def test_join_nid__nearest(main_cfg: HFConfig) -> None:
     gdf = _join_nid(main_cfg, res_df, nid_df)
 
     # test relevant columns
-    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "latitude", "longitude", "geometry"]].copy()
 
     assert_geodataframe_equal(gdf, expected)
 
@@ -377,7 +377,7 @@ def test_join_nid__all(main_cfg: HFConfig) -> None:
                 "ls-2",
                 "ls-1",
             ],
-            "nid": ["A3", "A2", "A1"],
+            "nidid": ["A3", "A2", "A1"],
             "latitude": [
                 33.6,
                 33.79988,
@@ -394,6 +394,6 @@ def test_join_nid__all(main_cfg: HFConfig) -> None:
     gdf = _join_nid(main_cfg, res_df, nid_df)
 
     # test relevant columns
-    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "latitude", "longitude", "geometry"]].copy()
 
     assert_geodataframe_equal(gdf, expected, check_like=True)
