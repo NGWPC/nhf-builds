@@ -14,7 +14,7 @@ build:
 tasks:
   build_hydrofabric: True
   divide_attributes: True
-  flowpath_attributes: True
+  flowpath_attributes: True 
   waterbodies: False # not present in OCONUS
   hydrolocations: True
   gages: True
@@ -141,6 +141,7 @@ divide_attributes:
       file_name: gw/zmax.tif
       agg_type: mean
       field_name: max_gw_storage
+    lzfpm:
       file_name: sac-sma/LZFPM.tif
       agg_type: mean
       field_name: lzfpm_mean
