@@ -281,6 +281,7 @@ lakes:
   calculate_elevation: False # Hawaii is joined to existing data and does not need new elevation
   use_cached_lakes: False
   output_comid_field: "lake_id"
+  lakes_path: "output/hi_lakes.gpkg"
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association

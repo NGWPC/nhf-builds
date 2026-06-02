@@ -224,12 +224,18 @@ def _calculate_elevation__nwm(
         if gdf_nwm_orig.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]:
             gdf_nwm_poly = polygon_elevation(cfg.lakes.dem.path, gdf_nwm_orig, "ref_elev")
             gdf_nwm_poly = gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field})
+            gdf_nwm_poly = gdf_nwm_poly.to_crs(cfg.crs)
+            gdf_nwm_poly["nwm_lakes_area"] = gdf_nwm_poly.area
             gdf_nwm_pts = gdf_nwm_pts.merge(
-                gdf_nwm_poly[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
+                gdf_nwm_poly[[cfg.lakes.output_comid_field, "ref_elev", "nwm_lakes_area"]].copy(),
                 on=cfg.lakes.output_comid_field,
                 how="left",
             )
             gdf_nwm_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_nwm_pts)
+            gdf_nwm_pts["LkArea"] = np.where(
+                gdf_nwm_pts["LkArea"].isnull(), gdf_nwm_pts["nwm_lakes_area"], gdf_nwm_pts["LkArea"]
+            )
+
         # if all points
         else:
             gdf_nwm_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_nwm_pts)
@@ -242,19 +248,30 @@ def _calculate_elevation__nwm(
     return gdf_nwm_pts
 
 
-def _calculate_elevation__refwb(cfg: HFConfig, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _calculate_elevation__refwb(
+    cfg: HFConfig, gdf_refwb_pts: gpd.GeoDataFrame, gdf_refwb_poly: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Calculate elevation for Reference Waterbodies
 
     Polygon elevation is used for `ref_elev`.
     """
     if cfg.lakes.calculate_elevation:
-        gdf = polygon_elevation(cfg.lakes.dem.path, gdf, "ref_elev")
-        gdf["dam_elev"] = gdf["ref_elev"].copy()
+        gdf_refwb_poly = gdf_refwb_poly.loc[
+            gdf_refwb_poly[cfg.lakes.ref_wb.id_field].isin(gdf_refwb_pts[cfg.lakes.output_comid_field])
+        ].copy()
+        gdf_refwb_poly = polygon_elevation(cfg.lakes.dem.path, gdf_refwb_poly, "ref_elev")
+        gdf_refwb_poly["dam_elev"] = gdf_refwb_poly["ref_elev"].copy()
+        gdf_refwb_pts = gdf_refwb_pts.merge(
+            gdf_refwb_poly[[cfg.lakes.ref_wb.id_field, "ref_elev", "dam_elev"]],
+            left_on=cfg.lakes.output_comid_field,
+            right_on=cfg.lakes.ref_wb.id_field,
+            how="left",
+        )
     else:
-        gdf["dam_elev"] = np.nan
-        gdf["ref_elev"] = np.nan
+        gdf_refwb_pts["dam_elev"] = np.nan
+        gdf_refwb_pts["ref_elev"] = np.nan
 
-    return gdf
+    return gdf_refwb_pts
 
 
 def _calculate_elevation__refres(
@@ -437,7 +454,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # Make NID spatial for de-duplicating
     nid_df = nid_df.loc[~nid_df["latitude"].isnull() & ~nid_df["longitude"].isnull()].copy()
     nid_df = gpd.GeoDataFrame(
-        nid_df, geometry=gpd.points_from_xy(nid_df["latitude"], nid_df["longitude"]), crs=4326
+        nid_df, geometry=gpd.points_from_xy(nid_df["longitude"], nid_df["latitude"]), crs=4326
     )
     nid_df = nid_df.to_crs(res_df.crs)
 
@@ -480,46 +497,54 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     # remove all duplicates being evaluated from original df, do not keep any (keep=false)
     res_df = res_df.drop_duplicates(subset=["dam_id", "nid"], keep=False)
-
-    # get only the NIDs that are duplicated to reduce spatial search
-    nid_subset = nid_df.loc[nid_df["nid"].isin(duplicated["nid"])].copy()
-
-    # groupby each NID from the NID subset table
-    # spatial join between the duplicated value (dam_id and nid) and corresponding NID group to get the distance between points
-    grouped = nid_subset.groupby("nid")
-    nearest_list = []
-    for name, group in grouped:
-        dupe = duplicated.loc[duplicated["nid"] == name, :].copy()
-        group.index.rename("tmp_index", inplace=True)
-        nearest_list.append(
-            gpd.sjoin_nearest(
-                dupe, group[["geometry", "nid", "dam_name_nid"]], distance_col="dist", how="left"
-            )
-        )
-
-    # gdf_nearest includes all the duplicates with the distance between dam and nearest NID dam
-    gdf_nearest = pd.concat(nearest_list).reset_index(drop=True)
-
-    # get the index of the lowest distance per NID and keep only the dam with lowest NID distance even if there are multiple dams
-    keep_index = gdf_nearest[["dam_id", "dist", "nid_right"]].groupby("nid_right").idxmin(numeric_only=True)
-    gdf_dupes_removed = gdf_nearest.loc[keep_index["dist"]].copy()
-
-    # geomtry x is the original geometry
-    gdf_dupes_removed = gdf_dupes_removed.rename(columns={"nid_left": "nid", "geometry_x": "geometry"}).drop(
-        columns=["nid_right", "geometry_y"]
-    )
-
     res_df = (
         res_df.rename(columns={"geometry_x": "geometry"})
         .drop(columns=["geometry_y"])
         .set_geometry("geometry")
     )
-
     # ensure no duplicated geometries though this should  be handled
     res_df = res_df.drop_duplicates(subset=["geometry"], keep="first")
 
-    # add in the desired duplicates and nwm
-    output = pd.concat([res_df, gdf_dupes_removed, nwm_df])
+    if not duplicated.empty:
+        # get only the NIDs that are duplicated to reduce spatial search
+        nid_subset = nid_df.loc[nid_df["nid"].isin(duplicated["nid"])].copy()
+
+        # groupby each NID from the NID subset table
+        # spatial join between the duplicated value (dam_id and nid) and corresponding NID group to get the distance between points
+        grouped = nid_subset.groupby("nid")
+        nearest_list = []
+        for name, group in grouped:
+            dupe = duplicated.loc[duplicated["nid"] == name, :].copy()
+            group.index.rename("tmp_index", inplace=True)
+            nearest_list.append(
+                gpd.sjoin_nearest(
+                    dupe, group[["geometry", "nid", "dam_name_nid"]], distance_col="dist", how="left"
+                )
+            )
+
+        # gdf_nearest includes all the duplicates with the distance between dam and nearest NID dam
+        gdf_nearest = pd.concat(nearest_list).reset_index(drop=True)
+
+        # get the index of the lowest distance per NID and keep only the dam with lowest NID distance even if there are multiple dams
+        keep_index = (
+            gdf_nearest[["dam_id", "dist", "nid_right"]].groupby("nid_right").idxmin(numeric_only=True)
+        )
+        gdf_dupes_removed = gdf_nearest.loc[keep_index["dist"]].copy()
+
+        # geomtry x is the original geometry
+        gdf_dupes_removed = gdf_dupes_removed.rename(
+            columns={"nid_left": "nid", "geometry_x": "geometry"}
+        ).drop(columns=["nid_right", "geometry_y"])
+        # add in the desired duplicates and nwm
+        output = (
+            pd.concat([res_df, gdf_dupes_removed, nwm_df])
+            .reset_index(drop=True)
+            .rename(columns={"nid": "nidid"})
+        )
+
+    # if nothing was found in nearest list, re-concat the original df to nwm df
+    else:
+        output = pd.concat([res_df, nwm_df]).reset_index(drop=True).rename(columns={"nid": "nidid"})
 
     return output
 

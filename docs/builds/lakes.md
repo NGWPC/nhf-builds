@@ -1,11 +1,11 @@
 # Lakes
 
-## Explanation
+The NHF lakes layer integrates lakes and reservoir data from multiple sources. Hydraulic parameters for t-route are calculated.
 
 ## Data sources
 ### Inputs
-s3: `s3://edfs-data/lakes/input`
-local: `data/lakes/input`
+s3: `s3://edfs-data/lakes/{domain}/inputs`
+local: `data/{domain}/lakes/input`
 
 #### Lake polygons:
 OWP sent a file called `nwm_lakes.gpkg` in January 2026. This polygon file was split into `nwm_lakes_hi_input.gpkg`, `nwm_lakes_prvi_input.gpkg`, and `nwm_lakes_sconus_input.gpkg`. There are no AK polygons. Polygons are associated with most downstream flowpath intersecting.
@@ -17,17 +17,25 @@ Attribute data from HF 2.2 is joined to retain all attributes and RFC-DA categor
 - PRVI: `prvi_nextgen_workaround.gpkg` The final HF 2.2 PRVI version used by NGWPC
 - SuperCONUS: `nwm_patch_conus_nextgen.gpg` The final HF 2.2 CONUS version used by NGWPC
 
+#### Reference Reservoirs
+Reference reservoirs is a point dataset of reservoirs generated from National Inventory of Dams (NID) data and other sources. It contains high quality spatial placement (e.g. at the outlet of dam) and includes attributes describing the dam that can improve hydraulic parameter calculation.
+
+#### Reference Waterbodies
+Reference Waterbodies is a polygon dataset of different waterbodies in CONUS and includes NHD 2.2 COMID as ID. Reference waterbodies are joined to reference reservoirs with COMID to get mean lake elevation.
+
+#### Adhoc
+A list of adhoc lakes were created to ensure they are in NHF. Some lakes are only found in reference waterbodies. Some lake polygons are only found in reference waterbodies. These waterbodies are included in NHF.
+
+Future work could allow the Adhoc step to include a polygon to be used in the build process.
+
 ### Outputs:
-s3: `s3://edfs-data/lakes/output`
-local: `data/lakes/output`
-The output of the flowpath-associated and merged file is saved when flowpath_association is run. It can also be loaded a priori to skip running flowpath association.
+s3: `s3://edfs-data/lakes/{domain}/output`
+local: `data/lakes/{domain}/output`
 
-- AK: `ak_lakes_fp_associated.gpkg`
-- HI: `hawaii_lakes_fp_associated.gpkg`
-- PRVI: `prvi_lakes_fp_associated.gpkg`
-- SuperCONUS: `sconus_lakes_fp_associated.gpkg`
+The output of the flowpath-associated and merged file is saved when flowpath_association is run. It can also be loaded a priori to skip running flowpath association as `{domain}_lakes_fp_associated.gpkg`. It can be used to skip flowpath association if stored under `nwm.tmp_path` and `nwm.associate_flowpaths` set to `False`,
 
-These outputs are used to create the final `lakes` layer in the NHF gpkg.
+The output of the full lakes process is saved. It can be used with the `use_cached_lakes` flag to skip the lake builidng process entirely. The default value in each domain's config is `{domain}_lakes.gpkg`.
+
 
 ## Adding a new data source
 Data sources can be added to the lakes pipeline.

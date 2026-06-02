@@ -14,7 +14,7 @@ build:
 tasks:
   build_hydrofabric: True
   divide_attributes: True
-  flowpath_attributes: True 
+  flowpath_attributes: True
   waterbodies: False # not present in OCONUS
   hydrolocations: True
   gages: True
@@ -350,6 +350,7 @@ lakes:
   calculate_elevation: False # AK is joined to existing data and does not need new elevation
   use_cached_lakes: False
   output_comid_field: "lake_id"
+  lakes_path: "output/ak_lakes.gpkg"
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association

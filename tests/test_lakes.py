@@ -13,6 +13,7 @@ from shapely import Point, box
 
 from hydrofabric_builds.config import HFConfig, TaskSelection
 from hydrofabric_builds.hydrofabric.lakes import lakes_pipeline
+from hydrofabric_builds.lakes.lakes import _join_nid
 from hydrofabric_builds.schemas.hydrofabric import BuildHydrofabricConfig
 
 
@@ -256,3 +257,143 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
         (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
+
+
+def test_join_nid__nwm(main_cfg: HFConfig) -> None:
+    """There are two NIDID points and one is an NWM lake. Keep the NWM lake."""
+    nid_df = pd.DataFrame(
+        data={"nidid": ["A1"], "dam_name": ["dam_1"], "latitude": [33.79988], "longitude": [-114.80959]}
+    )
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1718569.5, 1363475.7), Point(-1718569.5, 1363475.7)],
+        data={
+            "lake_id": [1, 2],
+            "attrib_src": ["nwm_lakes.gpkg", None],
+            "dam_id": ["ls-1", "ls-1"],
+            "nid": ["A1", "A1"],
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1718569.5, 1363475.7)],
+        data={
+            "lake_id": [1],
+            "attrib_src": ["nwm_lakes.gpkg"],
+            "dam_id": [
+                "ls-1",
+            ],
+            "nid": ["A1"],
+            "latitude": [np.nan],
+            "longitude": [np.nan],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+    assert_geodataframe_equal(gdf, expected, check_like=True)
+
+
+def test_join_nid__nearest(main_cfg: HFConfig) -> None:
+    """When there are lakes with smae NID, keep the nearest"""
+    nid_df = pd.DataFrame(
+        data={"nidid": ["A1"], "dam_name": ["dam_1"], "latitude": [33.79988], "longitude": [-114.80959]}
+    )
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1717881.0, 1363177.0), Point(-1717882.109, 1363178.697)],
+        data={
+            "lake_id": [1, 2],
+            "attrib_src": [None, None],
+            "dam_id": ["ls-1", "ls-1"],
+            "nid": ["A1", "A1"],
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1717882.109, 1363178.697)],
+        data={
+            "lake_id": [2],
+            "attrib_src": [None],
+            "dam_id": [
+                "ls-1",
+            ],
+            "nid": ["A1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+
+    # test relevant columns
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+
+    assert_geodataframe_equal(gdf, expected)
+
+
+def test_join_nid__all(main_cfg: HFConfig) -> None:
+    """Tests all cases.
+    1. There is a duplicate NWM (Lake 1) where one value is from src attribute and one has none. Index 1 with nwm_lakes.gpkg is kept
+    2. Dam ls-2 / NID A2 is duplicated. The closer value is chosen (lake_id 4)
+    3. There is one non-duplicate that is retained.
+    The order of concatenating is original -> dropped duplicates -> nwm"""
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1", "A2", "A3"],
+            "dam_name": ["dam_1", "dam_2", "dam_3"],
+            "latitude": [33.77, 33.79988, 33.6],
+            "longitude": [-114.80959, -114.80959, -114.80959],
+        }
+    )
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1718569.5, 1363475.7),
+            Point(-1718569.5, 1363475.7),
+            Point(-1717881.0, 1363177.0),
+            Point(-1717882.109, 1363178.697),
+            Point(-1717880.0, 1363176.0),
+        ],
+        data={
+            "lake_id": [1, 1, 3, 4, 5],
+            "attrib_src": ["nwm_lakes.gpkg", None, None, None, None],
+            "dam_id": ["ls-1", "ls-1", "ls-2", "ls-2", "ls-4"],
+            "nid": ["A1", "A1", "A2", "A2", "A3"],
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1717880.0, 1363176.0),
+            Point(-1717882.109, 1363178.697),
+            Point(-1718569.5, 1363475.7),
+        ],
+        data={
+            "lake_id": [5, 4, 1],
+            "attrib_src": [None, None, "nwm_lakes.gpkg"],
+            "dam_id": [
+                "ls-4",
+                "ls-2",
+                "ls-1",
+            ],
+            "nid": ["A3", "A2", "A1"],
+            "latitude": [
+                33.6,
+                33.79988,
+                np.nan,
+            ],
+            "longitude": [
+                -114.80959,
+                -114.80959,
+                np.nan,
+            ],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+
+    # test relevant columns
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nid", "latitude", "longitude", "geometry"]].copy()
+
+    assert_geodataframe_equal(gdf, expected, check_like=True)

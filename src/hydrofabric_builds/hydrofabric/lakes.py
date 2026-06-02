@@ -103,7 +103,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 cfg, gdf_adhoc=inputs["adhoc"], gdf_ref_res=inputs["ref_res"], gdf_wb_polys=inputs["ref_wb"]
             )
             gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_ref_wb)
-            gdf_ref_wb = _calculate_elevation__refwb(cfg, gdf_ref_wb)
+            gdf_ref_wb = _calculate_elevation__refwb(
+                cfg, gdf_refwb_pts=gdf_ref_wb, gdf_refwb_poly=inputs["ref_wb"]
+            )
             gdf_list.append(gdf_ref_wb)
         else:
             # an empty dataframe including dam_id column is needed to filter the reference reservoirs
