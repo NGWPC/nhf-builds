@@ -123,9 +123,7 @@ def join_attributes(
         Whether to rename attrib_dst_key to attrib_src_key in returned GDF
 
     """
-    if not attrib_src_path:
-        return gdf
-    elif (
+    if (
         attrib_src_path and not attrib_src_fields
     ):  # It is illegal behavior to define only one of these fields. We enforce that here
         raise ValueError(

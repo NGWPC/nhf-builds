@@ -13,19 +13,17 @@ def polygon_elevation(dem_path: str | Path, polygons: gpd.GeoDataFrame, field_na
             raise ValueError("DEM has no CRS.")
         if polygons.crs is None:
             raise ValueError("ref_wbs has no CRS; cannot reproject.")
-
         if polygons.crs.to_string().upper() != src.crs.to_string().upper():
             polygons = polygons.to_crs(src.crs)
-            stats = zonal_stats(
-                vectors=polygons,  # GeoDataFrame or shapes
-                raster=str(dem_path),  # path to your DEM
-                stats="mean",
-                nodata=src.nodata if src.nodata is not None else None,
-                all_touched=False,  # or True if you want a more inclusive mask
-            )
-            polygons[field_name] = [s["mean"] for s in stats]
-        else:
-            polygons[field_name] = np.nan
+
+        stats = zonal_stats(
+            vectors=polygons,  # GeoDataFrame or shapes
+            raster=str(dem_path),  # path to your DEM
+            stats="mean",
+            nodata=src.nodata if src.nodata is not None else None,
+            all_touched=False,  # or True if you want a more inclusive mask
+        )
+        polygons[field_name] = [s["mean"] for s in stats]
 
     return polygons
 

@@ -1017,8 +1017,13 @@ class LakesConfig(BaseModel):
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
 
-        if self.nwm.attrib_src_path:
-            self.nwm.attrib_src_path = self.input_dir / self.nwm.attrib_src_path
+        # optional paths
+        self.nwm.attrib_src_path = (
+            self.input_dir / self.nwm.attrib_src_path if self.nwm.attrib_src_path else None
+        )
+        self.ref_wb.attrib_src_path = (
+            self.input_dir / self.ref_wb.attrib_src_path if self.ref_wb.attrib_src_path else None
+        )
 
         self.lakes_path.parent.mkdir(exist_ok=True)
 
