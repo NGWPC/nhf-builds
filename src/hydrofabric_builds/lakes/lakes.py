@@ -14,6 +14,7 @@ from hydrofabric_builds.helpers.flowpath_association import (
     join_attributes,
 )
 from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
+from hydrofabric_builds.pipeline.processing import _encode_unique
 
 logger = logging.getLogger(__name__)
 
@@ -512,9 +513,22 @@ def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFram
 
 
 def _create_ids(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Create IDs for NHF"""
-    # TODO: change to location-based
-    gdf["nhf_lake_id"] = range(1, gdf.shape[0] + 1)
+    """Create location-based lake IDs using Open Location Code (Plus Codes).
+
+    Converts the centroid of each lake geometry to a deterministic base-20 integer ID similar to the process for generating the location based fp_id's in ./src/hydrofabric_builds/lakes/lakes.py
+    """
+    gdf_wgs84 = gdf.to_crs("EPSG:4326")
+    used_ints: set[int] = set()
+    ids: list[int] = []
+
+    for geom in gdf_wgs84.geometry:
+        pt = geom.centroid
+        _, olc_int = _encode_unique(pt.y, pt.x, code_length=12, used_ints=used_ints)
+        used_ints.add(olc_int)
+        ids.append(olc_int)
+
+    gdf["nhf_lake_id"] = ids
+    gdf["nhf_lake_id"] = gdf["nhf_lake_id"].astype("Int64")
     return gdf
 
 

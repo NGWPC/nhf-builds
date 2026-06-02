@@ -27,7 +27,7 @@ def main_lakes_nhf() -> str:
 
 
 @pytest.fixture
-def dummy_dem(lakes_root) -> Path:
+def dummy_dem(lakes_root: Path) -> Path:
     dem = lakes_root / "dummy_dem.tif"
 
     bbox = (-1728875.0003, 1342405.00029999, -1701024.9997, 1372475.0003)
@@ -52,7 +52,7 @@ def dummy_dem(lakes_root) -> Path:
 
 
 @pytest.fixture
-def nid(lakes_root) -> Path:
+def nid(lakes_root: Path) -> Path:
     nid = lakes_root / "nid.csv"
     df = pd.DataFrame(
         data={
@@ -83,10 +83,10 @@ def nid(lakes_root) -> Path:
 
 
 @pytest.fixture
-def main_cfg(lakes_root, main_lakes_nhf) -> HFConfig:
+def main_cfg(lakes_root: Path, main_lakes_nhf: str) -> HFConfig:
     return HFConfig(
         output_dir=lakes_root,
-        output_name=main_lakes_nhf,
+        output_name=Path(main_lakes_nhf),
         build=BuildHydrofabricConfig(
             reference_flowpaths_path=str(lakes_root / "reference_flowpaths.parquet")
         ),
@@ -103,7 +103,7 @@ def main_cfg(lakes_root, main_lakes_nhf) -> HFConfig:
     )
 
 
-def test__use_cached(main_cfg: HFConfig, lakes_root):
+def test__use_cached(main_cfg: HFConfig, lakes_root: Path) -> None:
     """Use a cached lakes layer"""
     try:
         tmp_nhf = lakes_root / "nhf_tmp.gpkg"
@@ -114,7 +114,7 @@ def test__use_cached(main_cfg: HFConfig, lakes_root):
         expected_lakes.to_file(tmp_lakes, driver="GPKG")
 
         cfg = main_cfg.model_copy()
-        cfg.output_name = tmp_nhf.name
+        cfg.output_name = Path(tmp_nhf.name)
         cfg.output_file_path = tmp_nhf
         cfg.lakes.use_cached_lakes = True
         cfg.lakes.lakes_path = tmp_lakes
@@ -129,14 +129,14 @@ def test__use_cached(main_cfg: HFConfig, lakes_root):
         tmp_nhf.unlink(missing_ok=True)
 
 
-def test__no_layers(main_cfg: HFConfig, lakes_root):
+def test__no_layers(main_cfg: HFConfig, lakes_root: Path) -> None:
     """No files are requested to run and a blank layer is written"""
     try:
         tmp_nhf = lakes_root / "nhf_tmp.gpkg"
         shutil.copy(main_cfg.output_file_path, tmp_nhf)
 
         cfg = main_cfg.model_copy()
-        cfg.output_name = tmp_nhf.name
+        cfg.output_name = Path(tmp_nhf.name)
         cfg.output_file_path = tmp_nhf
         cfg.lakes.adhoc.run = False
         cfg.lakes.ref_res.run = False
@@ -155,14 +155,14 @@ def test__no_layers(main_cfg: HFConfig, lakes_root):
         tmp_nhf.unlink(missing_ok=True)
 
 
-def test__run_nwm(main_cfg: HFConfig, lakes_root, dummy_dem, nid):
+def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path) -> None:
     """No files are requested to run and a blank layer is written"""
     try:
         tmp_nhf = lakes_root / "nhf_tmp.gpkg"
         shutil.copy(main_cfg.output_file_path, tmp_nhf)
 
         cfg = main_cfg.model_copy()
-        cfg.output_name = tmp_nhf.name
+        cfg.output_name = Path(tmp_nhf.name)
         cfg.output_file_path = tmp_nhf
         cfg.lakes.dem.path = dummy_dem
         cfg.lakes.nid.path = nid
@@ -215,7 +215,7 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root, dummy_dem, nid):
             geometry=[geom[0].centroid],
             crs=5070,
             data={
-                "nhf_lake_id": [1],
+                "nhf_lake_id": [1261204677721496],
                 "ref_fp_id": [9999572],
                 "fp_id": [np.nan],
                 "virtual_fp_id": [1261203455606765.0],
