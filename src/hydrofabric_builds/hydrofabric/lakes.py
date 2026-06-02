@@ -18,6 +18,7 @@ from hydrofabric_builds.lakes.lakes import (
     _fold_ref_res_to_nwm_lakes,
     _join_nid,
     _prep_ref_wb,
+    _read_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,15 +73,21 @@ def lakes_pipeline(cfg: HFConfig) -> None:
     # else run pipeline
     else:
         gdf_list = []
+        inputs = _read_inputs(cfg)
+
         # ------------------------------------------------------
         # NWM lakes
         # ------------------------------------------------------
         if cfg.lakes.nwm.run:
             logger.info("Running NWM lakes")
-            gdf_nwm_lakes = _associate_lake_flowpaths(cfg, "nwm")
+            gdf_nwm_lakes = _associate_lake_flowpaths(cfg, "nwm", gdf=inputs["nwm_lakes"])
             # improve placement
-            gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(cfg, gdf_nwm_lakes)
-            gdf_nwm_lakes = _calculate_elevation__nwm(cfg, gdf_nwm_lakes)
+            gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(
+                cfg, nwm_lakes_pt=gdf_nwm_lakes, nwm_lakes_orig=inputs["nwm_lakes"], ref_res=inputs["ref_res"]
+            )
+            gdf_nwm_lakes = _calculate_elevation__nwm(
+                cfg, gdf_nwm_pts=gdf_nwm_lakes, gdf_nwm_orig=inputs["nwm_lakes"]
+            )
             gdf_list.append(gdf_nwm_lakes)
         else:
             # an empty dataframe including dam_id column is needed to filter the reference reservoirs
@@ -92,7 +99,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         if cfg.lakes.ref_wb.run:
             logger.info("Running adhoc lakes found only in reference waterbodies")
-            gdf_ref_wb = _prep_ref_wb(cfg)
+            gdf_ref_wb = _prep_ref_wb(
+                cfg, gdf_adhoc=inputs["adhoc"], gdf_ref_res=inputs["ref_res"], gdf_wb_polys=inputs["ref_wb"]
+            )
             gdf_ref_wb = _associate_lake_flowpaths(cfg, "ref_wb", gdf=gdf_ref_wb)
             gdf_ref_wb = _calculate_elevation__refwb(cfg, gdf_ref_wb)
             gdf_list.append(gdf_ref_wb)
@@ -106,8 +115,12 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         if cfg.lakes.ref_res.run:
             logger.info("Running reference reservoirs")
-            gdf_ref_res = _filter_ref_res(cfg, gdf_nwm_lakes, gdf_ref_wb)
-            gdf_ref_res = _calculate_elevation__refres(cfg, gdf_ref_res)
+            gdf_ref_res = _filter_ref_res(
+                cfg, gdf_ref_res=inputs["ref_res"], gdf_nwm=gdf_nwm_lakes, gdf_ref_wb=gdf_ref_wb
+            )
+            gdf_ref_res = _calculate_elevation__refres(
+                cfg, gdf_ref_res=gdf_ref_res, gdf_wb_poly=inputs["ref_wb"]
+            )
             gdf_list.append(gdf_ref_res)
 
         # ------------------------------------------------------
@@ -120,7 +133,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # Join National Inventory of Dams (NID) Attributes
         # ------------------------------------------------------
         logger.info("Joining lakes to NID")
-        gdf_all_lks = _join_nid(cfg, gdf_all_lks)
+        gdf_all_lks = _join_nid(cfg, gdf_all_lks, inputs["nid"])
 
         # ------------------------------------------------------
         # Hydraulics
