@@ -632,9 +632,6 @@ def test_join_nid__all(main_cfg: HFConfig) -> None:
     assert_geodataframe_equal(gdf, expected, check_like=True)
 
 
-pytest.mark.filterwarnings("error")
-
-
 def test_join_nid__force_drop_dupe(main_cfg: HFConfig) -> None:
     """Force dropping dupes"""
     # warnings.simplefilter()
