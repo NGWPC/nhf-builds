@@ -88,7 +88,7 @@ def _associate_lake_flowpaths(
             return gpd.GeoDataFrame(columns=["geometry", "lake_id"])
 
     # Preprocess lakes by associating with flowpaths if requested or if processed path does not exist
-    if cfg.associate_flowpaths or not cfg.tmp_path.exists():
+    if cfg.associate_flowpaths or not cfg.fp_associated_path.exists():
         # Use nearest point association method
         if cfg.flowpath_association_method == "nearest_point":
             logger.info(f"Associating {lake_type} flowpath with points")
@@ -130,11 +130,11 @@ def _associate_lake_flowpaths(
             gdf = gdf.rename(columns={cfg.id_field: main_cfg.lakes.output_comid_field})
 
         # Save nwm_lakes layer to NHF
-        gdf.to_file(cfg.tmp_path, layer="lakes", driver="GPKG", overwrite=True)
+        gdf.to_file(cfg.fp_associated_path, layer="lakes", driver="GPKG", overwrite=True)
 
     else:
         # read the pre-processed file to return
-        gdf = gpd.read_file(cfg.tmp_path)
+        gdf = gpd.read_file(cfg.fp_associated_path)
 
     return gdf
 
@@ -150,11 +150,17 @@ def _fold_ref_res_to_nwm_lakes(
     If reference point is available, also retains "dam_id", "dam_name" and "nid" columns from reference datapoint.
     """
     # only run if reference reservoirs are present, requested, and nwm lakes have polygons
-    if (
+
+    if cfg.lakes.nwm.improve_placement_path.exists() and cfg.lakes.nwm.use_cached_improve_placement:
+        nwm_lakes_pt = gpd.read_file(cfg.lakes.nwm.improve_placement_path)
+        return nwm_lakes_pt
+
+    elif (
         cfg.lakes.nwm.improve_placement_ref_res
         and not ref_res.empty
         and nwm_lakes_orig.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
     ):
+        logger.info("Improving NWM lake placement with reference reservoirs.")
         fp = gpd.read_parquet(cfg.build.reference_flowpaths_path).to_crs(cfg.crs)
         nwm_lakes_poly = nwm_lakes_orig.copy().to_crs(cfg.crs)
 
@@ -204,7 +210,9 @@ def _fold_ref_res_to_nwm_lakes(
             "outlet_fp_id"
         ]
 
-        return gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
+        gdf = gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
+        gdf.to_file(cfg.lakes.nwm.improve_placement_path)
+        return gdf
 
     else:
         nwm_lakes_pt[["nid", "dam_id"]] = None
@@ -476,10 +484,13 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     # remove NWM to be held separately
     nwm_df = res_df.loc[~res_df["attrib_src"].isnull()].copy()
+
+    # pull out res df that should be kept
     res_df = res_df.loc[
         (res_df["attrib_src"].isnull())
         & (~res_df["nid"].isin(nwm_df["nid"]))
         & (~res_df["dam_id"].isin(nwm_df["dam_id"]))
+        & (~res_df[cfg.lakes.output_comid_field].isin(nwm_df[cfg.lakes.output_comid_field]))
     ].copy()
 
     # merge NID and res
@@ -505,6 +516,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # ensure no duplicated geometries though this should  be handled
     res_df = res_df.drop_duplicates(subset=["geometry"], keep="first")
 
+    # if they are duplicated dam_id and nid
     if not duplicated.empty:
         # get only the NIDs that are duplicated to reduce spatial search
         nid_subset = nid_df.loc[nid_df["nid"].isin(duplicated["nid"])].copy()
@@ -545,6 +557,41 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # if nothing was found in nearest list, re-concat the original df to nwm df
     else:
         output = pd.concat([res_df, nwm_df]).reset_index(drop=True).rename(columns={"nid": "nidid"})
+
+    # de-duplicate the COMID field by taking most downstream
+    lake_dupe = output.loc[output[[cfg.lakes.output_comid_field]].duplicated(keep=False)].copy()
+    if len(lake_dupe) > 0:
+        gdf_fp = gpd.read_file(cfg.output_file_path, layer="flowpaths")
+        gdf_ref_fp = gpd.read_file(cfg.output_file_path, layer="reference_flowpaths")
+
+        # drop any lakes that do not have the minimum hydroseq
+        lake_dupe["ref_fp_id"] = lake_dupe["ref_fp_id"].astype(np.float64)
+        lake_dupe = lake_dupe.merge(gdf_ref_fp, on="ref_fp_id", how="left").merge(
+            gdf_fp, on="fp_id", how="left"
+        )
+        gr = lake_dupe.groupby(cfg.lakes.output_comid_field)[[cfg.lakes.output_comid_field, "hydroseq"]].min()
+        to_drop = lake_dupe.loc[~lake_dupe["hydroseq"].isin(gr["hydroseq"])]
+
+        # merge the dupes back in to get the unique key including hydroseq
+        output = output.merge(
+            lake_dupe[[cfg.lakes.output_comid_field, "attrib_src", "nidid", "dam_id", "hydroseq"]],
+            on=[cfg.lakes.output_comid_field, "attrib_src", "nidid", "dam_id"],
+            how="left",
+        )
+        output = output.drop(index=output.loc[output["hydroseq"].isin(to_drop["hydroseq"])].index)
+
+        # if there are stll duplicates with the same hydroseq, just keep first
+        output = output.drop_duplicates(
+            subset=["hydroseq", cfg.lakes.output_comid_field], keep="first", ignore_index=True
+        )
+
+    output[cfg.lakes.output_comid_field] = output[cfg.lakes.output_comid_field].astype(str).copy()
+
+    # TODO: improve dropping above so this is not necessary as a last measure
+    # force dropping duplicate comid
+    if cfg.lakes.force_drop_dupe:
+        output.reset_index(drop=True, inplace=True)
+        output.drop_duplicates(subset=[cfg.lakes.output_comid_field], ignore_index=True, inplace=True)
 
     return output
 

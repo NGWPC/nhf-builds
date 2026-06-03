@@ -407,9 +407,11 @@ lakes:
     run: True
     associate_flowpaths: True # this will run the flowpath association
     improve_placement_ref_res: True # this takes 20-30 minutes. Turn off for speed or if placement not important
+    improve_placement_path: "output/nwm_lakes_improved_placement.gpkg"
+    use_cached_improve_placement: False # change to true to skip if you have already built
     path: "input/nwm_lakes_sconus_input.gpkg"
     layer: "nwm_lakes"
-    tmp_path: "output/sconus_lakes_fp_associated.gpkg" # can be empty or populated
+    fp_associated_path: "output/sconus_lakes_fp_associated.gpkg" # can be empty or populated
     flowpath_association_method: "polygon_outlet" # "nearest_point" or "polygon_outlet"
     id_field: "newID"
     output_id_field: "lake_id"

@@ -802,8 +802,8 @@ class NWMLakeInput(BaseModel):
         description="Source path. LakesConfig will inject preceding input path.",
     )
     layer: str = Field(default="lakes", description="GPKG layer")
-    tmp_path: Path = Field(
-        default=Path("input/tmp_nwmlakes.gpkg"),
+    fp_associated_path: Path = Field(
+        default=Path("output/fp_associated.gpkg"),
         description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
     )
     run: bool = Field(
@@ -811,6 +811,14 @@ class NWMLakeInput(BaseModel):
     )
     improve_placement_ref_res: bool = Field(
         default=True, description="Flag to use reference reservoirs to improve placement of lakes."
+    )
+    improve_placement_path: Path = Field(
+        default=Path("output/fp_improved placement.gpkg"),
+        description="A temporary layer to read lakes from where flowpaths have been associated, attributes joined, and reference reservoirs folded in to improve placement. Skips reference reservoirs folding.",
+    )
+    use_cached_improve_placement: bool = Field(
+        default=False,
+        description="Use the cached layer stored at `improve_placement_path` regardless of whether the process is requested to run.",
     )
     associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
     flowpath_association_method: str = Field(
@@ -874,7 +882,7 @@ class RefWaterbodyInput(BaseModel):
         default=True,
         description="Flag to run Reference Waterbodies input. Must be set to false if file is not present.",
     )
-    tmp_path: Path = Field(
+    fp_associated_path: Path = Field(
         default=Path("input/refwb_tmp.gpkg"),
         description="A temporary layer to read waterbodies from where flowpaths have been associated and attributes joined. Skips flowpath association.",
     )
@@ -937,6 +945,10 @@ class LakesConfig(BaseModel):
     use_cached_lakes: bool = Field(
         default=False,
         description="Flag to use the file stored at `lakes_path` for lakes building. This will skip pipeline run. Note: IDs and flowpath association will not be changed.",
+    )
+    force_drop_dupe: bool = Field(
+        default=True,
+        description="Force duplicate COMID to be dropped even if they were not filtered out properly. This will keep the first and ignore where attributes are from. Useful for debugging. Should be deleted when duplicate dropping is working fully.",
     )
     nwm: NWMLakeInput = Field(
         default=NWMLakeInput(),
@@ -1010,9 +1022,10 @@ class LakesConfig(BaseModel):
         self.lakes_path = self.input_dir / self.lakes_path
         self.nid.path = self.input_dir / self.nid.path
         self.nwm.path = self.input_dir / self.nwm.path
-        self.nwm.tmp_path = self.input_dir / self.nwm.tmp_path
+        self.nwm.fp_associated_path = self.input_dir / self.nwm.fp_associated_path
+        self.nwm.improve_placement_path = self.input_dir / self.nwm.improve_placement_path
         self.ref_wb.path = self.input_dir / self.ref_wb.path
-        self.ref_wb.tmp_path = self.input_dir / self.ref_wb.tmp_path
+        self.ref_wb.fp_associated_path = self.input_dir / self.ref_wb.fp_associated_path
         self.ref_res.path = self.input_dir / self.ref_res.path
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
