@@ -551,19 +551,23 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     res_df = res_df.loc[res_df["attrib_src"].isna()].copy()
 
     # Exclude non-NWM rows that share identifying attributes with NWM lakes.
-    #  NWM lakes take precedence over ref_res
-    # on nid, dam_id, and lake_id — even when lake_id differs, matching nid or
-    # dam_id is treated as the same physical feature.
     if not nwm_df.empty:
+        # Cast comparison columns to string for type-safe isin checks
+        lake_id_col = cfg.lakes.output_comid_field
+        res_df[lake_id_col] = res_df[lake_id_col].astype(str)
+        nwm_df[lake_id_col] = nwm_df[lake_id_col].astype(str)
+        res_df["nid"] = res_df["nid"].astype(str)
+        nwm_df["nid"] = nwm_df["nid"].astype(str)
+        res_df["dam_id"] = res_df["dam_id"].astype(str)
+        nwm_df["dam_id"] = nwm_df["dam_id"].astype(str)
+
         res_df = res_df.loc[
             (~res_df["nid"].isin(nwm_df["nid"]))
             & (~res_df["dam_id"].isin(nwm_df["dam_id"]))
-            & (~res_df[cfg.lakes.output_comid_field].isin(nwm_df[cfg.lakes.output_comid_field]))
+            & (~res_df[lake_id_col].isin(nwm_df[lake_id_col]))
         ].copy()
 
     # Attribute-merge NID onto non-NWM lakes
-    # Merging two GeoDataFrames on nid drops the active geometry column
-    # and creates geometry_x (lake) and geometry_y (NID point) as regular columns
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
 
     # Dedup: one (lake_id, nid) -> potentially many NID coordinate records
