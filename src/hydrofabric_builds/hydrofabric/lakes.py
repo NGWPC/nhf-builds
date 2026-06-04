@@ -13,6 +13,7 @@ from hydrofabric_builds.lakes.lakes import (
     _calculate_elevation__refwb,
     _concat_lakes,
     _create_ids,
+    _dedup_lake_id,
     _filter_columns,
     _filter_ref_res,
     _fold_ref_res_to_nwm_lakes,
@@ -130,6 +131,12 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         logger.info("All lakes source files run. Concatenating lakes.")
         gdf_all_lks = _concat_lakes(cfg, gdf_list)
+
+        # ------------------------------------------------------
+        # Deduplicate by lake_id (COMID) across sources
+        # ------------------------------------------------------
+        logger.info("Deduplicating lake_id (COMID) across sources")
+        gdf_all_lks = _dedup_lake_id(cfg, gdf_all_lks)
 
         # ------------------------------------------------------
         # Join National Inventory of Dams (NID) Attributes
