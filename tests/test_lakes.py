@@ -497,7 +497,7 @@ def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
             "lake_id": ["2", "1"],
             "attrib_src": [None, "nwm_lakes.gpkg"],
             "dam_id": ["ls-2", "ls-1"],
-            "nidid": [None, "A1"],  # NWM has nid, non-NWM had nid=A2 but no NID record for A2, so None
+            "nidid": ["A2", "A1"],  # non-NWM nid=A2 survives rename; NWM has nid=A1
         },
     )
 
