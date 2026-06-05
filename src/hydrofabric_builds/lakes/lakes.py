@@ -476,12 +476,15 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     """Join National Inventory Dams (NID) data to lakes.
 
     NID is joined by attribute (nidid) first. When multiple NID coordinate
-    records exist for the same nidid, the spatially closest one to the lake
-    point is kept.
+    records exist for the same lake_id/nid, the spatially closest one to the
+    lake point is kept.
+
+    When different lake_ids share the same dam_id and nid (i.e. multiple
+    reservoir records referencing the same dam), only the row whose lake
+    geometry is closest to the NID point is retained.
 
     NWM lakes (attrib_src is set) already have NID info from placement
-    improvement and are excluded from the deduplication logic, then
-    stitched back.
+    improvement and are excluded from the NID merge logic, then stitched back.
     """
     # Columns to retain from NID for hydraulics computation
     keep_cols = [
@@ -557,25 +560,41 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     nwm_df = res_df.loc[res_df["attrib_src"].notna()].copy()
     res_df = res_df.loc[res_df["attrib_src"].isna()].copy()
 
-    # Exclude non-NWM rows that share identifying attributes with NWM lakes.
+    # Exclude non-NWM rows whose dam_id or nid reference a dam already
+    # represented by an NWM lake (same dam, different lake_id). The NWM
+    # lake's attributes from placement improvement take priority.
     if not nwm_df.empty:
-        # Cast comparison columns to string for type-safe isin checks
-        lake_id_col = cfg.lakes.output_comid_field
-        res_df[lake_id_col] = res_df[lake_id_col].astype(str)
-        nwm_df[lake_id_col] = nwm_df[lake_id_col].astype(str)
         res_df["nid"] = res_df["nid"].astype(str)
         nwm_df["nid"] = nwm_df["nid"].astype(str)
         res_df["dam_id"] = res_df["dam_id"].astype(str)
         nwm_df["dam_id"] = nwm_df["dam_id"].astype(str)
 
         res_df = res_df.loc[
-            (~res_df["nid"].isin(nwm_df["nid"]))
-            & (~res_df["dam_id"].isin(nwm_df["dam_id"]))
-            & (~res_df[lake_id_col].isin(nwm_df[lake_id_col]))
+            ~(res_df["nid"].isin(nwm_df["nid"]) | res_df["dam_id"].isin(nwm_df["dam_id"]))
         ].copy()
 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
+
+    # Dedup: same (dam_id, nid) across different lake_ids -> keep closest to NID point
+    dam_dupe_cols = ["dam_id", "nid"]
+    dam_dupe_mask = (
+        res_df.duplicated(subset=dam_dupe_cols, keep=False) & res_df["dam_id"].notna() & res_df["nid"].notna()
+    )
+    if dam_dupe_mask.any():
+        logger.info(
+            f"Resolving {dam_dupe_mask.sum()} duplicate dam_id/nid rows "
+            f"for {res_df.loc[dam_dupe_mask, 'dam_id'].nunique()} dam(s)"
+        )
+        dupes = res_df[dam_dupe_mask].copy()
+        non_dupes = res_df[~dam_dupe_mask].copy()
+
+        # Compute distance between lake (geometry_x) and NID point (geometry_y)
+        dupes["_dam_nid_dist"] = dupes["geometry_x"].distance(dupes["geometry_y"])
+        keep_idx = dupes.groupby(dam_dupe_cols)["_dam_nid_dist"].idxmin()
+        deduped = dupes.loc[keep_idx].drop(columns=["_dam_nid_dist"])
+
+        res_df = gpd.GeoDataFrame(pd.concat([non_dupes, deduped], ignore_index=True), crs=cfg.crs)
 
     # Dedup: one (lake_id, nid) -> potentially many NID coordinate records
     dupe_cols = [cfg.lakes.output_comid_field, "nid"]
@@ -616,7 +635,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     output[cfg.lakes.output_comid_field] = output[cfg.lakes.output_comid_field].astype(str).copy()
 
-    return output
+    return gpd.GeoDataFrame(output, crs=cfg.crs)
 
 
 def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFrame:
