@@ -469,7 +469,7 @@ def _dedup_lake_id(
     gdf = gdf.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
     gdf = gdf.drop(columns=["_priority"], errors="ignore")
 
-    return gdf
+    return gpd.GeoDataFrame(gdf, crs=cfg.crs)
 
 
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -594,6 +594,13 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         keep_idx = dupes.groupby(dam_dupe_cols)["_dam_nid_dist"].idxmin()
         deduped = dupes.loc[keep_idx].drop(columns=["_dam_nid_dist"])
 
+        # Restore active geometry from geometry_x
+        deduped = deduped.rename(columns={"geometry_x": "geometry"}).drop(
+            columns=["geometry_y"], errors="ignore"
+        )
+        non_dupes = non_dupes.rename(columns={"geometry_x": "geometry"}).drop(
+            columns=["geometry_y"], errors="ignore"
+        )
         res_df = gpd.GeoDataFrame(pd.concat([non_dupes, deduped], ignore_index=True), crs=cfg.crs)
 
     # Dedup: one (lake_id, nid) -> potentially many NID coordinate records
@@ -620,8 +627,9 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
             columns=["geometry_y"], errors="ignore"
         )
         res_df = gpd.GeoDataFrame(pd.concat([non_dupes, deduped], ignore_index=True), crs=cfg.crs)
-    else:
-        # No duplicates: restore active geometry from geometry_x
+
+    # Restore active geometry if still needed (neither dedup ran, or only dam_id/nid dedup didn't run)
+    if "geometry_x" in res_df.columns:
         res_df = res_df.rename(columns={"geometry_x": "geometry"}).drop(
             columns=["geometry_y"], errors="ignore"
         )
