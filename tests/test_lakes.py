@@ -490,14 +490,14 @@ def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
     expected = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
+            Point(-1717881.0, 1363177.0),  # non-NWM lake (res_df first)
             Point(-1718569.5, 1363475.7),  # NWM lake preserved
-            Point(-1717881.0, 1363177.0),  # non-NWM lake with NID merged
         ],
         data={
-            "lake_id": ["1", "2"],
-            "attrib_src": ["nwm_lakes.gpkg", None],
-            "dam_id": ["ls-1", "ls-2"],
-            "nidid": ["A1", None],  # NWM has nid, non-NWM had nid=A2 but no NID record for A2, so None
+            "lake_id": ["2", "1"],
+            "attrib_src": [None, "nwm_lakes.gpkg"],
+            "dam_id": ["ls-2", "ls-1"],
+            "nidid": [None, "A1"],  # NWM has nid, non-NWM had nid=A2 but no NID record for A2, so None
         },
     )
 
