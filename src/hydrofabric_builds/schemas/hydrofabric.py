@@ -946,10 +946,6 @@ class LakesConfig(BaseModel):
         default=False,
         description="Flag to use the file stored at `lakes_path` for lakes building. This will skip pipeline run. Note: IDs and flowpath association will not be changed.",
     )
-    force_drop_dupe: bool = Field(
-        default=True,
-        description="Force duplicate COMID to be dropped even if they were not filtered out properly. This will keep the first and ignore where attributes are from. Useful for debugging. Should be deleted when duplicate dropping is working fully.",
-    )
     nwm: NWMLakeInput = Field(
         default=NWMLakeInput(),
         description="All NWM Lakes Input configs. NWM Lakes is a polygon dataset with COMID. This is the operational lakes layer provided by OWP.",
