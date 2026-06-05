@@ -378,23 +378,23 @@ def test_dedup_lake_id__mixed_sources(main_cfg: HFConfig) -> None:
     expected = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
-            Point(-1718569.5, 1363475.7),  # lake 1, NWM
-            Point(-1717881.0, 1363177.0),  # lake 3, unique
-            Point(-1717880.0, 1363176.0),  # lake 5, unique
-            Point(-1717880.0, 1363176.5),  # lake 6, NWM
-            Point(-1712832, 1357087),  # lake 7, lower hydroseq
+            Point(-1718569.5, 1363475.7),  # lake 1, NWM, priority=0, hydroseq=50
+            Point(-1712832, 1357087),  # lake 7, NWM, priority=0, hydroseq=50
+            Point(-1717880.0, 1363176.5),  # lake 6, NWM, priority=0, hydroseq=200
+            Point(-1717881.0, 1363177.0),  # lake 3, non-NWM, priority=1, hydroseq=100
+            Point(-1717880.0, 1363176.0),  # lake 5, non-NWM, priority=1, hydroseq=150
         ],
         data={
-            "lake_id": [1, 3, 5, 6, 7],
+            "lake_id": [1, 7, 6, 3, 5],
             "attrib_src": [
                 "nwm_lakes.gpkg",
-                None,
-                None,
                 "nwm_lakes.gpkg",
                 "nwm_lakes.gpkg",
+                None,
+                None,
             ],
-            "dam_id": ["ls-1", "ls-2", "ls-4", None, "ls-7"],
-            "nid": ["A1", "A2", "A3", None, "A5"],
+            "dam_id": ["ls-1", "ls-7", None, "ls-2", "ls-4"],
+            "nid": ["A1", "A5", None, "A2", "A3"],
         },
     )
     result = _dedup_lake_id(main_cfg, gdf)
