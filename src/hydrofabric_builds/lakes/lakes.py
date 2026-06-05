@@ -451,25 +451,37 @@ def _dedup_lake_id(
         f"{dupe_mask.sum()} rows across {n_dupe_groups} duplicate groups"
     )
 
+    # Detach geometry to avoid geopandas sort_values/drop_duplicates bugs
+    # that set geometry values to None in certain versions.
+    geom = gdf.geometry
+    df = pd.DataFrame(gdf.drop(columns=["geometry"]))
+
     # Tag source priority: NWM (has attrib_src) = 0, else = 1
     has_attrib = (
-        gdf.get("attrib_src", pd.Series([False] * len(gdf), index=gdf.index)).notna()
-        if "attrib_src" in gdf.columns
-        else pd.Series([False] * len(gdf), index=gdf.index)
+        df.get("attrib_src", pd.Series([False] * len(df), index=df.index)).notna()
+        if "attrib_src" in df.columns
+        else pd.Series([False] * len(df), index=df.index)
     )
-    gdf["_priority"] = (~has_attrib).astype(int)
+    df["_priority"] = (~has_attrib).astype(int)
 
     # Sort by priority then hydroseq (lower = more downstream).
     # Uses pre-computed _hydroseq from flowpath association.
     # Falls back to ref_fp_id if _hydroseq not available (e.g. cached data)
     tiebreak = "_hydroseq"
-    gdf = gdf.sort_values(["_priority", tiebreak], na_position="last")
+    df = df.sort_values(["_priority", tiebreak], na_position="last")
 
     # Keep first per lake_id
-    gdf = gdf.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
-    gdf = gdf.drop(columns=["_priority"], errors="ignore")
+    df = df.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
+    df = df.drop(columns=["_priority"], errors="ignore")
 
-    return gpd.GeoDataFrame(gdf, geometry="geometry", crs=cfg.crs)
+    # Re-attach geometry by aligning on original index labels
+    # (df.index retains original labels after drop_duplicates)
+    result = gpd.GeoDataFrame(
+        df.reset_index(drop=True),
+        geometry=geom[df.index].reset_index(drop=True),
+        crs=cfg.crs,
+    )
+    return result
 
 
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
