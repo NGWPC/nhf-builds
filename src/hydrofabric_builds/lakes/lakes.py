@@ -469,7 +469,7 @@ def _dedup_lake_id(
     gdf = gdf.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
     gdf = gdf.drop(columns=["_priority"], errors="ignore")
 
-    return gpd.GeoDataFrame(gdf, crs=cfg.crs)
+    return gpd.GeoDataFrame(gdf, geometry="geometry", crs=cfg.crs)
 
 
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
