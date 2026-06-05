@@ -403,7 +403,6 @@ lakes:
   use_cached_lakes: False
   output_comid_field: "lake_id"
   lakes_path: "output/sconus_lakes.gpkg"
-  force_dupe_drop: True # TODO: when this is fixed turn off
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association

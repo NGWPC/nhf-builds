@@ -181,7 +181,9 @@ def _fold_ref_res_to_nwm_lakes(
 
             # Keep min hydroseq of all intersected FPs (ref fp)
             outlet_fp_id = fps[cfg.lakes.fp_id_field][fps["hydroseq"].idxmin()]
+            outlet_hydroseq = fps.loc[fps[cfg.lakes.fp_id_field] == outlet_fp_id, "hydroseq"].min()
             nwm_lakes_poly.loc[idx, "outlet_fp_id"] = outlet_fp_id
+            nwm_lakes_poly.loc[idx, "_outlet_hydroseq"] = outlet_hydroseq
 
             # Find nearest ref_res to most downstream fp_id
             candidates = ref_res.sindex.nearest(
@@ -199,7 +201,15 @@ def _fold_ref_res_to_nwm_lakes(
         nwm_lakes_pt.drop(columns=["geometry"], inplace=True)
         nwm_lakes_pt = nwm_lakes_pt.merge(
             nwm_lakes_poly[
-                ["geometry", cfg.lakes.output_comid_field, "dam_name", "nid", "dam_id", "outlet_fp_id"]
+                [
+                    "geometry",
+                    cfg.lakes.output_comid_field,
+                    "dam_name",
+                    "nid",
+                    "dam_id",
+                    "outlet_fp_id",
+                    "_outlet_hydroseq",
+                ]
             ],
             on=cfg.lakes.output_comid_field,
             how="left",
@@ -209,6 +219,9 @@ def _fold_ref_res_to_nwm_lakes(
         nwm_lakes_pt.loc[~nwm_lakes_pt["outlet_fp_id"].isna(), cfg.lakes.fp_id_out_field] = nwm_lakes_pt[
             "outlet_fp_id"
         ]
+        # propagate hydroseq for the updated ref_fp_id
+        nwm_lakes_pt["_hydroseq"] = nwm_lakes_pt["_outlet_hydroseq"].fillna(nwm_lakes_pt["_hydroseq"])
+        nwm_lakes_pt = nwm_lakes_pt.drop(columns=["_outlet_hydroseq"])
 
         gdf = gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
         gdf.to_file(cfg.lakes.nwm.improve_placement_path)
@@ -384,9 +397,29 @@ def _filter_ref_res(
         | (gdf_ref_res["dam_id"].isin(cfg.lakes.ref_res.ref_res_keep))
     ].copy()
 
+    # Deduplicate on ref_fab_wb (waterbody COMID), keeping the row with the most NID data
+    gdf_ref_res["_nid_priority"] = (
+        gdf_ref_res["nid"].notna().astype(int) + gdf_ref_res["dam_id"].notna().astype(int) * 2
+    )
+    gdf_ref_res = gdf_ref_res.sort_values("_nid_priority", ascending=False).drop_duplicates(
+        subset="ref_fab_wb", keep="first"
+    )
+    gdf_ref_res = gdf_ref_res.drop(columns=["_nid_priority"])
+
     gdf_ref_res = gdf_ref_res.rename(
         columns={"ref_fab_fp": "ref_fp_id", "ref_fab_wb": cfg.lakes.output_comid_field}
     )
+
+    # Add hydroseq from reference flowpaths for COMID dedup tiebreaking
+    gdf_ref_fp = gpd.read_parquet(cfg.build.reference_flowpaths_path)
+    hydro_lookup = (
+        gdf_ref_fp[["flowpath_id", "hydroseq"]]
+        .drop_duplicates(subset="flowpath_id")
+        .rename(columns={"flowpath_id": "ref_fp_id", "hydroseq": "_hydroseq"})
+    )
+    hydro_lookup["ref_fp_id"] = pd.to_numeric(hydro_lookup["ref_fp_id"], errors="coerce")
+    gdf_ref_res["ref_fp_id"] = pd.to_numeric(gdf_ref_res["ref_fp_id"], errors="coerce")
+    gdf_ref_res = gdf_ref_res.merge(hydro_lookup, on="ref_fp_id", how="left")
 
     return gdf_ref_res
 
@@ -404,13 +437,12 @@ def _dedup_lake_id(
 ) -> gpd.GeoDataFrame:
     """Deduplicate by lake_id (COMID) after concatenation, before NID join.
 
-    When the same lake_id appears from multiple sources:
-    1. NWM lakes (attrib_src is set) are preferred over ref_res / ref_wb
-    2. Among same-priority duplicates, the most downstream (lowest hydroseq) wins
+    Uses pre-computed _hydroseq from flowpath association. Priority:
+    1. NWM lakes (attrib_src is set)
+    2. Among same priority, most downstream (lowest hydroseq)
     """
     dupe_mask = gdf[cfg.lakes.output_comid_field].duplicated(keep=False)
     if not dupe_mask.any():
-        logger.info("No duplicate lake_id values to resolve")
         return gdf
 
     n_dupe_groups = gdf.loc[dupe_mask, cfg.lakes.output_comid_field].nunique()
@@ -419,49 +451,24 @@ def _dedup_lake_id(
         f"{dupe_mask.sum()} rows across {n_dupe_groups} duplicate groups"
     )
 
-    # Build hydroseq lookup: ref_fp_id -> fp_id -> hydroseq
-    # The NHF GPKG at cfg.output_file_path already has these layers
-    gdf_ref_fp = gpd.read_file(cfg.output_file_path, layer="reference_flowpaths")
-    gdf_fp = gpd.read_file(cfg.output_file_path, layer="flowpaths")
-
-    hydro_lookup = gdf_ref_fp.merge(gdf_fp[["fp_id", "hydroseq"]], on="fp_id", how="left").dropna(
-        subset=["fp_id"]
-    )[["ref_fp_id", "hydroseq"]]
-    hydro_lookup["ref_fp_id"] = pd.to_numeric(hydro_lookup["ref_fp_id"], errors="coerce")
-    hydro_lookup = hydro_lookup.dropna(subset=["ref_fp_id"]).drop_duplicates(subset="ref_fp_id")
-
     # Tag source priority: NWM (has attrib_src) = 0, else = 1
     has_attrib = (
         gdf.get("attrib_src", pd.Series([False] * len(gdf), index=gdf.index)).notna()
         if "attrib_src" in gdf.columns
         else pd.Series([False] * len(gdf), index=gdf.index)
     )
-    gdf["_priority"] = (~has_attrib).astype(int)  # NWM = 0, non-NWM = 1
+    gdf["_priority"] = (~has_attrib).astype(int)
 
-    # Add hydroseq for tiebreaking
-    gdf["_ref_fp_id_num"] = pd.to_numeric(gdf["ref_fp_id"], errors="coerce")
-    gdf = gdf.merge(
-        hydro_lookup,
-        left_on="_ref_fp_id_num",
-        right_on="ref_fp_id",
-        how="left",
-        suffixes=("", "_hydro"),
-    )
+    # Sort by priority then hydroseq (lower = more downstream).
+    # Uses pre-computed _hydroseq from flowpath association.
+    # Falls back to ref_fp_id if _hydroseq not available (e.g. cached data)
+    tiebreak = "_hydroseq"
+    gdf = gdf.sort_values(["_priority", tiebreak], na_position="last")
 
-    # For each duplicate group, sort and keep the first (best) entry
-    keep_indices: list[int] = []
-    for _lid, group in gdf[dupe_mask].groupby(cfg.lakes.output_comid_field):
-        sorted_group = group.sort_values(["_priority", "hydroseq"], na_position="last")
-        keep_indices.append(sorted_group.index[0])
+    # Keep first per lake_id
+    gdf = gdf.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
+    gdf = gdf.drop(columns=["_priority"], errors="ignore")
 
-    drop_indices = gdf[dupe_mask].index.difference(keep_indices)
-    gdf = gdf.drop(index=drop_indices)
-    gdf = gdf.drop(
-        columns=["_ref_fp_id_num", "ref_fp_id_hydro", "hydroseq", "_priority"],
-        errors="ignore",
-    )
-
-    logger.info(f"Dropped {len(drop_indices)} duplicate lake rows; kept {len(keep_indices)}")
     return gdf
 
 

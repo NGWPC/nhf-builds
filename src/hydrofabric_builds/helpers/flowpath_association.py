@@ -220,11 +220,12 @@ def associate_flowpaths_polygon_outlet(
             candidates = candidates.sort_values("hydroseq")
             # try to use a slightly better candidate if the intersection length is very small
             intersection_len = candidates.iloc[0]["geometry"].intersection(buffered).length
-            gdf_poly.loc[idx, flowpath_id_out_field] = (
-                candidates.iloc[1][flowpath_id]
-                if intersection_len < min_preferred_intersection_len_m and num_candidates > 1
-                else candidates.iloc[0][flowpath_id]
+            selected_idx = (
+                1 if intersection_len < min_preferred_intersection_len_m and num_candidates > 1 else 0
             )
+            selected = candidates.iloc[selected_idx]
+            gdf_poly.loc[idx, flowpath_id_out_field] = selected[flowpath_id]
+            gdf_poly.loc[idx, "_hydroseq"] = selected["hydroseq"]
             gdf_poly.loc[idx, "buffer_radius"] = search_radius
             break
 
