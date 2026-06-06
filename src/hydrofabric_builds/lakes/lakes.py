@@ -572,17 +572,24 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     nwm_df = res_df.loc[res_df["attrib_src"].notna()].copy()
     res_df = res_df.loc[res_df["attrib_src"].isna()].copy()
 
-    # Exclude non-NWM rows whose dam_id or nid reference a dam already
-    # represented by an NWM lake (same dam, different lake_id). The NWM
-    # lake's attributes from placement improvement take priority.
+    # Exclude non-NWM rows whose dam_id, nid, or lake_id reference a dam/feature already
+    # represented by an NWM lake (same dam, different lake_id; or same lake_id, different dam).
+    # The NWM lake's attributes from placement improvement take priority.
     if not nwm_df.empty:
+        lake_id_col = cfg.lakes.output_comid_field
+        res_df[lake_id_col] = res_df[lake_id_col].astype(str)
+        nwm_df[lake_id_col] = nwm_df[lake_id_col].astype(str)
         res_df["nid"] = res_df["nid"].astype(str)
         nwm_df["nid"] = nwm_df["nid"].astype(str)
         res_df["dam_id"] = res_df["dam_id"].astype(str)
         nwm_df["dam_id"] = nwm_df["dam_id"].astype(str)
 
         res_df = res_df.loc[
-            ~(res_df["nid"].isin(nwm_df["nid"]) | res_df["dam_id"].isin(nwm_df["dam_id"]))
+            ~(
+                res_df["nid"].isin(nwm_df["nid"])
+                | res_df["dam_id"].isin(nwm_df["dam_id"])
+                | res_df[lake_id_col].isin(nwm_df[lake_id_col])
+            )
         ].copy()
 
     # Attribute-merge NID onto non-NWM lakes
@@ -626,18 +633,21 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         dupes = res_df[dupe_mask].copy()
         non_dupes = res_df[~dupe_mask].copy()
 
-        # Compute distance between lake (geometry_x) and NID point (geometry_y)
-        dupes["_nid_dist"] = dupes["geometry_x"].distance(dupes["geometry_y"])
+        # Use available geometry columns (geometry_x from merge, or geometry if already restored)
+        geom_col = "geometry_x" if "geometry_x" in dupes.columns else "geometry"
+        nid_geom_col = "geometry_y" if "geometry_y" in dupes.columns else geom_col
+        dupes["_nid_dist"] = dupes[geom_col].distance(dupes[nid_geom_col])
         keep_idx = dupes.groupby(dupe_cols)["_nid_dist"].idxmin()
         deduped = dupes.loc[keep_idx].drop(columns=["_nid_dist"])
 
         # Restore active geometry from geometry_x
-        deduped = deduped.rename(columns={"geometry_x": "geometry"}).drop(
-            columns=["geometry_y"], errors="ignore"
-        )
-        non_dupes = non_dupes.rename(columns={"geometry_x": "geometry"}).drop(
-            columns=["geometry_y"], errors="ignore"
-        )
+        if "geometry_x" in deduped.columns:
+            deduped = deduped.rename(columns={"geometry_x": "geometry"}).drop(
+                columns=["geometry_y"], errors="ignore"
+            )
+            non_dupes = non_dupes.rename(columns={"geometry_x": "geometry"}).drop(
+                columns=["geometry_y"], errors="ignore"
+            )
         res_df = gpd.GeoDataFrame(pd.concat([non_dupes, deduped], ignore_index=True), crs=cfg.crs)
 
     # Restore active geometry if still needed (neither dedup ran, or only dam_id/nid dedup didn't run)
