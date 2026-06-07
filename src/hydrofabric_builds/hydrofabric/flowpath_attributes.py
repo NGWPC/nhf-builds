@@ -210,11 +210,15 @@ def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFra
     df_ref = df_ref.with_columns(pl.col("fp_id").cast(pl.Int64, strict=False))
     df = df.with_columns(pl.col("fp_id").cast(pl.Int64, strict=False))
     df_refj = df.join(df_ref, on="fp_id", how="left")
+    # Cast ref_fp_id to Int64 to match parquet predictions; f64 vs i64 mismatch causes join errors
+    df_refj = df_refj.with_columns(pl.col("ref_fp_id").cast(pl.Int64, strict=False))
 
     # join predictions to fp with ref fp and calculate mean for fp_id (multiple ref_fp_id) for each ML field
     if model_cfg.tw_path:
-        df_tw = pl.read_parquet(model_cfg.tw_path).rename(
-            {"FEATUREID": "ref_fp_id", "prediction": "topwdth_ml"}
+        df_tw = (
+            pl.read_parquet(model_cfg.tw_path)
+            .rename({"FEATUREID": "ref_fp_id", "prediction": "topwdth_ml"})
+            .with_columns(pl.col("ref_fp_id").cast(pl.Int64, strict=False))
         )
         df_tmp = df_refj.join(df_tw, on="ref_fp_id", how="full")
         df_meantw = df_tmp[["fp_id", "topwdth_ml"]].group_by("fp_id").mean()
@@ -223,7 +227,11 @@ def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFra
         df_meantw = df_refj[["fp_id"]].unique(keep="first").with_columns(pl.lit(None).alias("topwdth_ml"))
 
     if model_cfg.y_path:
-        df_y = pl.read_parquet(model_cfg.y_path).rename({"FEATUREID": "ref_fp_id", "prediction": "y_ml"})
+        df_y = (
+            pl.read_parquet(model_cfg.y_path)
+            .rename({"FEATUREID": "ref_fp_id", "prediction": "y_ml"})
+            .with_columns(pl.col("ref_fp_id").cast(pl.Int64, strict=False))
+        )
         df_tmp = df_refj.join(df_y, on="ref_fp_id", how="full")
         df_meany = df_tmp[["fp_id", "y_ml"]].group_by("fp_id").mean()
         del df_tmp
@@ -231,7 +239,11 @@ def _riverml_attributes(model_cfg: FlowpathAttributesModelConfig, df: pl.DataFra
         df_meany = df_refj[["fp_id"]].unique(keep="first").with_columns(pl.lit(None).alias("y_ml"))
 
     if model_cfg.r_path:
-        df_r = pl.read_parquet(model_cfg.r_path).rename({"FEATUREID": "ref_fp_id", "prediction": "r_ml"})
+        df_r = (
+            pl.read_parquet(model_cfg.r_path)
+            .rename({"FEATUREID": "ref_fp_id", "prediction": "r_ml"})
+            .with_columns(pl.col("ref_fp_id").cast(pl.Int64, strict=False))
+        )
         df_tmp = df_refj.join(df_r, on="ref_fp_id", how="full")
         df_meanr = df_tmp[["fp_id", "r_ml"]].group_by("fp_id").mean()
         del df_tmp
