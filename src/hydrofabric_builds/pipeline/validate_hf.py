@@ -330,8 +330,8 @@ def validate_hf(**context: dict[str, Any]) -> dict[str, Any]:
         else ["No routelink file found; validation not run"]
     )
     lakes = (
-        validate_lakes(file_name, nwm_lakes_path=cfg.lakes.input_path, id_col=cfg.lakes.id_field)
-        if cfg.lakes.input_path
+        validate_lakes(file_name, nwm_lakes_path=cfg.lakes.nwm.path, id_col=cfg.lakes.nwm.id_field)
+        if cfg.lakes.nwm.path
         else ["No NWM lakes file found; validation not run"]
     )
 
