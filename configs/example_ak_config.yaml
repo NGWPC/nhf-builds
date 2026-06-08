@@ -356,9 +356,9 @@ lakes:
     associate_flowpaths: True # this will run the flowpath association
     path: "input/ak_lakeparm.gpkg"
     layer: "ak_lakeparm"
-    tmp_path: "output/ak_lakes_fp_associated.gpkg" # can be empty or populated
+    fp_associated_path: "output/ak_lakes_fp_associated.gpkg" # can be empty or populated
+    improve_placement_ref_res: False # no ref res in oCONUS
     flowpath_association_method:  "nearest_point"
-    improve_placement_ref_res: False
     id_field: "lake_id"
     search_radius_m: 25000.0
   adhoc:

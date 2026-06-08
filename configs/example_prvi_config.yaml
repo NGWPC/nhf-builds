@@ -286,8 +286,9 @@ lakes:
     associate_flowpaths: False # this will run the flowpath association
     path: "input/nwm_lakes_prvi_input.gpkg"
     layer: "nwm_lakes"
-    tmp_path: "output/prvi_lakes_fp_associated.gpkg"
+    fp_associated_path: "output/prvi_lakes_fp_associated.gpkg"
     flowpath_association_method: "polygon_outlet"
+    improve_placement_ref_res: False # no ref res in oCONUS
     populate_hydaulics: True
     id_field: "newID"
     search_radius_m: 25000
