@@ -267,10 +267,12 @@ def validate_lakes(gpkg_path_filename: Path, nwm_lakes_path: Path, id_col: str) 
 
     lakes_out = []
 
-    lakes_nhf = lakes_layer["lake_id"].to_list()
-    lakes_nwm = nwm_lakes[id_col].to_list()
+    # Normalize types: NHF lake_id is often str, NWM id_col is often int
+    # Cast both to int for a fair comparison; skip non-numeric values
+    lakes_nhf = {int(x) for x in lakes_layer["lake_id"].dropna() if str(x).isdigit()}
+    lakes_nwm = set(nwm_lakes[id_col].dropna().tolist())
 
-    lake_diffs = list(set(lakes_nwm) - set(lakes_nhf))
+    lake_diffs = list(lakes_nwm - lakes_nhf)
     lakes_out.append({"Missing NWM or Lakeparm Lakes": lake_diffs})
 
     missing_fp = lakes_layer[lakes_layer["fp_id"].isna() & lakes_layer["virtual_fp_id"].isna()][
