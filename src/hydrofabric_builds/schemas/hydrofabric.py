@@ -1039,6 +1039,72 @@ class LakesConfig(BaseModel):
         return self
 
 
+class ResCrosswalkFields(BaseModel):
+    index_field: str = "feature_id"
+    lake_id_field: str = "lake_id"
+    usgs_gage_id_field: str = "usgs_gage_id"
+    usgs_lake_id_field: str = "usgs_lake_id"
+    usace_gage_id_field: str = "usace_gage_id"
+    usace_lake_id_field: str = "usace_lake_id"
+    rfc_gage_id_field: str = "rfc_gage_id"
+    rfc_lake_id_field: str = "rfc_lake_id"
+
+
+class ResCrossWalkInput(BaseModel):
+    path: Path = Path("inputs/reservoir_index_AnA.nc")
+    fields: ResCrosswalkFields = ResCrosswalkFields()
+
+
+class ResDAMapping(BaseModel):
+    level_pool: int = 1
+    usgs_persistence: int = 2
+    usace_persistence: int = 3
+    usbr_persistence: int = 7
+    rfc_forecast: int = 4
+    usgs_gage: int = 6
+    wsc_gage: int = 6
+    ijc_file: int = 6
+
+
+class AdhocResDAInput(BaseModel):
+    path: Path = Field(
+        default=Path("input/adhoc_lakes.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    layer: str = "adhoc_lakes"
+    run: bool = Field(
+        default=False,
+        description="Flag to use Adhoc Lake input. Must be set to false if file is not present.",
+    )
+    rfc_field: str = "locationId"
+    lake_id_field: str = "lake_id"
+    null_value: int = -99999
+
+
+class ResDAConfig(BaseModel):
+    input_dir: Path = Field(
+        default=here() / "data/lakes",
+        description="Input directory. This will be prepended to all paths for other inputs",
+    )
+    adhoc: AdhocResDAInput = Field(
+        default=AdhocResDAInput(),
+        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon.",
+    )
+    output_comid_field: str = Field(
+        default="lake_id", description="The common name of 'comid' field that is present in various datasets"
+    )
+    res_crosswalk: ResCrossWalkInput = Field(default=ResCrossWalkInput(), description="")
+
+    generate_additional_crosswalk: bool = False
+
+    @model_validator(mode="after")
+    def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Inject input directories into each input config path"""
+        self.adhoc.path = self.input_dir / self.adhoc.path
+        self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
+        return self
+
+
 ### fp_crosswalk  ###
 class FPCrosswalkReference(BaseModel):
     """fp_crosswalk: reference (file1) network"""
