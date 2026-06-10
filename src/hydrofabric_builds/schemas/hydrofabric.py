@@ -1039,8 +1039,19 @@ class LakesConfig(BaseModel):
         return self
 
 
+# Reservoir DA
+
+GREAT_LAKES_MAPPING = {
+    "4800002": {"fp": 4351968, "site_no": "fixme"},
+    "4800004": {"fp": 4340959, "site_no": "fixme"},
+    "4800006": {"fp": 4331097, "site_no": "fixme"},
+    "4800007": {"fp": 4327242, "site_no": "fixme"},
+}
+
+
 class ResCrosswalkFields(BaseModel):
-    index_field: str = "feature_id"
+    """Fields in reservoir DA crosswalk file"""
+
     lake_id_field: str = "lake_id"
     usgs_gage_id_field: str = "usgs_gage_id"
     usgs_lake_id_field: str = "usgs_lake_id"
@@ -1051,37 +1062,48 @@ class ResCrosswalkFields(BaseModel):
 
 
 class ResCrossWalkInput(BaseModel):
-    path: Path = Path("inputs/reservoir_index_AnA.nc")
-    fields: ResCrosswalkFields = ResCrosswalkFields()
+    """Reservoir crosswalk file"""
+
+    path: Path = Field(
+        default=Path("inputs/reservoir_index_AnA.nc"),
+        description="File with reservoir crosswalks for USGS, USACE, RFC",
+    )
+    fields: ResCrosswalkFields = Field(
+        default=ResCrosswalkFields(), description="All field mappings for reservoir index file"
+    )
 
 
 class ResDAMapping(BaseModel):
+    """Mapping of reservoir DA types to integer code"""
+
     level_pool: int = 1
     usgs_persistence: int = 2
     usace_persistence: int = 3
     usbr_persistence: int = 7
     rfc_forecast: int = 4
-    usgs_gage: int = 6
-    wsc_gage: int = 6
-    ijc_file: int = 6
+    great_lakes: int = 6
 
 
 class AdhocResDAInput(BaseModel):
+    """Adhoc lakes input. Must include lake_id and an rfc_field with the name of RFC gage."""
+
     path: Path = Field(
         default=Path("input/adhoc_lakes.gpkg"),
         description="Source path. ResDAConfig will inject preceding input path.",
     )
-    layer: str = "adhoc_lakes"
+    layer: str = Field(default="adhoc_lakes", description="Layer in adhoc lakes gpkg")
     run: bool = Field(
         default=False,
         description="Flag to use Adhoc Lake input. Must be set to false if file is not present.",
     )
-    rfc_field: str = "locationId"
-    lake_id_field: str = "lake_id"
-    null_value: int = -99999
+    rfc_field: str = Field(default="locationId", description="Field containing RFC gage ID")
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    null_value: int = Field(default=-99999, description="Missing data value")
 
 
 class ResDAConfig(BaseModel):
+    """Configuartion for reservoir DA"""
+
     input_dir: Path = Field(
         default=here() / "data/lakes",
         description="Input directory. This will be prepended to all paths for other inputs",
@@ -1090,12 +1112,22 @@ class ResDAConfig(BaseModel):
         default=AdhocResDAInput(),
         description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon.",
     )
-    output_comid_field: str = Field(
+    lake_id_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
     )
-    res_crosswalk: ResCrossWalkInput = Field(default=ResCrossWalkInput(), description="")
+    gage_id_field: str = Field(default="site_no", description="Name for output gage ID field")
+    da_type_field: str = Field(default="da_type", description="Name for output reservoir DA type field")
+    res_crosswalk: ResCrossWalkInput = Field(
+        default=ResCrossWalkInput(), description="Data for the gage-lake crosswalk"
+    )
+    great_lakes: bool = Field(
+        default=False, description="Flag to add the Great Lakes mappings to the dataframe"
+    )
 
-    generate_additional_crosswalk: bool = False
+    generate_additional_crosswalk: bool = Field(
+        default=False,
+        description="Flag to generate lake:gage crosswalks for lakes without RFC or gage information.",
+    )
 
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
