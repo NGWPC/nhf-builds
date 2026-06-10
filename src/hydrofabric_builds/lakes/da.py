@@ -12,6 +12,19 @@ logger = logging.getLogger(__name__)
 DA_MAPPING = ResDAMapping()
 
 
+def _all_level_pool(
+    df_lakes: pd.DataFrame,
+    lake_id_field: str = "lake_id",
+    gage_id_field: str = "site_no",
+    res_da_field: str = "da_type",
+) -> pd.DataFrame:
+    """Set all lakes to level pool"""
+    df_lakes = df_lakes[["nhf_lake_id", lake_id_field]].copy()
+    df_lakes[gage_id_field] = None
+    df_lakes[res_da_field] = DA_MAPPING.level_pool
+    return df_lakes
+
+
 def _read_res_index(
     ds: xr.Dataset,
     res_da_field: str = "da_type",
@@ -25,63 +38,60 @@ def _read_res_index(
     output_gage_field: str = "site_no",
 ) -> pd.DataFrame:
     """Extract crosswalk values and add DA scheme"""
-    for field in [
-        lake_id_field,
-        usgs_gage_id_field,
-        usgs_lake_id_field,
-        usace_gage_id_field,
-        usace_lake_id_field,
-        rfc_gage_id_field,
-        rfc_lake_id_field,
-    ]:
-        assert field in ds.variables, "Fields missing from reservoir index crosswalk"
+    df_list = []
 
     # rfc
-    rfc_crosswalk = pd.DataFrame(
-        data={
-            rfc_gage_id_field: ds[rfc_gage_id_field].to_numpy(),
-            rfc_lake_id_field: ds[rfc_lake_id_field].to_numpy(),
-        }
-    )
-    rfc_crosswalk[rfc_gage_id_field] = (
-        rfc_crosswalk[rfc_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-    )
-    rfc_crosswalk[res_da_field] = DA_MAPPING.rfc_forecast
-    rfc_crosswalk.rename(
-        columns={rfc_gage_id_field: output_gage_field, rfc_lake_id_field: lake_id_field}, inplace=True
-    )
+    if rfc_lake_id_field in ds.variables:
+        rfc_crosswalk = pd.DataFrame(
+            data={
+                rfc_gage_id_field: ds[rfc_gage_id_field].to_numpy(),
+                rfc_lake_id_field: ds[rfc_lake_id_field].to_numpy(),
+            }
+        )
+        rfc_crosswalk[rfc_gage_id_field] = (
+            rfc_crosswalk[rfc_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
+        )
+        rfc_crosswalk[res_da_field] = DA_MAPPING.rfc_forecast
+        rfc_crosswalk.rename(
+            columns={rfc_gage_id_field: output_gage_field, rfc_lake_id_field: lake_id_field}, inplace=True
+        )
+        df_list.append(rfc_crosswalk)
 
     # usgs
-    usgs_crosswalk = pd.DataFrame(
-        data={
-            usgs_gage_id_field: ds[usgs_gage_id_field].to_numpy(),
-            usgs_lake_id_field: ds[usgs_lake_id_field].to_numpy(),
-        }
-    )
-    usgs_crosswalk[usgs_gage_id_field] = (
-        usgs_crosswalk[usgs_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-    )
-    usgs_crosswalk[res_da_field] = DA_MAPPING.usgs_persistence
-    usgs_crosswalk.rename(
-        columns={usgs_gage_id_field: output_gage_field, usgs_lake_id_field: lake_id_field}, inplace=True
-    )
+    if usgs_lake_id_field in ds.variables:
+        usgs_crosswalk = pd.DataFrame(
+            data={
+                usgs_gage_id_field: ds[usgs_gage_id_field].to_numpy(),
+                usgs_lake_id_field: ds[usgs_lake_id_field].to_numpy(),
+            }
+        )
+        usgs_crosswalk[usgs_gage_id_field] = (
+            usgs_crosswalk[usgs_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
+        )
+        usgs_crosswalk[res_da_field] = DA_MAPPING.usgs_persistence
+        usgs_crosswalk.rename(
+            columns={usgs_gage_id_field: output_gage_field, usgs_lake_id_field: lake_id_field}, inplace=True
+        )
+        df_list.append(usgs_crosswalk)
 
     # usace
-    usace_crosswalk = pd.DataFrame(
-        data={
-            usace_gage_id_field: ds[usace_gage_id_field].to_numpy(),
-            usace_lake_id_field: ds[usace_lake_id_field].to_numpy(),
-        }
-    )
-    usace_crosswalk[usace_gage_id_field] = (
-        usace_crosswalk[usace_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-    )
-    usace_crosswalk[res_da_field] = DA_MAPPING.usace_persistence
-    usace_crosswalk.rename(
-        columns={usace_gage_id_field: output_gage_field, usace_lake_id_field: lake_id_field}, inplace=True
-    )
+    if usace_lake_id_field in ds.variables:
+        usace_crosswalk = pd.DataFrame(
+            data={
+                usace_gage_id_field: ds[usace_gage_id_field].to_numpy(),
+                usace_lake_id_field: ds[usace_lake_id_field].to_numpy(),
+            }
+        )
+        usace_crosswalk[usace_gage_id_field] = (
+            usace_crosswalk[usace_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
+        )
+        usace_crosswalk[res_da_field] = DA_MAPPING.usace_persistence
+        usace_crosswalk.rename(
+            columns={usace_gage_id_field: output_gage_field, usace_lake_id_field: lake_id_field}, inplace=True
+        )
+        df_list.append(usace_crosswalk)
 
-    df_out = pd.concat([rfc_crosswalk, usgs_crosswalk, usace_crosswalk], ignore_index=True)
+    df_out = pd.concat(df_list, ignore_index=True)
 
     return df_out
 
@@ -140,6 +150,9 @@ def _merge(
 ) -> pd.DataFrame:
     """Merge all dataframe sources and de-duplicate lake_id"""
     df_lakes = df_lakes[[gid_field, lake_id_field]].copy()
+
+    if not pd.api.types.is_object_dtype(df_lakes[lake_id_field].dtype):
+        df_lakes[lake_id_field] = df_lakes[lake_id_field].astype(int).astype(str)
 
     for df in df_list:
         df[lake_id_field] = df[lake_id_field].astype(int).astype(str)

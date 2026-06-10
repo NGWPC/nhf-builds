@@ -452,3 +452,21 @@ lakes:
   dem:
     path: input/COP90_DEM_SuperCONUS.tif
     nodata: -99999
+
+res_da:
+  input_dir: "./data/sconus/lakes/"
+  lake_id_field: "lake_id"
+  gage_id_field: "site_no"
+  da_type_field: "da_type"
+  great_lakes: True
+  generate_additional_crosswalk: False
+  all_level_pool: False
+  adhoc:
+    run: True
+    path: "input/adhoc_lakes.gpkg"
+    layer: "adhoc_lakes"
+    rfc_field: "locationId"
+    lake_id_field: "lake_id"
+    null_value: -99999
+  res_crosswalk:
+    path: "input/reservoir_index_AnA.nc"

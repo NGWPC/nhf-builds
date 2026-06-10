@@ -20,6 +20,7 @@ tasks:
   lakes: True
   fp_crosswalk: True
   validate_hf: True
+  res_da: True
 
 # flowpaths
 flowpath_attributes:
@@ -306,3 +307,14 @@ lakes:
     path: input/NID2019_U.csv
   dem:
     path: input/hi_dem_250.tif # Generally HI does not need elevation, but store USGS DEM here if so
+
+res_da:
+  input_dir: "./data/hi/lakes/"
+  lake_id_field: "lake_id"
+  gage_id_field: "site_no"
+  da_type_field: "da_type"
+  great_lakes: False
+  all_level_pool: True
+  generate_additional_crosswalk: False
+  adhoc:
+    run: False

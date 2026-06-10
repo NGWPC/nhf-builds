@@ -8,6 +8,7 @@ from pyogrio.errors import DataLayerError
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.lakes.da import (
     _add_great_lakes,
+    _all_level_pool,
     _generate_additional_crosswalk,
     _merge,
     _read_adhoc,
@@ -42,6 +43,15 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
                 cfg.res_da.gage_id_field,
                 cfg.res_da.da_type_field,
             ]
+        )
+
+    if cfg.res_da.all_level_pool:
+        logger.info("Setting all reservoir DA to level pool")
+        return _all_level_pool(
+            df_lakes=lakes,
+            gage_id_field=cfg.res_da.gage_id_field,
+            lake_id_field=cfg.res_da.lake_id_field,
+            res_da_field=cfg.res_da.da_type_field,
         )
 
     df_list = []

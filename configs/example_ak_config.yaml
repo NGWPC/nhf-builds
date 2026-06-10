@@ -21,6 +21,7 @@ tasks:
   lakes: True
   fp_crosswalk: True
   validate_hf: True
+  res_da: True
 
 flowpath_attributes:
   flowpath_id: fp_id
@@ -371,3 +372,16 @@ lakes:
     path: input/NID2019_U.csv
   dem:
     path: input/ak_dem_250.tif # Generally AK does not need elevation, but store DEM here if so
+
+res_da:
+  input_dir: "./data/ak/lakes/"
+  lake_id_field: "lake_id"
+  gage_id_field: "site_no"
+  da_type_field: "da_type"
+  great_lakes: False
+  generate_additional_crosswalk: False
+  all_level_pool: False
+  adhoc:
+    run: False
+  res_crosswalk:
+    path: "input/reservoir_index_GDL_AK.nc"

@@ -1040,12 +1040,11 @@ class LakesConfig(BaseModel):
 
 
 # Reservoir DA
-
 GREAT_LAKES_MAPPING = {
-    "4800002": {"fp": 4351968, "site_no": "fixme"},
-    "4800004": {"fp": 4340959, "site_no": "fixme"},
-    "4800006": {"fp": 4331097, "site_no": "fixme"},
-    "4800007": {"fp": 4327242, "site_no": "fixme"},
+    "4800002": {"fp": 4351968, "site_no": "04127885"},
+    "4800004": {"fp": 4340959, "site_no": "04159130"},
+    "4800006": {"fp": 4331097, "site_no": "02HA013"},
+    "4800007": {"fp": 4327242, "site_no": "IJC"},
 }
 
 
@@ -1107,6 +1106,10 @@ class ResDAConfig(BaseModel):
     input_dir: Path = Field(
         default=here() / "data/lakes",
         description="Input directory. This will be prepended to all paths for other inputs",
+    )
+    all_level_pool: bool = Field(
+        default=False,
+        description="Flag to make all reservoirs level pool. This can be used in domains with no lake-gage crosswalk available.",
     )
     adhoc: AdhocResDAInput = Field(
         default=AdhocResDAInput(),
