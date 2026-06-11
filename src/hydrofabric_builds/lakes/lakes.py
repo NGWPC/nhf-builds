@@ -785,8 +785,10 @@ def crosswalk_vfp_lk(
     """
     lake_id_field = cfg.lakes.output_comid_field
     gdf_polys = _get_lake_polys(cfg, gdf_lakes)
+    gdf_polys = gdf_polys.to_crs(cfg.crs)
 
     # spatial join polys and vfps
+
     gdf_join = gdf_polys.sjoin(gdf_vfp[["geometry", "virtual_fp_id"]], how="left", predicate="intersects")
     gdf_join = gdf_lakes[["nhf_lake_id", lake_id_field]].merge(gdf_join, on=lake_id_field)
     df_join = gdf_join[["nhf_lake_id", lake_id_field, "virtual_fp_id"]].copy().reset_index(drop=True)

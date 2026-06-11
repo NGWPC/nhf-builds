@@ -277,7 +277,7 @@ fp_crosswalk:
 #---------------------------------------------------
 lakes:
   input_dir: "./data/hi/lakes/"
-  fp_lake_crosswalk: False
+  vfp_lake_crosswalk: True
   calculate_elevation: False # Hawaii is joined to existing data and does not need new elevation
   use_cached_lakes: False
   output_comid_field: "lake_id"
