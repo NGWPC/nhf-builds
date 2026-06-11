@@ -3,7 +3,7 @@ import logging
 import geopandas as gpd
 import pandas as pd
 import xarray as xr
-from pyogrio.errors import DataLayerError
+from pyogrio.errors import DataLayerError, DataSourceError
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.lakes.da import (
@@ -88,7 +88,7 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
         logger.info("Generating reservoir:gage crosswalks from data")
         try:
             gages = gpd.read_file(cfg.output_file_path, layer="gages")
-        except DataLayerError:
+        except (DataLayerError, DataSourceError):
             logger.info("Gages layer not available for Reservoir DA. Skipping additional crosswalking.")
             gages = gpd.GeoDataFrame()
         if gages.any():

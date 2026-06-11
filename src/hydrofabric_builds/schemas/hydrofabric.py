@@ -915,7 +915,7 @@ class RefWaterbodyInput(BaseModel):
 
 
 class AdhocLakeInput(BaseModel):
-    """Lakes: Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon. Adhoc lakes that are only in reference waterbodies are flagged to force inclusion."""
+    """Lakes: Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. Adhoc lakes that are only in reference waterbodies are flagged to force inclusion."""
 
     path: Path = Field(
         default=Path("input/adhoc_lakes.gpkg"),
@@ -1040,6 +1040,8 @@ class LakesConfig(BaseModel):
 
 
 # Reservoir DA
+
+# GL lake_ID : {flowpath, gage/site_no}
 GREAT_LAKES_MAPPING = {
     "4800002": {"fp": 4351968, "site_no": "04127885"},
     "4800004": {"fp": 4340959, "site_no": "04159130"},
@@ -1049,19 +1051,26 @@ GREAT_LAKES_MAPPING = {
 
 
 class ResCrosswalkFields(BaseModel):
-    """Fields in reservoir DA crosswalk file"""
+    """Fields in reservoir DA crosswalk file ("reservoir_index_AnA.netcdf).
 
-    lake_id_field: str = "lake_id"
-    usgs_gage_id_field: str = "usgs_gage_id"
-    usgs_lake_id_field: str = "usgs_lake_id"
-    usace_gage_id_field: str = "usace_gage_id"
-    usace_lake_id_field: str = "usace_lake_id"
-    rfc_gage_id_field: str = "rfc_gage_id"
-    rfc_lake_id_field: str = "rfc_lake_id"
+    These can be changed in config file if needed and will be input read index functions.
+    """
+
+    lake_id_field: str = Field("lake_id", description="Lake ID field in Res ANA index file")
+    usgs_gage_id_field: str = Field("usgs_gage_id", description="USGS gage ID field in reservoir index file")
+    usgs_lake_id_field: str = Field("usgs_lake_id", description="USGS lake ID field in reservoir index file")
+    usace_gage_id_field: str = Field(
+        "usace_gage_id", description="USACE gage ID field in reservoir index file"
+    )
+    usace_lake_id_field: str = Field(
+        "usace_lake_id", description="USACE lake ID field in reservoir index file"
+    )
+    rfc_gage_id_field: str = Field("rfc_gage_id", description="RFC gage ID in reservoir index")
+    rfc_lake_id_field: str = Field("rfc_lake_id", description="RFC lake ID in reservoir index")
 
 
 class ResCrossWalkInput(BaseModel):
-    """Reservoir crosswalk file"""
+    """Reservoir crosswalk file ("reservoir_index_AnA.netcdf")"""
 
     path: Path = Field(
         default=Path("inputs/reservoir_index_AnA.nc"),
@@ -1084,7 +1093,7 @@ class ResDAMapping(BaseModel):
 
 
 class AdhocResDAInput(BaseModel):
-    """Adhoc lakes input. Must include lake_id and an rfc_field with the name of RFC gage."""
+    """Adhoc lakes input for reservoir DA. Must include lake_id and an rfc_field with the name of RFC gage."""
 
     path: Path = Field(
         default=Path("input/adhoc_lakes.gpkg"),
@@ -1113,7 +1122,7 @@ class ResDAConfig(BaseModel):
     )
     adhoc: AdhocResDAInput = Field(
         default=AdhocResDAInput(),
-        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon.",
+        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID/lake_id, site_no (gage), and dam_id (reference reservoirs) when possible.",
     )
     lake_id_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"

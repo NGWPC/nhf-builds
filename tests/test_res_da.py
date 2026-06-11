@@ -9,7 +9,7 @@ from pandas.testing import assert_frame_equal
 from pyprojroot import here
 from shapely import Point
 
-from hydrofabric_builds.lakes.da import _merge, _read_adhoc, _read_res_index
+from hydrofabric_builds.lakes.da import _all_level_pool, _merge, _read_adhoc, _read_res_index
 
 
 @pytest.fixture
@@ -266,3 +266,23 @@ def test_read_res_index(res_index_path: Path) -> None:
     df = _read_res_index(ds)
     assert {"site_no", "lake_id", "da_type"} == set(df.columns.values)
     assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
+
+
+def test_all_level_pool() -> None:
+    df = pd.DataFrame(
+        data={
+            "nhf_lake_id": [1254387044031094, 1277324208337912],
+            "lake_id": ["120053476", "4800004"],
+            "other_field": [1, 2],
+        }
+    )
+    expected = pd.DataFrame(
+        data={
+            "nhf_lake_id": [1254387044031094, 1277324208337912],
+            "lake_id": ["120053476", "4800004"],
+            "site_no": [None, None],
+            "da_type": [1, 1],
+        }
+    )
+    output = _all_level_pool(df)
+    assert_frame_equal(output, expected)
