@@ -736,5 +736,69 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
     return
 
 
-def _crosswalk_fp_lk() -> None:
-    pass
+def _get_lake_polys(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Read in lake polygons that match gdf lakes.
+
+    Note: If NWM lakes is a point file (Alaska), the process functions.
+    In `crosswalk_fp_lk` any geometry with no intersection will be assigned the flowpath that
+    was already associated with it.
+    """
+    lake_id_field = cfg.lakes.output_comid_field
+    lake_polys = []
+
+    # read NWM lakes
+    if cfg.lakes.nwm.path.exists():
+        gdf_nwm = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer)
+        gdf_nwm.rename(columns={cfg.lakes.nwm.id_field: lake_id_field}, inplace=True)
+        gdf_nwm = gdf_nwm[["geometry", lake_id_field]]
+        lake_polys.append(gdf_nwm)
+
+    # read reference waterbodies
+    if cfg.lakes.ref_wb.path.exists():
+        gdf_wb = gpd.read_file(cfg.lakes.ref_wb.path)
+        gdf_wb.rename(columns={cfg.lakes.ref_wb.id_field: lake_id_field}, inplace=True)
+        gdf_wb = gdf_wb[["geometry", lake_id_field]]
+        lake_polys.append(gdf_wb)
+
+    if not lake_polys:
+        logger.info("No lake polygons available, could not run lakes-flowpaths crosswalk.")
+        return gpd.GeoDataFrame(columns=["nhf_lake_id", lake_id_field, "fp_id"])
+
+    gdf_lake_polys = pd.concat(lake_polys)
+
+    # filter to lakes that are present in lakes file
+    gdf_lake_polys = gdf_lake_polys.loc[gdf_lake_polys[lake_id_field].isin(gdf_lakes[lake_id_field])].copy()
+
+    return gdf_lake_polys
+
+
+def crosswalk_vfp_lk(
+    cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame, gdf_vfp: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Crosswalks virtual flowpaths and lakes.
+
+    Uses lake data source for geometry. This is generally polygons but will work with points (Alaska).
+    Points are unlikely to get intersection matches and will use the fallback to taking the virtual flowpath
+    that was associated with the lakes in lakes pipeline.
+
+    Any unmatched lakes using pure intersect will retrieve virtual flowpath that was associated prior.
+    """
+    lake_id_field = cfg.lakes.output_comid_field
+    gdf_polys = _get_lake_polys(cfg, gdf_lakes)
+
+    # spatial join polys and vfps
+    gdf_join = gdf_polys.sjoin(gdf_vfp[["geometry", "virtual_fp_id"]], how="left", predicate="intersects")
+    gdf_join = gdf_lakes[["nhf_lake_id", lake_id_field]].merge(gdf_join, on=lake_id_field)
+    df_join = gdf_join[["nhf_lake_id", lake_id_field, "virtual_fp_id"]].copy().reset_index(drop=True)
+    del gdf_join
+
+    # join lakes without vfp intersection to lakes table and take pre-associated vfp
+    df_unmatched = df_join.loc[df_join["virtual_fp_id"].isnull(), ["nhf_lake_id", lake_id_field]].copy()
+    df_unmatched = df_unmatched.merge(
+        gdf_lakes[[lake_id_field, "virtual_fp_id"]], on=lake_id_field, how="left"
+    )
+    df_join = df_join.loc[~df_join["virtual_fp_id"].isnull()].copy()
+
+    df_join = pd.concat([df_join, df_unmatched], ignore_index=True).reset_index(drop=True)
+
+    return gpd.GeoDataFrame(df_join)
