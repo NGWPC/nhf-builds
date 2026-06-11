@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_reservoir_da(**context: dict[str, Any]) -> dict[str, Any]:
-    """Builds lakes layer from all NWM lake sources
+    """Builds reservoir DA layer
 
     Parameters
     ----------

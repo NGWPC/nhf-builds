@@ -22,10 +22,15 @@ logger = logging.getLogger(__name__)
 def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
     """Runs the reservoir data assimilation pipeline
 
+    Reads from reservoir index, adhoc lakes file, and creates additional gage:lake crosswalk.
+    If reservoir index is not available, returns all level pool.
+    If lakes layer is not available, returns empty table.
+    If gages are not available when additional gage:lake crosswalk is requested, crosswalk will not be run.
+
     Parameters
     ----------
     cfg : HFConfig
-        _description_
+        HF Config
 
     Returns
     -------
