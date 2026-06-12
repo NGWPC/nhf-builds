@@ -736,8 +736,8 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
     return
 
 
-def _get_lake_polys(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Read in lake polygons that match gdf lakes.
+def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Read in original lake polygons or points that match gdf lakes.
 
     Note: If NWM lakes is a point file (Alaska), the process functions.
     In `crosswalk_fp_lk` any geometry with no intersection will be assigned the flowpath that
@@ -784,23 +784,26 @@ def crosswalk_vfp_lk(
     Any unmatched lakes using pure intersect will retrieve virtual flowpath that was associated prior.
     """
     lake_id_field = cfg.lakes.output_comid_field
-    gdf_polys = _get_lake_polys(cfg, gdf_lakes)
-    gdf_polys = gdf_polys.to_crs(cfg.crs)
+    gdf_geom = _get_lake_geom(cfg, gdf_lakes)
+    gdf_geom = gdf_geom.to_crs(cfg.crs)
 
     # spatial join polys and vfps
-
-    gdf_join = gdf_polys.sjoin(gdf_vfp[["geometry", "virtual_fp_id"]], how="left", predicate="intersects")
+    gdf_join = gdf_geom.sjoin(gdf_vfp[["geometry", "virtual_fp_id"]], how="left", predicate="intersects")
     gdf_join = gdf_lakes[["nhf_lake_id", lake_id_field]].merge(gdf_join, on=lake_id_field)
     df_join = gdf_join[["nhf_lake_id", lake_id_field, "virtual_fp_id"]].copy().reset_index(drop=True)
     del gdf_join
 
     # join lakes without vfp intersection to lakes table and take pre-associated vfp
     df_unmatched = df_join.loc[df_join["virtual_fp_id"].isnull(), ["nhf_lake_id", lake_id_field]].copy()
-    df_unmatched = df_unmatched.merge(
-        gdf_lakes[[lake_id_field, "virtual_fp_id"]], on=lake_id_field, how="left"
-    )
-    df_join = df_join.loc[~df_join["virtual_fp_id"].isnull()].copy()
+    if not df_unmatched.empty:
+        logger.info(
+            f"All lakes did not intersect virtual flowpaths. Copying associated flowpaths for {len(df_unmatched)} lakes."
+        )
+        df_unmatched = df_unmatched.merge(
+            gdf_lakes[[lake_id_field, "virtual_fp_id"]], on=lake_id_field, how="left"
+        )
+        df_join = df_join.loc[~df_join["virtual_fp_id"].isnull()].copy()
 
-    df_join = pd.concat([df_join, df_unmatched], ignore_index=True).reset_index(drop=True)
+        df_join = pd.concat([df_join, df_unmatched], ignore_index=True).reset_index(drop=True)
 
     return gpd.GeoDataFrame(df_join)

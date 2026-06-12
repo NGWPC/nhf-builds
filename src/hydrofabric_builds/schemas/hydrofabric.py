@@ -975,7 +975,7 @@ class LakesConfig(BaseModel):
     )
     vfp_lk_crosswalk: bool = Field(
         default=True,
-        description="Flag to perform virtual flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon when available.",
+        description="Flag to perform virtual flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon or point.",
     )
     fp_id_field: str = Field(
         default="flowpath_id",
