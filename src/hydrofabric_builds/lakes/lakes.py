@@ -762,7 +762,7 @@ def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFra
 
     if not lake_polys:
         logger.info("No lake polygons available, could not run lakes-flowpaths crosswalk.")
-        return gpd.GeoDataFrame(columns=["nhf_lake_id", lake_id_field, "fp_id"])
+        return gpd.GeoDataFrame(columns=["nhf_lake_id", lake_id_field, "virtual_fp_id"])
 
     gdf_lake_polys = pd.concat(lake_polys)
 
