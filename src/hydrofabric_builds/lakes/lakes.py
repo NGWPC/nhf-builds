@@ -737,7 +737,7 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
 
 
 def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Read in original lake polygons or points that match gdf lakes.
+    """Read in original lake polygons or points that match gdf lakes for virtual flowpath-lake crosswalk.
 
     Note: If NWM lakes is a point file (Alaska), the process functions.
     In `crosswalk_fp_lk` any geometry with no intersection will be assigned the flowpath that

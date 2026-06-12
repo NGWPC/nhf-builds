@@ -155,7 +155,6 @@ def test_crosswalk_vfp_lk__points_mixed(
         ],
     )
 
-    # 3 lake polygons: polygon 1 has one intersection, polygon 2 has two intersections, polygon 3 has no intersections and retains original associated VFP
     gdf_lake_points = gpd.GeoDataFrame(
         geometry=[
             Point((-1717413.071685534, 1366279.5299988713)),  # intersects vfp
@@ -200,7 +199,6 @@ def test_crosswalk_vfp_lk__points_all_intersect(
     )
     gdf_vfp = gpd.read_file(nhf, layer="virtual_flowpaths")
 
-    # 3 lake points with corresponding virtual fp ID
     gdf_lakes = gpd.GeoDataFrame(
         data={
             "nhf_lake_id": [4, 6, 7],
@@ -215,7 +213,6 @@ def test_crosswalk_vfp_lk__points_all_intersect(
         ],
     )
 
-    # 3 lake polygons: polygon 1 has one intersection, polygon 2 has two intersections, polygon 3 has no intersections and retains original associated VFP
     gdf_lake_points = gpd.GeoDataFrame(
         geometry=[
             Point((-1717413.071685534, 1366279.5299988713)),  # intersects vfp 1
