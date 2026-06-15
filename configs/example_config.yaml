@@ -398,7 +398,7 @@ validate_hf:
 #---------------------------------------------------
 lakes:
   input_dir: "./data/sconus/lakes/"
-  fp_lake_crosswalk: False
+  vfp_lake_crosswalk: True
   calculate_elevation: True
   use_cached_lakes: False
   output_comid_field: "lake_id"

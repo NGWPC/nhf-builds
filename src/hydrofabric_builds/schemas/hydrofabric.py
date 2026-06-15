@@ -973,9 +973,9 @@ class LakesConfig(BaseModel):
         default=NIDInputs(),
         description="All National Inventory of Dams (NID) configs. NID is a point dataset of dam information that is joined to Reference Reservoirs.",
     )
-    fp_lk_crosswalk: bool = Field(
+    vfp_lk_crosswalk: bool = Field(
         default=True,
-        description="Flag to perform flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon when available.",
+        description="Flag to perform virtual flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon or point.",
     )
     fp_id_field: str = Field(
         default="flowpath_id",
