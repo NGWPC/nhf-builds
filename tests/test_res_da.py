@@ -9,7 +9,13 @@ from pandas.testing import assert_frame_equal
 from pyprojroot import here
 from shapely import Point
 
-from hydrofabric_builds.lakes.da import _all_level_pool, _merge, _read_adhoc, _read_res_index
+from hydrofabric_builds.lakes.da import (
+    _all_level_pool,
+    _check_gages_exist,
+    _merge,
+    _read_adhoc,
+    _read_res_index,
+)
 
 
 @pytest.fixture
@@ -77,7 +83,7 @@ def test_merge__mixed() -> None:
     )
 
     df_great_lakes = pd.DataFrame(
-        data={"lake_id": ["4800002", "4800004"], "site_no": ["fixme", "fixme"], "da_type": [6, 6]}
+        data={"lake_id": ["4800002", "4800004"], "site_no": ["04127885", "04159130"], "da_type": [6, 6]}
     )
 
     df_adhoc = pd.DataFrame.from_records(
@@ -133,13 +139,13 @@ def test_merge__mixed() -> None:
             {
                 "nhf_lake_id": 1278784300184414,
                 "lake_id": "4800002",
-                "site_no": "fixme",
+                "site_no": "04127885",
                 "da_type": 6,
             },  # Lake Superior
             {
                 "nhf_lake_id": 1277324208337912,
                 "lake_id": "4800004",
-                "site_no": "fixme",
+                "site_no": "04159130",
                 "da_type": 6,
             },  # Lake MI/Huron
         ]
@@ -286,3 +292,60 @@ def test_all_level_pool() -> None:
     )
     output = _all_level_pool(df)
     assert_frame_equal(output, expected)
+
+
+def test_check_gage_exist__all_exist(caplog: pytest.FixtureDef) -> None:
+    """One gage in reservoir DA exists and one reservoir DA does not have gage."""
+    df_res_da = pd.DataFrame(
+        data={
+            "nhf_lake_id": [1273759975268731, 1287496639639737],
+            "lake_id": ["120022128", "5198470"],
+            "site_no": ["CCKK2OT", None],
+            "da_type": [4, 1],
+        }
+    )
+    gdf_gages = gpd.GeoDataFrame(
+        data={"site_no": ["CCKK2OT", "450157090060701"], "status": ["RFC", "USGS-active"]}
+    )
+
+    _check_gages_exist(df_res_da, gdf_gages, "site_no")
+
+    assert "All gages for reservoir DA lake:gage crosswalk present in gages file." in caplog.text
+
+
+def test_check_gage_exist__one_missing(caplog: pytest.FixtureDef) -> None:
+    """One gage in reservoir DA exists and one gage does not."""
+    df_res_da = pd.DataFrame(
+        data={
+            "nhf_lake_id": [1273759975268731, 1287496639639737],
+            "lake_id": ["120022128", "5198470"],
+            "site_no": ["CCKK2OT", "missing"],
+            "da_type": [4, 4],
+        }
+    )
+    gdf_gages = gpd.GeoDataFrame(
+        data={"site_no": ["CCKK2OT", "450157090060701"], "status": ["RFC", "USGS-active"]}
+    )
+
+    _check_gages_exist(df_res_da, gdf_gages, "site_no")
+
+    assert "1 (50%) gages for reservoir DA missing from gages layer" in caplog.text
+
+
+def test_check_gage_exist__all_missing(caplog: pytest.FixtureDef) -> None:
+    """All gages reservoir DA missing"""
+    df_res_da = pd.DataFrame(
+        data={
+            "nhf_lake_id": [1273759975268731, 1287496639639737],
+            "lake_id": ["120022128", "5198470"],
+            "site_no": ["CCKK2OT", "missing"],
+            "da_type": [4, 4],
+        }
+    )
+    gdf_gages = gpd.GeoDataFrame(
+        data={"site_no": ["CHET1OT", "450157090060701"], "status": ["RFC", "USGS-active"]}
+    )
+
+    _check_gages_exist(df_res_da, gdf_gages, "site_no")
+
+    assert "2 (100%) gages for reservoir DA missing from gages layer" in caplog.text

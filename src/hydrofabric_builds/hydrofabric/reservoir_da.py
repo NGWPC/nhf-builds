@@ -9,12 +9,12 @@ from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.lakes.da import (
     _add_great_lakes,
     _all_level_pool,
+    _check_gages_exist,
     _generate_additional_crosswalk,
     _merge,
     _read_adhoc,
     _read_res_index,
 )
-from hydrofabric_builds.schemas.hydrofabric import GREAT_LAKES_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,14 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
             ]
         )
 
+    try:
+        gages = gpd.read_file(cfg.output_file_path, layer="gages")
+    except (DataLayerError, DataSourceError):
+        logger.info(
+            "Gages layer not available for Reservoir DA. Skipping additional crosswalking and gage check."
+        )
+        gages = gpd.GeoDataFrame(columns=[cfg.res_da.gage_id_field])
+
     if cfg.res_da.all_level_pool:
         logger.info("Setting all reservoir DA to level pool")
         return _all_level_pool(
@@ -72,7 +80,7 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
 
     if cfg.res_da.great_lakes:
         logger.info("Adding Great Lakes")
-        df_list.append(_add_great_lakes(mapping=GREAT_LAKES_MAPPING.copy()))
+        df_list.append(_add_great_lakes(mapping=cfg.lakes.great_lakes))
 
     if cfg.res_da.adhoc.run:
         logger.info("Retrieving reservoirs from adhoc table")
@@ -91,17 +99,16 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
 
     if cfg.res_da.generate_additional_crosswalk:
         logger.info("Generating reservoir:gage crosswalks from data")
-        try:
-            gages = gpd.read_file(cfg.output_file_path, layer="gages")
-        except (DataLayerError, DataSourceError):
-            logger.info("Gages layer not available for Reservoir DA. Skipping additional crosswalking.")
-            gages = gpd.GeoDataFrame()
+
         if gages.any():
             fp = gpd.read_file(cfg.output_file_path, layer="flowpaths")
             df_list.append(_generate_additional_crosswalk(fp, gages, lakes))
             del fp
 
     logger.info("Merging reservoir DA tables")
-    return _merge(
+    df_res_da = _merge(
         lakes, df_list, res_da_field=cfg.res_da.da_type_field, lake_id_field=cfg.res_da.lake_id_field
     )
+    _check_gages_exist(gdf_gages=gages, df_res_da=df_res_da, gage_id_field=cfg.res_da.gage_id_field)
+
+    return df_res_da

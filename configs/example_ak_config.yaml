@@ -15,7 +15,6 @@ tasks:
   build_hydrofabric: True
   divide_attributes: True
   flowpath_attributes: True
-  waterbodies: False # not present in OCONUS
   hydrolocations: True
   gages: True
   lakes: True

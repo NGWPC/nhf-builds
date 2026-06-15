@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from hydrofabric_builds.schemas.hydrofabric import ResDAMapping
+from hydrofabric_builds.schemas.hydrofabric import GreatLakesMapping, ResDAMapping
 
 logger = logging.getLogger(__name__)
 
@@ -40,59 +40,27 @@ def _read_res_index(
     """Extract crosswalk values and add DA scheme"""
     df_list = []
 
-    # rfc
-    if rfc_lake_id_field in ds.variables:
-        rfc_crosswalk = pd.DataFrame(
-            data={
-                rfc_gage_id_field: ds[rfc_gage_id_field].to_numpy(),
-                rfc_lake_id_field: ds[rfc_lake_id_field].to_numpy(),
-            }
-        )
-        rfc_crosswalk[rfc_gage_id_field] = (
-            rfc_crosswalk[rfc_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-        )
-        rfc_crosswalk[res_da_field] = DA_MAPPING.rfc_forecast
-        rfc_crosswalk.rename(
-            columns={rfc_gage_id_field: output_gage_field, rfc_lake_id_field: lake_id_field}, inplace=True
-        )
-        df_list.append(rfc_crosswalk)
+    # Group the configurations for RFC, USGS, and USACE
+    res_index_fields = [
+        (rfc_gage_id_field, rfc_lake_id_field, DA_MAPPING.rfc_forecast),
+        (usgs_gage_id_field, usgs_lake_id_field, DA_MAPPING.usgs_persistence),
+        (usace_gage_id_field, usace_lake_id_field, DA_MAPPING.usace_persistence),
+    ]
 
-    # usgs
-    if usgs_lake_id_field in ds.variables:
-        usgs_crosswalk = pd.DataFrame(
-            data={
-                usgs_gage_id_field: ds[usgs_gage_id_field].to_numpy(),
-                usgs_lake_id_field: ds[usgs_lake_id_field].to_numpy(),
-            }
-        )
-        usgs_crosswalk[usgs_gage_id_field] = (
-            usgs_crosswalk[usgs_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-        )
-        usgs_crosswalk[res_da_field] = DA_MAPPING.usgs_persistence
-        usgs_crosswalk.rename(
-            columns={usgs_gage_id_field: output_gage_field, usgs_lake_id_field: lake_id_field}, inplace=True
-        )
-        df_list.append(usgs_crosswalk)
-
-    # usace
-    if usace_lake_id_field in ds.variables:
-        usace_crosswalk = pd.DataFrame(
-            data={
-                usace_gage_id_field: ds[usace_gage_id_field].to_numpy(),
-                usace_lake_id_field: ds[usace_lake_id_field].to_numpy(),
-            }
-        )
-        usace_crosswalk[usace_gage_id_field] = (
-            usace_crosswalk[usace_gage_id_field].apply(lambda x: x.decode("utf-8")).str.strip()
-        )
-        usace_crosswalk[res_da_field] = DA_MAPPING.usace_persistence
-        usace_crosswalk.rename(
-            columns={usace_gage_id_field: output_gage_field, usace_lake_id_field: lake_id_field}, inplace=True
-        )
-        df_list.append(usace_crosswalk)
+    for gage_field, lake_field, da_mapping in res_index_fields:
+        if lake_field in ds.variables:
+            crosswalk = pd.DataFrame(
+                data={
+                    gage_field: ds[gage_field].to_numpy(),
+                    lake_field: ds[lake_field].to_numpy(),
+                }
+            )
+            crosswalk[gage_field] = crosswalk[gage_field].apply(lambda x: x.decode("utf-8")).str.strip()
+            crosswalk[res_da_field] = da_mapping
+            crosswalk.rename(columns={gage_field: output_gage_field, lake_field: lake_id_field}, inplace=True)
+            df_list.append(crosswalk)
 
     df_out = pd.concat(df_list, ignore_index=True)
-
     return df_out
 
 
@@ -113,22 +81,23 @@ def _read_adhoc(
 
 
 def _add_great_lakes(
-    mapping: dict,
+    mapping: GreatLakesMapping,
     gage_id_field: str = "site_no",
     lake_id_field: str = "lake_id",
     res_da_field: str = "da_type",
 ) -> pd.DataFrame:
-    lake_id = []
-    site_no = []
-    for k, v in mapping.items():
-        lake_id.append(k)
-        site_no.append(v["site_no"])
+    dict_lakes = mapping.model_dump()
+
+    lake_ids, site_nos = [], []
+    for _k, v in dict_lakes.items():
+        lake_ids.append(v[lake_id_field])
+        site_nos.append(v[gage_id_field])
 
     return pd.DataFrame(
         data={
-            lake_id_field: lake_id,
-            gage_id_field: site_no,
-            res_da_field: [DA_MAPPING.great_lakes] * len(mapping.keys()),
+            lake_id_field: lake_ids,
+            gage_id_field: site_nos,
+            res_da_field: [DA_MAPPING.great_lakes] * len(lake_ids),
         }
     )
 
@@ -189,3 +158,25 @@ def _merge(
     assert ~df_lakes.duplicated(subset=gid_field).any(), f"Duplicate {gid_field} detected"
 
     return df_lakes
+
+
+def _check_gages_exist(
+    df_res_da: pd.DataFrame, gdf_gages: gpd.GeoDataFrame, gage_id_field: str = "site_no"
+) -> None:
+    """Check if reservoir DA gages exist in gages layer."""
+    # FIXME: Move to validation script
+    if gdf_gages.empty:
+        logger.info("Gages layer is not available. Cannot check if reservoir DA gages are available.")
+        return
+
+    res_gages = df_res_da.loc[~df_res_da[gage_id_field].isnull()].copy()
+    missing_gages = res_gages.loc[~res_gages[gage_id_field].isin(gdf_gages[gage_id_field])].copy()
+    len_missing = len(missing_gages)
+
+    if len_missing > 0:
+        logger.warning(
+            f"{len_missing} ({round(len_missing / len(res_gages) * 100)}%) gages for reservoir DA missing from gages layer"
+        )
+    else:
+        logger.info("All gages for reservoir DA lake:gage crosswalk present in gages file.")
+    return

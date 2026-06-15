@@ -931,6 +931,23 @@ class AdhocLakeInput(BaseModel):
     )
 
 
+class GreatLake(BaseModel):
+    """Defines parameters about a Great Lake"""
+
+    lake_id: str = Field(description="lake_id/NHD 2.2 COMID for Great Lake")
+    fp_id: float = Field(description="NHF flowpath ID for Great Lake")
+    site_no: str = Field(description="Gage ID / site_no for Great Lake")
+
+
+class GreatLakesMapping(BaseModel):
+    """All Great Lakes mappings"""
+
+    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885")
+    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130")
+    erie: GreatLake = GreatLake(lake_id="4800006", fp_id=-9999, site_no="02HA013")
+    ontario: GreatLake = GreatLake(lake_id="4800007", fp_id=-9999, site_no="IJC")
+
+
 class LakesConfig(BaseModel):
     """Main Config for Lakes"""
 
@@ -987,6 +1004,7 @@ class LakesConfig(BaseModel):
     output_comid_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
     )
+    great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
     fields: list[str] = Field(
         default=[
             "dam_id",
@@ -1040,16 +1058,6 @@ class LakesConfig(BaseModel):
 
 
 # Reservoir DA
-
-# GL lake_ID : {flowpath, gage/site_no}
-GREAT_LAKES_MAPPING = {
-    "4800002": {"fp": 4351968, "site_no": "04127885"},
-    "4800004": {"fp": 4340959, "site_no": "04159130"},
-    "4800006": {"fp": 4331097, "site_no": "02HA013"},
-    "4800007": {"fp": 4327242, "site_no": "IJC"},
-}
-
-
 class ResCrosswalkFields(BaseModel):
     """Fields in reservoir DA crosswalk file ("reservoir_index_AnA.netcdf).
 
@@ -1110,7 +1118,7 @@ class AdhocResDAInput(BaseModel):
 
 
 class ResDAConfig(BaseModel):
-    """Configuartion for reservoir DA"""
+    """Configuration for reservoir DA"""
 
     input_dir: Path = Field(
         default=here() / "data/lakes",
