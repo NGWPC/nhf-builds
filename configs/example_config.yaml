@@ -253,57 +253,6 @@ divide_attributes:
       field_name: max_gw_storage
 
 
-# waterbodies - all values have defaults
-waterbodies:
-  input_dir: data/reservoirs
-  output_dir: data/reservoirs/output
-  rfcda_output_name: rfc-da-hydraulics-v3.gpkg
-  rfcda_file: data/reservoirs/output/rfc-da-hydraulics-v3.gpkg # Note: By default this concatenates output_dir and rfcda_output_name but can be specified
-  default_src_crs: EPSG:4326
-  work_crs: EPSG:5070
-  nid:
-    path: source_files/NID2019_U.csv
-    src_crs: EPGS:4326
-    output_crs: EPSG:5070
-    drop_states: ["AK", "HI", "PR", "GU"]
-  refwb:
-    path: reference_reservoirs/reference_waterbodies.gpkg
-    layer: reference_waterbodies
-    src_crs: null
-    output_crs: EPSG:5070
-    id_col: comid
-  refres:
-    path: reference_reservoirs/reference-reservoirs-v1.gpkg
-    layer: reference-reservoirs-v1
-    src_crs: null
-    output_crs: EPSG:5070
-    distance_to_fp_col: distance_to_fp_m
-    wb_area_col: wb_areasqkm
-    ref_wb_id_col: ref_fab_wb
-    min_wb_area_sqkm: 0.2
-    max_distance_m: 1000.0
-    ref_res_keep: [ls-68980, ls-64223, ls-58669, ls-58869, ls-56815, ls-56599, ls-62263,  ls-58959, ls-58063, ls-45808, ls-50936, ls-52001, ls-46254, ls-54770, ls-53644, ls-38499, ls-13307, ls-32263, ls-31144, ls-28440,  ls-16225, ls-16263, ls-5817, ls-3502, ls-3207, ls-3159,  ls-3829, ls-2065, ls-2334, ls-2143 ]
-  osm:
-    path: source_files/osm_dams_all.gpkg
-    layer: osm_dams_all
-    filter_col: waterway
-    filter_val: dam
-  dem:
-    path: source_files/USGS_Seamless_DEM_13.vrt
-    prefer_crs_of_dem: True
-    band: 1
-    nodata: null
-  nwm_lakes:
-    prep_nwm_lakes: False # set to true if you want to do this, or it will run if file not found
-    input_path: "source_files/nwm_patch_conus_nextgen.gpkg"
-    layer: "lakes"
-    buffer_size_m: 500
-    output_path: "source_files/nwm_lakes.gpkg"
-    lakes_keep: [10998421, 11002485, 10998695, 10998319, 10998263, 10998695, 21638156, 166899333, 18415569, 120052349, 11629443, 167671349, 19268768, 17999940, 17951023, 120052740, 4620258, 16729991, 1514163, 20052547, 24005647 ]
-  rules:
-    max_waterbody_nearest_dist_m: 1000.0
-    min_area_sqkm: 0.2
-
 gages:
   gages:
     inputs:
@@ -452,3 +401,38 @@ lakes:
   dem:
     path: input/COP90_DEM_SuperCONUS.tif
     nodata: -99999
+  great_lakes:
+    superior:
+      lake_id: "4800002"
+      fp_id: -9999
+      site_no: "04127885"
+    mi_huron:
+      lake_id: "4800004"
+      fp_id: -9999
+      site_no: "04159130"
+    erie:
+      lake_id: "4800006"
+      fp_id: -9999
+      site_no: "02HA013"
+    ontario:
+      lake_id: "4800007"
+      fp_id: -9999
+      site_no: "IJC"
+
+res_da:
+  input_dir: "./data/sconus/lakes/"
+  lake_id_field: "lake_id"
+  gage_id_field: "site_no"
+  da_type_field: "da_type"
+  great_lakes: True
+  generate_additional_crosswalk: False
+  all_level_pool: False
+  adhoc:
+    run: True
+    path: "input/adhoc_lakes.gpkg"
+    layer: "adhoc_lakes"
+    rfc_field: "locationId"
+    lake_id_field: "lake_id"
+    null_value: -99999
+  res_crosswalk:
+    path: "input/reservoir_index_AnA.nc"

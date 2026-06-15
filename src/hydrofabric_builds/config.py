@@ -15,6 +15,7 @@ from hydrofabric_builds.schemas.hydrofabric import (
     FPCrosswalkConfig,
     GagesConfig,
     LakesConfig,
+    ResDAConfig,
     ValidateHFConfig,
 )
 
@@ -34,17 +35,19 @@ class TaskSelection(BaseModel):
         default=True, description="Decides if we want to run the flowpath attributes task"
     )
 
-    lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
-
-    gages: bool = Field(default=True, description="Decides if we want to run the gages task")
-
     fp_crosswalk: bool = Field(
         default=True, description="Decides if we want to run the flowpath crosswalk task"
     )
 
+    gages: bool = Field(default=True, description="Decides if we want to run the gages task")
+
     hydrolocations: bool = Field(
         default=True, description="Decides if we want to run the hydrolocations task"
     )
+
+    lakes: bool = Field(default=True, description="Decides if we want to run the nwm lakes task")
+
+    res_da: bool = Field(default=False, description="Decides if we want to run reservoir DA")
 
     validate_hf: bool = Field(default=False, description="Decides if we want to run hf validation")
 
@@ -92,6 +95,8 @@ class HFConfig(BaseModel):
     fp_crosswalk: FPCrosswalkConfig = Field(
         default=FPCrosswalkConfig(), description="Settings for building flowpath crosswalks"
     )
+
+    res_da: ResDAConfig = Field(default=ResDAConfig(), description="Settings for building reservoir DA layer")
 
     validate_hf: ValidateHFConfig = Field(
         default=ValidateHFConfig(), description="settings for validating hf"

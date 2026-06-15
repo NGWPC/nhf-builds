@@ -915,7 +915,7 @@ class RefWaterbodyInput(BaseModel):
 
 
 class AdhocLakeInput(BaseModel):
-    """Lakes: Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon. Adhoc lakes that are only in reference waterbodies are flagged to force inclusion."""
+    """Lakes: Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. Adhoc lakes that are only in reference waterbodies are flagged to force inclusion."""
 
     path: Path = Field(
         default=Path("input/adhoc_lakes.gpkg"),
@@ -929,6 +929,23 @@ class AdhocLakeInput(BaseModel):
         default="ref_waterbodies_only",
         description="Field in the adhoc lakes table that flags if a lake is only in the reference waterbodies dataset (not in NWM lakes)",
     )
+
+
+class GreatLake(BaseModel):
+    """Defines parameters about a Great Lake"""
+
+    lake_id: str = Field(description="lake_id/NHD 2.2 COMID for Great Lake")
+    fp_id: float = Field(description="NHF flowpath ID for Great Lake")
+    site_no: str = Field(description="Gage ID / site_no for Great Lake")
+
+
+class GreatLakesMapping(BaseModel):
+    """All Great Lakes mappings"""
+
+    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885")
+    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130")
+    erie: GreatLake = GreatLake(lake_id="4800006", fp_id=-9999, site_no="02HA013")
+    ontario: GreatLake = GreatLake(lake_id="4800007", fp_id=-9999, site_no="IJC")
 
 
 class LakesConfig(BaseModel):
@@ -987,6 +1004,7 @@ class LakesConfig(BaseModel):
     output_comid_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
     )
+    great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
     fields: list[str] = Field(
         default=[
             "dam_id",
@@ -1036,6 +1054,106 @@ class LakesConfig(BaseModel):
 
         self.lakes_path.parent.mkdir(parents=True, exist_ok=True)
 
+        return self
+
+
+# Reservoir DA
+class ResCrosswalkFields(BaseModel):
+    """Fields in reservoir DA crosswalk file ("reservoir_index_AnA.netcdf).
+
+    These can be changed in config file if needed and will be input read index functions.
+    """
+
+    lake_id_field: str = Field("lake_id", description="Lake ID field in Res ANA index file")
+    usgs_gage_id_field: str = Field("usgs_gage_id", description="USGS gage ID field in reservoir index file")
+    usgs_lake_id_field: str = Field("usgs_lake_id", description="USGS lake ID field in reservoir index file")
+    usace_gage_id_field: str = Field(
+        "usace_gage_id", description="USACE gage ID field in reservoir index file"
+    )
+    usace_lake_id_field: str = Field(
+        "usace_lake_id", description="USACE lake ID field in reservoir index file"
+    )
+    rfc_gage_id_field: str = Field("rfc_gage_id", description="RFC gage ID in reservoir index")
+    rfc_lake_id_field: str = Field("rfc_lake_id", description="RFC lake ID in reservoir index")
+
+
+class ResCrossWalkInput(BaseModel):
+    """Reservoir crosswalk file ("reservoir_index_AnA.netcdf")"""
+
+    path: Path = Field(
+        default=Path("inputs/reservoir_index_AnA.nc"),
+        description="File with reservoir crosswalks for USGS, USACE, RFC",
+    )
+    fields: ResCrosswalkFields = Field(
+        default=ResCrosswalkFields(), description="All field mappings for reservoir index file"
+    )
+
+
+class ResDAMapping(BaseModel):
+    """Mapping of reservoir DA types to integer code"""
+
+    level_pool: int = 1
+    usgs_persistence: int = 2
+    usace_persistence: int = 3
+    usbr_persistence: int = 7
+    rfc_forecast: int = 4
+    great_lakes: int = 6
+
+
+class AdhocResDAInput(BaseModel):
+    """Adhoc lakes input for reservoir DA. Must include lake_id and an rfc_field with the name of RFC gage."""
+
+    path: Path = Field(
+        default=Path("input/adhoc_lakes.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    layer: str = Field(default="adhoc_lakes", description="Layer in adhoc lakes gpkg")
+    run: bool = Field(
+        default=False,
+        description="Flag to use Adhoc Lake input. Must be set to false if file is not present.",
+    )
+    rfc_field: str = Field(default="locationId", description="Field containing RFC gage ID")
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    null_value: int = Field(default=-99999, description="Missing data value")
+
+
+class ResDAConfig(BaseModel):
+    """Configuration for reservoir DA"""
+
+    input_dir: Path = Field(
+        default=here() / "data/lakes",
+        description="Input directory. This will be prepended to all paths for other inputs",
+    )
+    all_level_pool: bool = Field(
+        default=False,
+        description="Flag to make all reservoirs level pool. This can be used in domains with no lake-gage crosswalk available.",
+    )
+    adhoc: AdhocResDAInput = Field(
+        default=AdhocResDAInput(),
+        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID/lake_id, site_no (gage), and dam_id (reference reservoirs) when possible.",
+    )
+    lake_id_field: str = Field(
+        default="lake_id", description="The common name of 'comid' field that is present in various datasets"
+    )
+    gage_id_field: str = Field(default="site_no", description="Name for output gage ID field")
+    da_type_field: str = Field(default="da_type", description="Name for output reservoir DA type field")
+    res_crosswalk: ResCrossWalkInput = Field(
+        default=ResCrossWalkInput(), description="Data for the gage-lake crosswalk"
+    )
+    great_lakes: bool = Field(
+        default=False, description="Flag to add the Great Lakes mappings to the dataframe"
+    )
+
+    generate_additional_crosswalk: bool = Field(
+        default=False,
+        description="Flag to generate lake:gage crosswalks for lakes without RFC or gage information.",
+    )
+
+    @model_validator(mode="after")
+    def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
+        """Inject input directories into each input config path"""
+        self.adhoc.path = self.input_dir / self.adhoc.path
+        self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
         return self
 
 
