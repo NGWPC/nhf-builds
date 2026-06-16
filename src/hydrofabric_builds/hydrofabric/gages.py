@@ -24,6 +24,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     build_usgs_gages_from_kmz,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
+    merge_rfc_gage,
     merge_usgs_shapefile_into_gages,
 )
 
@@ -192,6 +193,25 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.warning(f"gages: NWM calibration list not found, skipping: {usgs_cal_gages_path}")
 
         # ---------------------------------------------------------------------
+        # 6) Add RFC gages
+        # ---------------------------------------------------------------------
+        rfc_gages_path = local_root / gage_cfg.gages.inputs.rfc.path
+        nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
+
+        if rfc_gages_path.exists():
+            gages = merge_rfc_gage(
+                gages,
+                rfc_path=rfc_gages_path,
+                nwm_rfc_path=nwm_rfc_path,
+                rfc_id_col=gage_cfg.gages.inputs.rfc.id_col_name,
+                status_col=gage_cfg.gages.inputs.rfc.status_col_name,
+                nwm_gage_id=gage_cfg.gages.inputs.nwm_rfc.rfc_gage_id_col,
+                x_col=gage_cfg.gages.inputs.rfc.x_col_name,
+                y_col=gage_cfg.gages.inputs.rfc.y_col_name,
+            )
+        else:
+            logger.warning(f"gages: 'rfc' file list not found, skipping: {rfc_gages_path}")
+        # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set
         # ---------------------------------------------------------------------
         gages = append_from_routelink(
@@ -275,6 +295,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     # 13) Write final output and return
     # ---------------------------------------------------------------------
+    logger.info(f"total gages: {len(gages)}")
     output = cfg.output_dir / gage_cfg.gages.target.out_gpkg
     gpkg_layer_name = gage_cfg.gages.target.gpkg_layer_name
     gages = gages.to_crs(gage_cfg.gages.target.crs)

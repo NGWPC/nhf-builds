@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import pathlib
 import re
 import tempfile
@@ -9,6 +10,10 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import xarray as xr
+
+logger = logging.getLogger(__name__)
+
 
 # --- helpers to parse Name field ---
 _site_href_re = re.compile(r"site_no=(\d+)", re.I)
@@ -521,3 +526,72 @@ def merge_usgs_shapefile_into_gages(
         out = gpd.GeoDataFrame(out, geometry="geometry", crs=gages.crs)
 
     return out
+
+
+def merge_rfc_gage(
+    gages: gpd.GeoDataFrame,
+    rfc_path: Path,
+    nwm_rfc_path: Path,
+    rfc_id_col: str = "nws shef id",
+    status_col: str | None = "forecast status",
+    nwm_gage_id: str = "rfc_gage_id",
+    x_col: str | None = "longitude",
+    y_col: str | None = "latitude",
+    rfc_crs: str = "EPSG:4326",
+) -> gpd.GeoDataFrame:
+    """Adds RFC gages. Retains RFC gages from NWM v3 reservoir index if provided.
+
+    Set to retain only gages with all year forecasts. If NWM v3 reservoir index is provided, any matching
+    gages will be retained.
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master table
+    rfc_path : Path
+        Path to RFC station data
+    nwm_rfc_path : Path
+        Path to NWM reservoir index. If this does not exist, function will pass over
+    rfc_id_col : str, optional
+        Gage ID column in RFC data, by default "nws shef id"
+    status_col : str | None, optional
+        Forecast status column used to filter gages, by default "forecast status"
+    nwm_gage_id : str, optional
+        Gage ID in NWM reservoir index file, by default "rfc_gage_id"
+    x_col : str | None, optional
+        x geometry, by default "longitude"
+    y_col : str | None, optional
+        y geometry, by default "latitude"
+    rfc_crs : _type_, optional
+        CRS of RFC table, by default "EPSG:4326"
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    df_rfc = pd.read_csv(rfc_path)
+    df_rfc.loc[df_rfc[status_col] == "Forecasts are issued routinely year-round.", "priority"] = 1
+
+    if nwm_rfc_path.exists():
+        if ".nc" not in nwm_rfc_path.name:
+            logger.info(
+                "NWM reservoir index path with RFC gages is not type netcdf. Cannot be read. Filtering RFC gages by NWM reservoirs will be skipped."
+            )
+
+        else:
+            ds = xr.open_dataset(nwm_rfc_path)
+            df_nwm = ds[nwm_gage_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
+            df_rfc.loc[df_rfc[rfc_id_col].isin(df_nwm.values), "priority"] = 1
+
+    df_rfc = df_rfc.loc[df_rfc["priority"] == 1, [rfc_id_col, x_col, y_col]].copy()
+    gdf_rfc = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(x=df_rfc[x_col], y=df_rfc[y_col]),
+        data={"site_no": df_rfc[rfc_id_col]},
+        crs=rfc_crs,
+    )
+    gdf_rfc = gdf_rfc.to_crs(gages.crs)
+    gdf_rfc["status"] = "RFC"
+    gages = pd.concat([gages, gdf_rfc])
+    logger.info(f"Added {len(gdf_rfc)} RFC gages. Some may be dropped if outside domain.")
+    return gages

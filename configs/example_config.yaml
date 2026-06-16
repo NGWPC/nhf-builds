@@ -284,7 +284,17 @@ gages:
       routelink:
         path: routelink/RouteLink_CONUS_EPSG4326.gpkg
         gage_source_crs: EPSG:4326
-        id_col_name: gages
+        id_col_name:
+      rfc:
+        path: rfc/nwps_all_gauges_report.csv
+        id_col_name: nws shef id
+        status_col_name: forecast status
+        x_col_name: longitude
+        y_col_name: latitude
+        gage_source_crs: EPSG:4326
+      nwm_rfc:
+        nwm_path: rfc/reservoir_index_AnA.nc
+        nwm_id_col_name: 'rfc_gage_id'
     target:
       crs: EPSG:5070
       snap_tolerance_m: 100.0

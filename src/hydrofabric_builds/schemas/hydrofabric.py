@@ -627,6 +627,14 @@ class GageInput(BaseModel):
     x_col_name: str | None = None
     y_col_name: str | None = None
     area_col_name: str = "area_sqkm"
+    status_col_name: str | None = None
+
+
+class NWMRFCInput(BaseModel):
+    """NWM reservoir index file for retaining RFC gages"""
+
+    path: Path = Path("rfc/reservoir_index_AnA.nc")
+    rfc_gage_id_col: str = "rfc_gage_id"
 
 
 class GagesInputs(BaseModel):
@@ -652,6 +660,20 @@ class GagesInputs(BaseModel):
     )
     routelink: GageInput = Field(
         default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"))
+    )
+    rfc: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path(
+                "rfc/nwps_all_gauges_report.csv",
+                id_col_name="nws shef id",
+                x_col_name="longitude",
+                y_col_name="latitude",
+                status_col="forecast status",
+            )
+        )
+    )
+    nwm_rfc: NWMRFCInput = Field(
+        default=NWMRFCInput(), description="An NWM v3 reservoid index file with RFC gages to retain"
     )
 
 
