@@ -119,6 +119,7 @@ class HydrofabricCRS(Enum):
     HI = 32604
     PRVI = 6566
 
+
 class VegetationTypes(IntEnum):
     """IVGTYP vegetation types"""
 
@@ -149,9 +150,11 @@ class VegetationTypes(IntEnum):
     PLAYA = 25
     LAVA = 26
 
+
 class VegetationTypesCombined(IntEnum):
+    """Combined vegetation types"""
+
     MODERATE = 1
     FOREST = 2
     SPARSE = 3
     NA = 4
-
