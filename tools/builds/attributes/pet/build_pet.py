@@ -44,9 +44,8 @@ forested = [
 ]
 
 sparse = [
-    VegetationTypes.WOODED_TUNDRA.value,
-    VegetationTypes.HERBACEOUS_TUNDRA.value,
-    VegetationTypes.MIXED_TUNDRA.value,
+    VegetationTypes.URBAN_AND_BUILT_UP_LAND.value,
+    VegetationTypes.BARREN_OR_SPARSELY_VEGETATED.value,
 ]
 
 no_veg = [
@@ -54,8 +53,6 @@ no_veg = [
     VegetationTypes.SNOW_OR_ICE.value,
     VegetationTypes.PLAYA.value,
     VegetationTypes.LAVA.value,
-    VegetationTypes.URBAN_AND_BUILT_UP_LAND.value,
-    VegetationTypes.BARREN_OR_SPARSELY_VEGETATED.value,
     VegetationTypes.BARE_GROUND_TUNDRA.value,
 ]
 
