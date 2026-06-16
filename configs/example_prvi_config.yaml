@@ -184,7 +184,7 @@ divide_attributes:
       file_name: sac-sma/UZTWM.tif
       agg_type: mean
       field_name: uztwm_mean
-        vegetation_height:
+    vegetation_height:
       file_name: pet/veg_height.tif
       agg_type: mean
       field_name: vegetation_height
