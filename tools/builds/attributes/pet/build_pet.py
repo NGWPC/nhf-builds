@@ -29,7 +29,9 @@ moderate = [
     VegetationTypes.MIXED_SHRUBLAND_GRASSLAND.value,
     VegetationTypes.SAVANNA,
     VegetationTypes.HERBACEOUS_WETLAND.value,
-    VegetationTypes.WOODED_WETLAND.value,
+    VegetationTypes.WOODED_TUNDRA.value,
+    VegetationTypes.HERBACEOUS_TUNDRA.value,
+    VegetationTypes.MIXED_TUNDRA.value,
 ]
 
 forested = [
@@ -38,6 +40,7 @@ forested = [
     VegetationTypes.EVERGREEN_BROADLEAF_FOREST.value,
     VegetationTypes.EVERGREEN_NEEDLELEAF_FOREST.value,
     VegetationTypes.MIXED_FOREST.value,
+    VegetationTypes.WOODED_WETLAND.value,
 ]
 
 sparse = [
@@ -73,16 +76,20 @@ def built_pet(ivgtyp_path: Path, ivgtyp_file: Path, output_grouped: bool) -> Non
     -------
     None
     """
+    # read IVGTYP raster
     ivgtyp_raster = rioxarray.open_rasterio(os.path.join(ivgtyp_path, ivgtyp_file))
 
     if np.isnan(ivgtyp_raster.rio.nodata):
         ivgtyp_raster = ivgtyp_raster.rio.write_nodata(-9999)
     ivgtyp_raster = ivgtyp_raster.fillna(ivgtyp_raster.rio.nodata)
     ivgtyp_raster = ivgtyp_raster.astype(np.int32)
+
+    # group IVGTYP vegetation types in to moderate, forested, sparse and NA categories
     grouped = xr.apply_ufunc(group_types, ivgtyp_raster, vectorize=True)
     grouped = grouped.fillna(ivgtyp_raster.rio.nodata)
     grouped = grouped.astype(np.int32)
 
+    # loop through PET parameters and assign values based on grouped vegetation type
     for key, value in params.items():
         new_array = (
             grouped.where(grouped != 1, value[0])
@@ -91,8 +98,8 @@ def built_pet(ivgtyp_path: Path, ivgtyp_file: Path, output_grouped: bool) -> Non
             .where(grouped != 4, ivgtyp_raster.rio.nodata)
         )
 
+        # add geospatial attributes and write raster file
         new_array = new_array.assign_coords(x=ivgtyp_raster.x, y=ivgtyp_raster.y, band=ivgtyp_raster.band)
-
         new_array = new_array.rio.write_crs(ivgtyp_raster.rio.crs)
         new_array.rio.write_transform(ivgtyp_raster.rio.transform(), inplace=True)
         new_array.attrs = ivgtyp_raster.attrs
@@ -100,9 +107,9 @@ def built_pet(ivgtyp_path: Path, ivgtyp_file: Path, output_grouped: bool) -> Non
         filename = os.path.join(ivgtyp_path, f"{key}.tif")
         new_array.rio.to_raster(filename, tiled=True, compress="deflate")
 
+    # if true, output a grouped vegetation type raster if needed for checking the PET parameter rasters.
     if output_grouped:
         grouped = grouped.assign_coords(x=ivgtyp_raster.x, y=ivgtyp_raster.y, band=ivgtyp_raster.band)
-
         grouped.rio.write_crs(ivgtyp_raster.rio.crs, inplace=True)
         grouped.rio.write_transform(ivgtyp_raster.rio.transform(), inplace=True)
         grouped.attrs = ivgtyp_raster.attrs
