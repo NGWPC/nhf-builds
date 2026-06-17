@@ -172,7 +172,6 @@ def _check_gages_exist(
     res_gages = df_res_da.loc[~df_res_da[gage_id_field].isnull()].copy()
     missing_gages = res_gages.loc[~res_gages[gage_id_field].isin(gdf_gages[gage_id_field])].copy()
     len_missing = len(missing_gages)
-    missing_gages.to_csv("data/missing_gages2.csv")
 
     if len_missing > 0:
         logger.warning(
