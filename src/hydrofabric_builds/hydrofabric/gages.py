@@ -22,9 +22,11 @@ from hydrofabric_builds.streamflow_gauges.TXDOT_gages_builder import txdot_read_
 from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     add_missing_usgs_sites,
     build_usgs_gages_from_kmz,
+    merge_adhoc_lakes_gages,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
-    merge_rfc_gage,
+    merge_nid_gages,
+    merge_rfc_gages,
     merge_usgs_shapefile_into_gages,
 )
 
@@ -193,24 +195,53 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.warning(f"gages: NWM calibration list not found, skipping: {usgs_cal_gages_path}")
 
         # ---------------------------------------------------------------------
-        # 6) Add RFC gages
+        # 6) Add RFC gages from RFC, USACE, Adhoc
         # ---------------------------------------------------------------------
         rfc_gages_path = local_root / gage_cfg.gages.inputs.rfc.path
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
+        nid_path = local_root / gage_cfg.gages.inputs.nid.path
+        adhoc_path = local_root / gage_cfg.gages.inputs.adhoc_lakes.path
 
         if rfc_gages_path.exists():
-            gages = merge_rfc_gage(
+            gages = merge_rfc_gages(
                 gages,
                 rfc_path=rfc_gages_path,
                 nwm_rfc_path=nwm_rfc_path,
                 rfc_id_col=gage_cfg.gages.inputs.rfc.id_col_name,
                 status_col=gage_cfg.gages.inputs.rfc.status_col_name,
-                nwm_gage_id=gage_cfg.gages.inputs.nwm_rfc.rfc_gage_id_col,
+                nwm_rfc_id=gage_cfg.gages.inputs.nwm_rfc.rfc_id_col,
                 x_col=gage_cfg.gages.inputs.rfc.x_col_name,
                 y_col=gage_cfg.gages.inputs.rfc.y_col_name,
+                rfc_crs=gage_cfg.gages.inputs.rfc.gage_source_crs,
             )
         else:
-            logger.warning(f"gages: 'rfc' file list not found, skipping: {rfc_gages_path}")
+            logger.info(f"gages: 'rfc' file not found, skipping: {rfc_gages_path}")
+
+        if nid_path.exists():
+            gages = merge_nid_gages(
+                gages,
+                nid_path=nid_path,
+                nwm_rfc_path=nwm_rfc_path,
+                nid_id_col=gage_cfg.gages.inputs.nid.id_col_name,
+                nwm_usace_id=gage_cfg.gages.inputs.nwm_rfc.usace_id_col,
+                x_col=gage_cfg.gages.inputs.nid.x_col_name,
+                y_col=gage_cfg.gages.inputs.nid.y_col_name,
+                nid_crs=gage_cfg.gages.inputs.nid.gage_source_crs,
+            )
+        else:
+            logger.info(f"gages: 'nid' file not found, skipping: {nid_path}")
+
+        if adhoc_path.exists():
+            gages = merge_adhoc_lakes_gages(
+                gages,
+                adhoc_path=adhoc_path,
+                adhoc_gage_id=gage_cfg.gages.inputs.adhoc_lakes.id_col_name,
+                x_col=gage_cfg.gages.inputs.adhoc_lakes.x_col_name,
+                y_col=gage_cfg.gages.inputs.adhoc_lakes.y_col_name,
+                adhoc_crs=gage_cfg.gages.inputs.adhoc_lakes.gage_source_crs,
+            )
+        else:
+            logger.info(f"gages: 'adhoc lakes' file list not found, skipping: {adhoc_path}")
         # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set
         # ---------------------------------------------------------------------

@@ -631,10 +631,11 @@ class GageInput(BaseModel):
 
 
 class NWMRFCInput(BaseModel):
-    """NWM reservoir index file for retaining RFC gages"""
+    """NWM reservoir index file for retaining RFC and USACE gages. USACE IDs are found in NID."""
 
     path: Path = Path("rfc/reservoir_index_AnA.nc")
-    rfc_gage_id_col: str = "rfc_gage_id"
+    rfc_id_col: str = "rfc_gage_id"
+    usace_id_col: str = "usace_gage_id"
 
 
 class GagesInputs(BaseModel):
@@ -674,6 +675,16 @@ class GagesInputs(BaseModel):
     )
     nwm_rfc: NWMRFCInput = Field(
         default=NWMRFCInput(), description="An NWM v3 reservoid index file with RFC gages to retain"
+    )
+    nid: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("rfc/NID2019_U.csv", id_col_name="NIDID", x_col_name="LONGITUDE", y_col_name="LATITUDE")
+        )
+    )
+    adhoc_lakes: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
+        )
     )
 
 

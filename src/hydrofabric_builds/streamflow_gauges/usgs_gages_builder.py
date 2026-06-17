@@ -528,16 +528,16 @@ def merge_usgs_shapefile_into_gages(
     return out
 
 
-def merge_rfc_gage(
+def merge_rfc_gages(
     gages: gpd.GeoDataFrame,
     rfc_path: Path,
     nwm_rfc_path: Path,
     rfc_id_col: str = "nws shef id",
     status_col: str | None = "forecast status",
-    nwm_gage_id: str = "rfc_gage_id",
+    nwm_rfc_id: str = "rfc_gage_id",
     x_col: str | None = "longitude",
     y_col: str | None = "latitude",
-    rfc_crs: str = "EPSG:4326",
+    rfc_crs: str | int = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
     """Adds RFC gages. Retains RFC gages from NWM v3 reservoir index if provided.
 
@@ -556,7 +556,7 @@ def merge_rfc_gage(
         Gage ID column in RFC data, by default "nws shef id"
     status_col : str | None, optional
         Forecast status column used to filter gages, by default "forecast status"
-    nwm_gage_id : str, optional
+    nwm_rfc_id : str, optional
         Gage ID in NWM reservoir index file, by default "rfc_gage_id"
     x_col : str | None, optional
         x geometry, by default "longitude"
@@ -581,7 +581,7 @@ def merge_rfc_gage(
 
         else:
             ds = xr.open_dataset(nwm_rfc_path)
-            df_nwm = ds[nwm_gage_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
+            df_nwm = ds[nwm_rfc_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
             df_rfc.loc[df_rfc[rfc_id_col].isin(df_nwm.values), "priority"] = 1
 
     df_rfc = df_rfc.loc[df_rfc["priority"] == 1, [rfc_id_col, x_col, y_col]].copy()
@@ -594,4 +594,112 @@ def merge_rfc_gage(
     gdf_rfc["status"] = "RFC"
     gages = pd.concat([gages, gdf_rfc])
     logger.info(f"Added {len(gdf_rfc)} RFC gages. Some may be dropped if outside domain.")
+    return gages
+
+
+def merge_nid_gages(
+    gages: gpd.GeoDataFrame,
+    nid_path: Path,
+    nwm_rfc_path: Path,
+    nwm_usace_id: str = "usace_gage_id",
+    nid_id_col: str = "NIDID",
+    x_col: str | None = "LONGITUDE",
+    y_col: str | None = "LATITUDE",
+    nid_crs: str | int = "EPSG:4326",
+) -> gpd.GeoDataFrame:
+    """Adds USACE gages that are in NWM v3 reservoir index. IDs are extracted from NID (National Inventory of Dams)
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master table
+    nid_path : Path
+        Path to NID csv
+    nwm_rfc_path : Path
+        Path to NWM reservoir index. If this does not exist, function will pass over_
+    nwm_usace_id : str, optional
+        Gage ID in NWM reservoir index USACE table, by default "usace_gage_id"
+    nid_id_col : str, optional
+        Gage ID in NID table, by default 'NIDID'
+    x_col : str | None, optional
+        x geometry, by default "LONGITUDE"
+    y_col : str | None, optional
+        y geometry, by default "LATITUDE"
+    nid_crs : _str, optional
+        CRS of NID table, by default "EPSG:4326"
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    df_nid = pd.read_csv(nid_path)
+
+    if nwm_rfc_path.exists():
+        if ".nc" not in nwm_rfc_path.name:
+            logger.info(
+                "NWM reservoir index path with RFC gages is not type netcdf. Cannot be read. Filtering RFC gages by NWM reservoirs will be skipped."
+            )
+
+        else:
+            ds = xr.open_dataset(nwm_rfc_path)
+            df_nwm = ds[nwm_usace_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
+            df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
+
+    gdf_nid = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
+        data={"site_no": df_nid[nid_id_col]},
+        crs=nid_crs,
+    )
+    gdf_nid = gdf_nid.to_crs(gages.crs)
+    gdf_nid["status"] = "USACE"
+    gages = pd.concat([gages, gdf_nid])
+    logger.info(
+        f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
+    )
+    return gages
+
+
+def merge_adhoc_lakes_gages(
+    gages: gpd.GeoDataFrame,
+    adhoc_path: Path,
+    adhoc_gage_id: str = "locationId",
+    x_col: str | None = "Lon",
+    y_col: str | None = "Lat",
+    adhoc_crs: str | int = "EPSG:4326",
+) -> gpd.GeoDataFrame:
+    """Adds gages from Adhoc Lakes introduced in Lakes Pipeline.
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master Table
+    adhoc_path : Path
+        Path to adhoc lakes GPKG
+    adhoc_gage_id : str, optional
+        Gage ID in adhoc table, by default "locationId"
+    x_col : str | None, optional
+        x geometry, by default "Lon"
+    y_col : str | None, optional
+        y geometry, by default "Lat"
+    adhoc_crs : _type_, optional
+        CRS of adhoc table, by default "EPSG:4326"
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    gdf_adhoc = gpd.read_file(adhoc_path)
+    gdf_adhoc = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(x=gdf_adhoc[x_col], y=gdf_adhoc[y_col]),
+        data={"site_no": gdf_adhoc[adhoc_gage_id]},
+        crs=adhoc_crs,
+    )
+    gdf_adhoc = gdf_adhoc.to_crs(gages.crs)
+    gdf_adhoc["status"] = "adhoc_lakes"
+    gages = pd.concat([gages, gdf_adhoc])
+    logger.info(
+        f"Added {len(gdf_adhoc)} gages from from adhoc lakes layer. Some may be dropped if outside domain."
+    )
     return gages
