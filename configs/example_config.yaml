@@ -251,6 +251,31 @@ divide_attributes:
       file_name: gw/zmax.tif
       agg_type: mean
       field_name: max_gw_storage
+    vegetation_height:
+      file_name: pet/veg_height.tif
+      agg_type: mean
+      field_name: vegetation_height
+    zero_plane_displacement_height:
+      file_name: pet/zero_plane.tif
+      agg_type: mean
+      field_name: zero_plane_displacement_height
+    momentum_transfer_roughness_length:
+      file_name: pet/momentum_transfer.tif
+      agg_type: mean
+      field_name: momentum_transfer_roughness_length
+    heat_transfer_roughness_length:
+      file_name: pet/heat_transfer.tif
+      agg_type: mean
+      field_name: heat_transfer_roughness_length
+    surface_longwave_emissivity:
+      file_name: pet/longwave_emissivity.tif
+      agg_type: mean
+      field_name: surface_longwave_emissivity
+    surface_shortwave_albedo:
+      file_name: pet/shortwave_albedo.tif
+      agg_type: mean
+      field_name: surface_shortwave_albedo
+
 
 
 gages:
