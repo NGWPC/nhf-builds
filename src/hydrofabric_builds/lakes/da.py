@@ -27,6 +27,8 @@ def _all_level_pool(
 
 def _read_res_index(
     ds: xr.Dataset,
+    active_rfc: pd.DataFrame | None = None,
+    active_gage_id: str = "nws shef id",
     res_da_field: str = "da_type",
     lake_id_field: str = "lake_id",
     usgs_gage_id_field: str = "usgs_gage_id",
@@ -37,7 +39,10 @@ def _read_res_index(
     rfc_lake_id_field: str = "rfc_lake_id",
     output_gage_field: str = "site_no",
 ) -> pd.DataFrame:
-    """Extract crosswalk values and add DA scheme"""
+    """Extract crosswalk values and add DA scheme
+
+    active_nws_gages is a table to filter RFC gages to active-only.
+    """
     df_list = []
 
     # Group the configurations for RFC, USGS, and USACE
@@ -57,6 +62,11 @@ def _read_res_index(
             )
             crosswalk[gage_field] = crosswalk[gage_field].apply(lambda x: x.decode("utf-8")).str.strip()
             crosswalk[res_da_field] = da_mapping
+
+            # for RFC gages, filter by active gages if the data is available
+            if gage_field == rfc_gage_id_field and active_rfc is not None:
+                crosswalk = crosswalk.loc[crosswalk[gage_field].isin(active_rfc[active_gage_id])].copy()
+
             crosswalk.rename(columns={gage_field: output_gage_field, lake_field: lake_id_field}, inplace=True)
             df_list.append(crosswalk)
 
@@ -117,7 +127,10 @@ def _merge(
     gid_field: str = "nhf_lake_id",
     lake_id_field: str = "lake_id",
 ) -> pd.DataFrame:
-    """Merge all dataframe sources and de-duplicate lake_id"""
+    """Merge all dataframe sources and de-duplicate lake_id
+
+    Active gages is a spreadsheet from OWP. This will eliminate gages that are no longer active by filtering with `nws_gage_id`
+    """
     df_lakes = df_lakes[[gid_field, lake_id_field]].copy()
 
     if not pd.api.types.is_object_dtype(df_lakes[lake_id_field].dtype):

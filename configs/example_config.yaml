@@ -293,8 +293,9 @@ gages:
         y_col_name: latitude
         gage_source_crs: EPSG:4326
       nwm_rfc:
-        nwm_path: rfc/reservoir_index_AnA.nc
-        nwm_id_col_name: 'rfc_gage_id'
+        path: rfc/reservoir_index_AnA.nc
+        rfc_id_col: 'rfc_gage_id'
+        usace_id_col: 'usace_gage_id'
     target:
       crs: EPSG:5070
       snap_tolerance_m: 100.0
@@ -446,3 +447,6 @@ res_da:
     null_value: -99999
   res_crosswalk:
     path: "input/reservoir_index_AnA.nc"
+  active_rfc:
+    path: input/nwps_all_gauges_report.csv
+    id_field: nws shef id

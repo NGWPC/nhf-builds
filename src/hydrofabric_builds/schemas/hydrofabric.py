@@ -664,21 +664,25 @@ class GagesInputs(BaseModel):
     )
     rfc: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path(
-                "rfc/nwps_all_gauges_report.csv",
-                id_col_name="nws shef id",
-                x_col_name="longitude",
-                y_col_name="latitude",
-                status_col="forecast status",
-            )
-        )
+            path=Path("rfc/nwps_all_gauges_report.csv"),
+            id_col_name="nws shef id",
+            x_col_name="longitude",
+            y_col_name="latitude",
+            status_col="forecast status",
+        ),
+        description="Table of active NWS gages. Retrieved from https://water.noaa.gov/about/data-and-web-services-catalog on 6/15/26",
     )
     nwm_rfc: NWMRFCInput = Field(
         default=NWMRFCInput(), description="An NWM v3 reservoid index file with RFC gages to retain"
     )
     nid: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path("rfc/NID2019_U.csv", id_col_name="NIDID", x_col_name="LONGITUDE", y_col_name="LATITUDE")
+            path=Path(
+                "rfc/NID2019_U.csv",
+            ),
+            id_col_name="NIDID",
+            x_col_name="LONGITUDE",
+            y_col_name="LATITUDE",
         )
     )
     adhoc_lakes: GageInput = Field(
@@ -1114,12 +1118,22 @@ class ResCrossWalkInput(BaseModel):
     """Reservoir crosswalk file ("reservoir_index_AnA.netcdf")"""
 
     path: Path = Field(
-        default=Path("inputs/reservoir_index_AnA.nc"),
+        default=Path("input/reservoir_index_AnA.nc"),
         description="File with reservoir crosswalks for USGS, USACE, RFC",
     )
     fields: ResCrosswalkFields = Field(
         default=ResCrosswalkFields(), description="All field mappings for reservoir index file"
     )
+
+
+class ActiveRFC(BaseModel):
+    """Describes table of active NWS gages for reservoir DA. This is optionally used in gages.
+
+    Retrieved from https://water.noaa.gov/about/data-and-web-services-catalog on 6/15/26
+    """
+
+    path: Path = Field(default=Path("input/nwps_all_gauges_report.csv"))
+    id_field: str = Field(default="nws shef id")
 
 
 class ResDAMapping(BaseModel):
@@ -1181,12 +1195,16 @@ class ResDAConfig(BaseModel):
         default=False,
         description="Flag to generate lake:gage crosswalks for lakes without RFC or gage information.",
     )
+    active_rfc: ActiveRFC = Field(
+        default=ActiveRFC(), description="Table of active NWS gages used to filter NWM reservoir index."
+    )
 
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Inject input directories into each input config path"""
         self.adhoc.path = self.input_dir / self.adhoc.path
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
+        self.active_rfc.path = self.input_dir / self.active_rfc.path
         return self
 
 

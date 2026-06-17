@@ -292,8 +292,8 @@ gages:
         y_col_name: latitude
         gage_source_crs: EPSG:4326
       nwm_rfc:
-        nwm_path: rfc/reservoir_index_GDL_AK.nc
-        nwm_id_col_name: 'rfc_gage_id'
+        path: rfc/reservoir_index_GDL_AK.nc
+        rfc_id_col_name: 'rfc_gage_id'
     target:
       crs: EPSG:3338
       snap_tolerance_m: 100.0
@@ -394,3 +394,6 @@ res_da:
     run: False
   res_crosswalk:
     path: "input/reservoir_index_GDL_AK.nc"
+  active_rfc:
+    path: input/nwps_all_gauges_report.csv
+    id_field: nws shef id

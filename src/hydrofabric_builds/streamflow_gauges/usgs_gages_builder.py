@@ -643,20 +643,25 @@ def merge_nid_gages(
 
         else:
             ds = xr.open_dataset(nwm_rfc_path)
-            df_nwm = ds[nwm_usace_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
-            df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
 
-    gdf_nid = gpd.GeoDataFrame(
-        geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
-        data={"site_no": df_nid[nid_id_col]},
-        crs=nid_crs,
-    )
-    gdf_nid = gdf_nid.to_crs(gages.crs)
-    gdf_nid["status"] = "USACE"
-    gages = pd.concat([gages, gdf_nid])
-    logger.info(
-        f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
-    )
+    if nwm_usace_id in ds.variables:
+        df_nwm = ds[nwm_usace_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
+        df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
+
+        gdf_nid = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
+            data={"site_no": df_nid[nid_id_col]},
+            crs=nid_crs,
+        )
+        gdf_nid = gdf_nid.to_crs(gages.crs)
+        gdf_nid["status"] = "USACE"
+        gages = pd.concat([gages, gdf_nid])
+        logger.info(
+            f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
+        )
+    else:
+        logger.info("No NID gages added because USACE crosswalk not available in NWM reservoir index.")
+
     return gages
 
 
