@@ -196,7 +196,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.warning(f"gages: NWM calibration list not found, skipping: {usgs_cal_gages_path}")
 
         # ---------------------------------------------------------------------
-        # 6) Add RFC gages from RFC, USACE, Adhoc
+        # 6) Add RFC gages from RFC, USACE, Adhoc, Canadian Great Lakes
         # ---------------------------------------------------------------------
         rfc_gages_path = local_root / gage_cfg.gages.inputs.rfc.path
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path

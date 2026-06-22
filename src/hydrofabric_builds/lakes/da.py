@@ -42,7 +42,7 @@ def _read_res_index(
 ) -> pd.DataFrame:
     """Extract crosswalk values and add DA scheme
 
-    active_rfc is a spreadsheet from OWP. This can beused to eliminate gages that are no
+    active_rfc is a spreadsheet from OWP. This can be used to eliminate gages that are no
     longer active by filtering with `active_gage_id`
 
     usgs_fix_list: Some USGS IDs are missing a leading 0. Optionally pass a list of gage IDs
