@@ -690,6 +690,10 @@ class GagesInputs(BaseModel):
             path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
         )
     )
+    canada_great_lakes: bool = Field(
+        default=False,
+        description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
+    )
 
 
 class GagesTarget(BaseModel):
@@ -974,15 +978,32 @@ class GreatLake(BaseModel):
     lake_id: str = Field(description="lake_id/NHD 2.2 COMID for Great Lake")
     fp_id: float = Field(description="NHF flowpath ID for Great Lake")
     site_no: str = Field(description="Gage ID / site_no for Great Lake")
+    lat: float | None = Field(default=None, description="Add a manual latitude if needed to place gage")
+    lon: float | None = Field(default=None, description="Add a manual longitude if needed to place gage")
+    data_source: str | None = Field(default=None, description="Data source of gage")
 
 
 class GreatLakesMapping(BaseModel):
     """All Great Lakes mappings"""
 
-    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885")
-    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130")
-    erie: GreatLake = GreatLake(lake_id="4800006", fp_id=-9999, site_no="02HA013")
-    ontario: GreatLake = GreatLake(lake_id="4800007", fp_id=-9999, site_no="IJC")
+    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885", data_source="USGS")
+    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130", data_source="USGS")
+    erie: GreatLake = GreatLake(
+        lake_id="4800006",
+        fp_id=-9999,
+        site_no="02HA013",
+        lat=42.93028,
+        lon=-78.91417,
+        data_source="Environment Canada: https://wateroffice.ec.gc.ca/report/real_time_e.html?stn=02HA013",
+    )
+    ontario: GreatLake = GreatLake(
+        lake_id="4800007",
+        fp_id=-9999,
+        site_no="IJC",
+        lat=45.00639,
+        lon=-74.79500,
+        data_source="International Lake Ontario-St. Lawrence River Board: https://ijc.org/en/loslrb/watershed/outflow-changes",
+    )
 
 
 class LakesConfig(BaseModel):
@@ -1197,6 +1218,10 @@ class ResDAConfig(BaseModel):
     )
     active_rfc: ActiveRFC = Field(
         default=ActiveRFC(), description="Table of active NWS gages used to filter NWM reservoir index."
+    )
+    usgs_fix_list: list[str] | None = Field(
+        default=None,
+        description="List of USGS site_no in the reservoir index that are missing a leading 0. These values will have 0 prepended during the pipeline.",
     )
 
     @model_validator(mode="after")

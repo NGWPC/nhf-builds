@@ -78,6 +78,7 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
             active_rfc=df_active_rfc,
             active_gage_id=cfg.res_da.active_rfc.id_field,
             output_gage_field=cfg.res_da.gage_id_field,
+            usgs_fix_list=cfg.res_da.usgs_fix_list,
             **cfg.res_da.res_crosswalk.fields.model_dump(),
         )
     )

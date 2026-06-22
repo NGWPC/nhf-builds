@@ -23,6 +23,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     add_missing_usgs_sites,
     build_usgs_gages_from_kmz,
     merge_adhoc_lakes_gages,
+    merge_canadian_great_lakes,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
     merge_nid_gages,
@@ -242,6 +243,10 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             )
         else:
             logger.info(f"gages: 'adhoc lakes' file list not found, skipping: {adhoc_path}")
+
+        if gage_cfg.gages.inputs.canada_great_lakes:
+            gages = merge_canadian_great_lakes(gages, great_lakes_cfg=cfg.lakes.great_lakes)
+
         # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set
         # ---------------------------------------------------------------------

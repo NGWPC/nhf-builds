@@ -12,6 +12,8 @@ import geopandas as gpd
 import pandas as pd
 import xarray as xr
 
+from hydrofabric_builds.schemas.hydrofabric import GreatLakesMapping
+
 logger = logging.getLogger(__name__)
 
 
@@ -707,4 +709,36 @@ def merge_adhoc_lakes_gages(
     logger.info(
         f"Added {len(gdf_adhoc)} gages from from adhoc lakes layer. Some may be dropped if outside domain."
     )
+    return gages
+
+
+def merge_canadian_great_lakes(
+    gages: gpd.GeoDataFrame, great_lakes_cfg: GreatLakesMapping
+) -> gpd.GeoDataFrame:
+    """Add Canadian Great Lakes (Erie, Ontario) gages from predefined values in GreatLakesMapping config.
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master Table
+    great_lakes_cfg : GreatLakesMapping
+        GreatLakesMapping config from schemas
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    erie = great_lakes_cfg.erie
+    ontario = great_lakes_cfg.ontario
+    gdf = gpd.GeoDataFrame(
+        data={
+            "site_no": [erie.site_no, ontario.site_no],
+            "status": ["canada_great_lakes", "canada_great_lakes"],
+        },
+        geometry=gpd.points_from_xy(x=[erie.lon, ontario.lon], y=[erie.lat, ontario.lat]),
+        crs=4326,
+    )
+    gages = pd.concat([gages, gdf])
+    logger.info("Added Canadian Great Lakes")
     return gages

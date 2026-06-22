@@ -38,10 +38,15 @@ def _read_res_index(
     rfc_gage_id_field: str = "rfc_gage_id",
     rfc_lake_id_field: str = "rfc_lake_id",
     output_gage_field: str = "site_no",
+    usgs_fix_list: list[str] | None = None,
 ) -> pd.DataFrame:
     """Extract crosswalk values and add DA scheme
 
-    active_nws_gages is a table to filter RFC gages to active-only.
+    active_rfc is a spreadsheet from OWP. This can beused to eliminate gages that are no
+    longer active by filtering with `active_gage_id`
+
+    usgs_fix_list: Some USGS IDs are missing a leading 0. Optionally pass a list of gage IDs
+    to prepend '0'
     """
     df_list = []
 
@@ -71,6 +76,13 @@ def _read_res_index(
             df_list.append(crosswalk)
 
     df_out = pd.concat(df_list, ignore_index=True)
+
+    # usgs_fix_list is a list of gages that need 0 prefix
+    if usgs_fix_list:
+        df_out.loc[df_out[output_gage_field].isin(usgs_fix_list), output_gage_field] = (
+            "0" + df_out[output_gage_field]
+        )
+
     return df_out
 
 
@@ -127,10 +139,7 @@ def _merge(
     gid_field: str = "nhf_lake_id",
     lake_id_field: str = "lake_id",
 ) -> pd.DataFrame:
-    """Merge all dataframe sources and de-duplicate lake_id
-
-    Active gages is a spreadsheet from OWP. This will eliminate gages that are no longer active by filtering with `nws_gage_id`
-    """
+    """Merge all dataframe sources and de-duplicate lake_id"""
     df_lakes = df_lakes[[gid_field, lake_id_field]].copy()
 
     if not pd.api.types.is_object_dtype(df_lakes[lake_id_field].dtype):

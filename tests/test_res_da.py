@@ -274,6 +274,15 @@ def test_read_res_index(res_index_path: Path) -> None:
     assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
 
 
+def test_read_res_index__usgs_fix_list(res_index_path: Path) -> None:
+    """Read the reservoir index and prepend a list of USGS site_no with 0."""
+    ds = xr.open_dataset(res_index_path)
+    df = _read_res_index(ds, usgs_fix_list=["137462010", "208250410", "21556525"])
+    assert {"site_no", "lake_id", "da_type"} == set(df.columns.values)
+    assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
+    assert len(df.loc[df["site_no"].isin(["0137462010", "0208250410", "021556525"])]) == 3
+
+
 def test_all_level_pool() -> None:
     df = pd.DataFrame(
         data={
