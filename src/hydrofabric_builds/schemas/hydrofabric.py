@@ -668,7 +668,7 @@ class GagesInputs(BaseModel):
             id_col_name="nws shef id",
             x_col_name="longitude",
             y_col_name="latitude",
-            status_col="forecast status",
+            status_col_name="forecast status",
         ),
         description="Table of active NWS gages. Retrieved from https://water.noaa.gov/about/data-and-web-services-catalog on 6/15/26",
     )

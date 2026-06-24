@@ -314,7 +314,7 @@ gages:
         gage_source_crs: EPSG:4326
       nwm_rfc:
         path: rfc/reservoir_index_GDL_AK.nc
-        rfc_id_col_name: 'rfc_gage_id'
+        rfc_id_col: 'rfc_gage_id'
     target:
       crs: EPSG:3338
       snap_tolerance_m: 100.0

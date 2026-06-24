@@ -739,6 +739,7 @@ def merge_canadian_great_lakes(
         geometry=gpd.points_from_xy(x=[erie.lon, ontario.lon], y=[erie.lat, ontario.lat]),
         crs=4326,
     )
+    gdf = gdf.to_crs(gages.crs)
     gages = pd.concat([gages, gdf])
     logger.info("Added Canadian Great Lakes")
     return gages
