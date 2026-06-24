@@ -39,7 +39,7 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
     """
     try:
         lakes = gpd.read_file(cfg.output_file_path, layer="lakes")
-    except DataLayerError:
+    except (DataLayerError, DataSourceError):
         logger.info("Lakes layer not available for Reservoir DA. Returning empty dataframe.")
         return pd.DataFrame(
             columns=[
@@ -71,9 +71,15 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
 
     logger.info("Retrieving reservoirs from crosswalk")
     ds = xr.open_dataset(cfg.res_da.res_crosswalk.path)
+    df_active_rfc = pd.read_csv(cfg.res_da.active_rfc.path) if cfg.res_da.active_rfc.path.exists() else None
     df_list.append(
         _read_res_index(
-            ds=ds, output_gage_field=cfg.res_da.gage_id_field, **cfg.res_da.res_crosswalk.fields.model_dump()
+            ds=ds,
+            active_rfc=df_active_rfc,
+            active_gage_id=cfg.res_da.active_rfc.id_field,
+            output_gage_field=cfg.res_da.gage_id_field,
+            usgs_fix_list=cfg.res_da.usgs_fix_list,
+            **cfg.res_da.res_crosswalk.fields.model_dump(),
         )
     )
     del ds

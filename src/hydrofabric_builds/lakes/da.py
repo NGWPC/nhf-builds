@@ -27,6 +27,8 @@ def _all_level_pool(
 
 def _read_res_index(
     ds: xr.Dataset,
+    active_rfc: pd.DataFrame | None = None,
+    active_gage_id: str = "nws shef id",
     res_da_field: str = "da_type",
     lake_id_field: str = "lake_id",
     usgs_gage_id_field: str = "usgs_gage_id",
@@ -36,8 +38,16 @@ def _read_res_index(
     rfc_gage_id_field: str = "rfc_gage_id",
     rfc_lake_id_field: str = "rfc_lake_id",
     output_gage_field: str = "site_no",
+    usgs_fix_list: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Extract crosswalk values and add DA scheme"""
+    """Extract crosswalk values and add DA scheme
+
+    active_rfc is a spreadsheet from OWP. This can be used to eliminate gages that are no
+    longer active by filtering with `active_gage_id`
+
+    usgs_fix_list: Some USGS IDs are missing a leading 0. Optionally pass a list of gage IDs
+    to prepend '0'
+    """
     df_list = []
 
     # Group the configurations for RFC, USGS, and USACE
@@ -57,10 +67,22 @@ def _read_res_index(
             )
             crosswalk[gage_field] = crosswalk[gage_field].apply(lambda x: x.decode("utf-8")).str.strip()
             crosswalk[res_da_field] = da_mapping
+
+            # for RFC gages, filter by active gages if the data is available
+            if gage_field == rfc_gage_id_field and active_rfc is not None:
+                crosswalk = crosswalk.loc[crosswalk[gage_field].isin(active_rfc[active_gage_id])].copy()
+
             crosswalk.rename(columns={gage_field: output_gage_field, lake_field: lake_id_field}, inplace=True)
             df_list.append(crosswalk)
 
     df_out = pd.concat(df_list, ignore_index=True)
+
+    # usgs_fix_list is a list of gages that need 0 prefix
+    if usgs_fix_list:
+        df_out.loc[df_out[output_gage_field].isin(usgs_fix_list), output_gage_field] = (
+            "0" + df_out[output_gage_field]
+        )
+
     return df_out
 
 

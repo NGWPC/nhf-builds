@@ -310,13 +310,25 @@ gages:
         path: routelink/RouteLink_CONUS_EPSG4326.gpkg
         gage_source_crs: EPSG:4326
         id_col_name: gages
+      rfc:
+        path: rfc/nwps_all_gauges_report.csv
+        id_col_name: nws shef id
+        status_col_name: forecast status
+        x_col_name: longitude
+        y_col_name: latitude
+        gage_source_crs: EPSG:4326
+      nwm_rfc:
+        path: rfc/reservoir_index_AnA.nc
+        rfc_id_col: 'rfc_gage_id'
+        usace_id_col: 'usace_gage_id'
+      canada_great_lakes: True
     target:
       crs: EPSG:5070
       snap_tolerance_m: 100.0
       update_existing: True
       exclude_ids: ["15056210", "15493000"]
-      out_gpkg: gages/gages_v1.gpkg
-      gpkg_layer_name: gages_v1
+      out_gpkg: gages/gages_v1.1.gpkg
+      gpkg_layer_name: gages_v1.1
 
   ###--------------------------------------------
   ## A file for USGS upstream area and basins shapefiles
@@ -461,3 +473,7 @@ res_da:
     null_value: -99999
   res_crosswalk:
     path: "input/reservoir_index_AnA.nc"
+  active_rfc:
+    path: input/nwps_all_gauges_report.csv
+    id_field: nws shef id
+  usgs_fix_list: ['137462010', '208250410', '21556525']

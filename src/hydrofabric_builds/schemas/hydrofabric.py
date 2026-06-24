@@ -627,6 +627,15 @@ class GageInput(BaseModel):
     x_col_name: str | None = None
     y_col_name: str | None = None
     area_col_name: str = "area_sqkm"
+    status_col_name: str | None = None
+
+
+class NWMRFCInput(BaseModel):
+    """NWM reservoir index file for retaining RFC and USACE gages. USACE IDs are found in NID."""
+
+    path: Path = Path("rfc/reservoir_index_AnA.nc")
+    rfc_id_col: str = "rfc_gage_id"
+    usace_id_col: str = "usace_gage_id"
 
 
 class GagesInputs(BaseModel):
@@ -652,6 +661,38 @@ class GagesInputs(BaseModel):
     )
     routelink: GageInput = Field(
         default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"))
+    )
+    rfc: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("rfc/nwps_all_gauges_report.csv"),
+            id_col_name="nws shef id",
+            x_col_name="longitude",
+            y_col_name="latitude",
+            status_col_name="forecast status",
+        ),
+        description="Table of active NWS gages. Retrieved from https://water.noaa.gov/about/data-and-web-services-catalog on 6/15/26",
+    )
+    nwm_rfc: NWMRFCInput = Field(
+        default=NWMRFCInput(), description="An NWM v3 reservoid index file with RFC gages to retain"
+    )
+    nid: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path(
+                "rfc/NID2019_U.csv",
+            ),
+            id_col_name="NIDID",
+            x_col_name="LONGITUDE",
+            y_col_name="LATITUDE",
+        )
+    )
+    adhoc_lakes: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
+        )
+    )
+    canada_great_lakes: bool = Field(
+        default=False,
+        description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
     )
 
 
@@ -937,15 +978,32 @@ class GreatLake(BaseModel):
     lake_id: str = Field(description="lake_id/NHD 2.2 COMID for Great Lake")
     fp_id: float = Field(description="NHF flowpath ID for Great Lake")
     site_no: str = Field(description="Gage ID / site_no for Great Lake")
+    lat: float | None = Field(default=None, description="Add a manual latitude if needed to place gage")
+    lon: float | None = Field(default=None, description="Add a manual longitude if needed to place gage")
+    data_source: str | None = Field(default=None, description="Data source of gage")
 
 
 class GreatLakesMapping(BaseModel):
     """All Great Lakes mappings"""
 
-    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885")
-    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130")
-    erie: GreatLake = GreatLake(lake_id="4800006", fp_id=-9999, site_no="02HA013")
-    ontario: GreatLake = GreatLake(lake_id="4800007", fp_id=-9999, site_no="IJC")
+    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885", data_source="USGS")
+    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130", data_source="USGS")
+    erie: GreatLake = GreatLake(
+        lake_id="4800006",
+        fp_id=-9999,
+        site_no="02HA013",
+        lat=42.93028,
+        lon=-78.91417,
+        data_source="Environment Canada: https://wateroffice.ec.gc.ca/report/real_time_e.html?stn=02HA013",
+    )
+    ontario: GreatLake = GreatLake(
+        lake_id="4800007",
+        fp_id=-9999,
+        site_no="IJC",
+        lat=45.00639,
+        lon=-74.79500,
+        data_source="International Lake Ontario-St. Lawrence River Board: https://ijc.org/en/loslrb/watershed/outflow-changes",
+    )
 
 
 class LakesConfig(BaseModel):
@@ -1081,12 +1139,22 @@ class ResCrossWalkInput(BaseModel):
     """Reservoir crosswalk file ("reservoir_index_AnA.netcdf")"""
 
     path: Path = Field(
-        default=Path("inputs/reservoir_index_AnA.nc"),
+        default=Path("input/reservoir_index_AnA.nc"),
         description="File with reservoir crosswalks for USGS, USACE, RFC",
     )
     fields: ResCrosswalkFields = Field(
         default=ResCrosswalkFields(), description="All field mappings for reservoir index file"
     )
+
+
+class ActiveRFC(BaseModel):
+    """Describes table of active NWS gages for reservoir DA. This is optionally used in gages.
+
+    Retrieved from https://water.noaa.gov/about/data-and-web-services-catalog on 6/15/26
+    """
+
+    path: Path = Field(default=Path("input/nwps_all_gauges_report.csv"))
+    id_field: str = Field(default="nws shef id")
 
 
 class ResDAMapping(BaseModel):
@@ -1148,12 +1216,20 @@ class ResDAConfig(BaseModel):
         default=False,
         description="Flag to generate lake:gage crosswalks for lakes without RFC or gage information.",
     )
+    active_rfc: ActiveRFC = Field(
+        default=ActiveRFC(), description="Table of active NWS gages used to filter NWM reservoir index."
+    )
+    usgs_fix_list: list[str] | None = Field(
+        default=None,
+        description="List of USGS site_no in the reservoir index that are missing a leading 0. These values will have 0 prepended during the pipeline.",
+    )
 
     @model_validator(mode="after")
     def inject_dirs(self: Any) -> Self:  # type: ignore[misc,type-var]
         """Inject input directories into each input config path"""
         self.adhoc.path = self.input_dir / self.adhoc.path
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
+        self.active_rfc.path = self.input_dir / self.active_rfc.path
         return self
 
 
