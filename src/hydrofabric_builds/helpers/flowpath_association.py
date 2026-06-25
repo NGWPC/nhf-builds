@@ -1,8 +1,13 @@
 """Helpers for associating geometries with reference flowpaths"""
 
+import logging
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
+import rustworkx as rx
+
+logger = logging.getLogger(__name__)
 
 
 def associate_flowpaths_nearest_point(
@@ -153,6 +158,138 @@ def join_attributes(
         gdf_merged["attrib_src"] = attrib_src_path.name
 
     return gdf_merged
+
+
+def make_vfp_graph(vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame) -> tuple[rx.PyDiGraph, dict[str, int]]:
+    """Build graph from virtual flowpaths and virtual nexus
+
+    Parameters
+    ----------
+    vfp : gpd.GeoDataFrame
+        virtual flowpath geodataframe
+    vn : gpd.GeoDataFrame
+        virtual nexus geodataframe
+
+    Returns
+    -------
+    tuple[rx.PyDiGraph, dict[str, int]]
+        PyDiGraph of virtual network, dictionary of virtual flowpath id : integer index used in graph
+    """
+    edges = (
+        vfp[["virtual_fp_id", "dn_virtual_nex_id"]]
+        .merge(
+            vn[["virtual_nex_id", "dn_virtual_fp_id"]],
+            how="left",
+            left_on="dn_virtual_nex_id",
+            right_on="virtual_nex_id",
+        )
+        .rename(columns={"dn_virtual_fp_id": "to_vfp_id"})[["virtual_fp_id", "to_vfp_id"]]
+    )
+
+    edges["virtual_fp_id"] = edges["virtual_fp_id"].astype(pd.Int64Dtype()).astype(str)
+    edges["to_vfp_id"] = edges["to_vfp_id"].astype(pd.Int64Dtype()).astype(str)
+    all_ids = pd.concat([edges["virtual_fp_id"], edges["to_vfp_id"]]).unique()
+    id_to_idx = {fp_id: idx for idx, fp_id in enumerate(all_ids)}
+
+    # Build directed graph from edge list
+    graph: rx.PyDiGraph = rx.PyDiGraph()
+    graph.add_nodes_from(range(len(all_ids)))
+    graph.extend_from_edge_list(
+        [
+            (id_to_idx[src], id_to_idx[dst])
+            for src, dst in zip(edges["virtual_fp_id"], edges["to_vfp_id"], strict=True)
+        ]
+    )
+
+    return graph, id_to_idx
+
+
+def associate_flowpaths_polyon_graph(
+    gdf_poly: gpd.GeoDataFrame,
+    gdf_vfp: gpd.GeoDataFrame,
+    graph: rx.PyDiGraph,
+    id_to_idx: dict[str, str],
+    fp_id: str,
+    poly_id: str,
+    intersection_length_min_m: int = 3,
+) -> gpd.GeoDataFrame:
+    """Associate polygon data with the intersecting flowpath with the largest subgraph (ancestors)
+
+    Parameters
+    ----------
+    gdf_poly : gpd.GeoDataFrame
+        polygon geodataframe (e.g. lakes)
+    gdf_vfp : gpd.GeoDataFrame
+       virtual flowpaths geodataframe, unmodified
+    graph : rx.PyDiGraph
+        virtual flowpath graph
+    id_to_idx : dict[str, str]
+        mapping of virtual flowpath ID to integer index used in graph
+    fp_id : str
+        field name for flowpath/virtual flowpath
+    poly_id : str
+        field name for polygon ID
+    intersection_length_min_m : int, optional
+        If a path intersects the polygon by less than this value, it will be removed. This is to handle
+        frequent cases where flowpaths only overlap by <1 meter. If the small intersection is used
+        the lake will route water too far downstream, by default 3 meters
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        _description_
+    """
+    # Cast all IDs to string
+    gdf_poly[poly_id] = gdf_poly[poly_id].astype(pd.Int64Dtype()).astype(str)
+    gdf_vfp[fp_id] = gdf_vfp[fp_id].astype(pd.Int64Dtype()).astype(str)
+
+    # intersect polygons and linestrings resulting in linestring intersections
+    int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
+
+    poly_fp_pairs = {}
+    missing_keys = []
+
+    # process each polygon to find flowpath with most ancestors (largest subgraph)
+    for poly in int_vfp[poly_id].unique():
+        # for each polygon, get all intersecting flowpaths
+        # for each intersecting flowpath, check the intersection length
+        # if the intersection length > minimum intersection length, keep flowpaths
+        candidates = int_vfp.loc[int_vfp[poly_id] == poly, [fp_id, "geometry"]]
+        single_poly = gdf_poly.loc[gdf_poly[poly_id] == poly, [poly_id, "geometry"]]
+        int = single_poly.overlay(candidates, how="intersection", keep_geom_type=False)
+        int = int.loc[int["geometry"].length > intersection_length_min_m]
+
+        # track which flowpath has most ancestors and the flowpath ID
+        max_ancestors = 0
+        max_fp = None
+
+        # for each candidate, get a list of ancestors
+        # save the candidate with largest subgraph / most ancestors
+        for cand in int[fp_id].values:
+            try:
+                ind = id_to_idx[cand]
+                vals = list(rx.ancestors(graph, ind))
+
+                # set max ancestor count and candidate
+                # including >= is to handle 0 if the only cand is 0
+                if len(vals) >= max_ancestors:
+                    max_ancestors = len(vals)
+                    max_fp = cand
+            except KeyError:
+                missing_keys.append(cand)
+                continue
+
+        poly_fp_pairs[poly] = max_fp
+
+    if missing_keys:
+        logger.warning(
+            f"Missing flowpath IDs detected in flowpath graph. Graph may be misconstructed. Keys: {missing_keys}"
+        )
+
+    # join flowpaths back to polygons
+    df_pairs = pd.DataFrame(data={poly_id: poly_fp_pairs.keys(), fp_id: poly_fp_pairs.values()})
+    gdf_poly = gdf_poly.merge(df_pairs, on=poly_id, how="left")
+    return gdf_poly
 
 
 def associate_flowpaths_polygon_outlet(
