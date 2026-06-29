@@ -149,6 +149,12 @@ def join_attributes(
             if attrib_src_key in attrib_src_fields_valid:
                 attrib_src_fields_valid.remove(attrib_src_key)
 
+        if ~pd.api.types.is_object_dtype(gdf_attrib_src[attrib_src_key]):
+            gdf_attrib_src[attrib_src_key] = gdf_attrib_src[attrib_src_key].astype(str)
+
+        if ~pd.api.types.is_object_dtype(gdf[attrib_dst_key]):
+            gdf[attrib_dst_key] = gdf[attrib_dst_key].astype(str)
+
         gdf_merged = gdf.merge(
             gdf_attrib_src[[attrib_src_key] + attrib_src_fields_valid],
             how="left",
@@ -208,9 +214,9 @@ def associate_flowpaths_polyon_graph(
     gdf_poly: gpd.GeoDataFrame,
     gdf_vfp: gpd.GeoDataFrame,
     graph: rx.PyDiGraph,
-    id_to_idx: dict[str, str],
-    fp_id: str,
+    id_to_idx: dict[str, int],
     poly_id: str,
+    vfp_id: str = "virtual_fp_id",
     intersection_length_min_m: int = 3,
 ) -> gpd.GeoDataFrame:
     """Associate polygon data with the intersecting flowpath with the largest subgraph (ancestors)
@@ -241,7 +247,7 @@ def associate_flowpaths_polyon_graph(
     """
     # Cast all IDs to string
     gdf_poly[poly_id] = gdf_poly[poly_id].astype(pd.Int64Dtype()).astype(str)
-    gdf_vfp[fp_id] = gdf_vfp[fp_id].astype(pd.Int64Dtype()).astype(str)
+    gdf_vfp[vfp_id] = gdf_vfp[vfp_id].astype(pd.Int64Dtype()).astype(str)
 
     # intersect polygons and linestrings resulting in linestring intersections
     int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
@@ -254,18 +260,18 @@ def associate_flowpaths_polyon_graph(
         # for each polygon, get all intersecting flowpaths
         # for each intersecting flowpath, check the intersection length
         # if the intersection length > minimum intersection length, keep flowpaths
-        candidates = int_vfp.loc[int_vfp[poly_id] == poly, [fp_id, "geometry"]]
+        candidates = int_vfp.loc[int_vfp[poly_id] == poly, [vfp_id, "geometry"]]
         single_poly = gdf_poly.loc[gdf_poly[poly_id] == poly, [poly_id, "geometry"]]
         int = single_poly.overlay(candidates, how="intersection", keep_geom_type=False)
         int = int.loc[int["geometry"].length > intersection_length_min_m]
 
         # track which flowpath has most ancestors and the flowpath ID
+        # for each candidate, get a list of ancestors
+        # save the candidate with largest subgraph / most ancestors
         max_ancestors = 0
         max_fp = None
 
-        # for each candidate, get a list of ancestors
-        # save the candidate with largest subgraph / most ancestors
-        for cand in int[fp_id].values:
+        for cand in int[vfp_id].values:
             try:
                 ind = id_to_idx[cand]
                 vals = list(rx.ancestors(graph, ind))
@@ -287,8 +293,10 @@ def associate_flowpaths_polyon_graph(
         )
 
     # join flowpaths back to polygons
-    df_pairs = pd.DataFrame(data={poly_id: poly_fp_pairs.keys(), fp_id: poly_fp_pairs.values()})
+    df_pairs = pd.DataFrame(data={poly_id: poly_fp_pairs.keys(), vfp_id: poly_fp_pairs.values()})
     gdf_poly = gdf_poly.merge(df_pairs, on=poly_id, how="left")
+    gdf_poly["geometry"] = gdf_poly["geometry"].centroid
+    gdf_poly[vfp_id] = pd.to_numeric(gdf_poly[vfp_id]).astype(pd.Int64Dtype())
     return gdf_poly
 
 

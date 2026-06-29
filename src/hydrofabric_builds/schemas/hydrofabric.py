@@ -873,8 +873,8 @@ class NWMLakeInput(BaseModel):
         default=500.0,
         description="Distance between NWM lake and reference reservoirs used when improving NWM lake placement.",
     )
-    min_preferred_intersection_len_m: float = Field(
-        default=10.0,
+    intersection_length_min_m: float = Field(
+        default=3.0,
         description="Minimum prefered intersection lenght when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
     )
     id_field: str = Field(default="newID", description="ID field for NWM lakes input")
@@ -939,8 +939,8 @@ class RefWaterbodyInput(BaseModel):
     output_id_field: str = Field(
         default="lake_id", description="ID field to change name to for reference waterbodies"
     )
-    min_preferred_intersection_len_m: float = Field(
-        default=10.0,
+    intersection_length_min_m: float = Field(
+        default=3.0,
         description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
     )
     attrib_src_path: Path | None = Field(
