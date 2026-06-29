@@ -842,6 +842,10 @@ class NWMLakeInput(BaseModel):
         default=Path("input/nwm_lakes.gpkg"),
         description="Source path. LakesConfig will inject preceding input path.",
     )
+    buffered_path: Path = Field(
+        default=Path("input/nwm_lakes_sconus_input_500m_buffer.gpkg"),
+        description="Source path, with polygons buffered out (for validating duplicate lake points). LakesConfig will inject preceding input path.",
+    )
     layer: str = Field(default="lakes", description="GPKG layer")
     fp_associated_path: Path = Field(
         default=Path("output/fp_associated.gpkg"),
@@ -1063,6 +1067,14 @@ class LakesConfig(BaseModel):
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
     )
     great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
+    validate_duplicates: bool = Field(
+        default=False,
+        description="Flag to search for duplicate lake points during lakes validation. Defaults to false",
+    )
+    save_duplicate_gpkgs: bool = Field(
+        default=False,
+        description="Flag to save the resulting duplicate lake points/polygons as geopackages. Defaults to false",
+    )
     fields: list[str] = Field(
         default=[
             "dam_id",
