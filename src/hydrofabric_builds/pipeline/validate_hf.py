@@ -259,15 +259,18 @@ def find_lake_duplicates(
     """
     # Standardize to the points' CRS (should be ESRI:5070) for consistent spatial operations
     # EPSG:5070 uses meters, so a 1000m buffer is exactly 1km
+    logger.info("Standardizing CRS between datasets...")
     target_crs = lakes_layer.crs
     if buffered_nwm_lakes.crs != target_crs:
         buffered_nwm_lakes = buffered_nwm_lakes.to_crs(target_crs)
 
     # Use overlay to keep only the NHF points that lie within the buffered NWM lake polygons
+    logger.info("Performing spatial overlay intersection...")
     intersection_gdf = gpd.overlay(lakes_layer, buffered_nwm_lakes, how="intersection")
 
-    # Group by the NWM lake polygon identifier ('newID') to find which NWM lakes capture multiple NHF lake points
+    # Group by the NWM lake polygon identifier to find which NWM lakes capture multiple NHF lake points
     # Transform 'count' gives us the total number of entries in that group for each row
+    logger.info("Finding all NWM lake polygons that contain multiple NHF lake points...")
     intersection_gdf["point_count_per_poly"] = intersection_gdf.groupby(id_col)["lake_id"].transform("count")
     intersection_gdf = intersection_gdf.drop_duplicates(subset="lake_id")
 
@@ -280,29 +283,40 @@ def find_lake_duplicates(
 
     # Add NWM lake geometries to the found NWM lakes
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.drop_duplicates(subset=id_col)
-    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.merge(buffered_nwm_lakes[['newID', 'geometry']], on='newID')
+    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.merge(buffered_nwm_lakes[[id_col, "geometry"]], on=id_col)
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.drop(columns=["geometry_x"])
-    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.rename(columns={'geometry_y': 'geometry'})
+    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.rename(columns={"geometry_y": "geometry"})
 
     # Clean up dataframe to only include the requested columns and geometry
+    logger.info("Dropping unneeded columns from results...")
     polygon_columns_to_keep = [id_col, "point_count_per_poly", "geometry"]
-    point_columns_to_keep = ["lake_id", "newID", "dam_id", "geometry"]
+    point_columns_to_keep = ["lake_id", id_col, "dam_id", "geometry"]
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points[polygon_columns_to_keep]
     nhf_points_no_match = nhf_points_no_match[point_columns_to_keep]
 
     # Create output dict and populate it with information to report back
-    nwm_lakes_to_report = dict()
-    for x in set(nwm_lake_mult_nhf_points["newID"]):
-        a = nhf_points_no_match.loc[(nhf_points_no_match["newID"] == x)]["lake_id"].tolist()
+    logger.info("Populating validation output dictionary...")
+    nwm_lakes_to_report = {}
+    for x in set(nwm_lake_mult_nhf_points[id_col]):
+        a = nhf_points_no_match.loc[(nhf_points_no_match[id_col] == x)]["lake_id"].tolist()
         if len(a) != 0:
             nwm_lakes_to_report[x] = a
-    nwm_lakes_to_report_gdf = nwm_lake_mult_nhf_points[nwm_lake_mult_nhf_points['newID'].isin(nwm_lakes_to_report.keys())]
+    nwm_lakes_to_report_gdf = nwm_lake_mult_nhf_points[nwm_lake_mult_nhf_points[id_col].isin(nwm_lakes_to_report.keys())]
+
+    if nwm_lakes_to_report:
+        logger.info(f"{len(nwm_lakes_to_report)} lakes found with duplicate point(s).")
+    else:
+        logger.info(f"No lakes were found with any duplicate points!")
 
     # Save results as a geopackage, if wanted
     if save_duplicate_gpkgs:
-        nwm_lakes_to_report_gdf.to_file(duplicate_gpkg_save_dir / f"nwm_problem_lake_polygons.gpkg", layer="multi_point_lakes", driver="GPKG")
-        nhf_points_no_match.to_file(duplicate_gpkg_save_dir / f"nhf_problem_lake_points.gpkg", layer="problem_lake_points", driver="GPKG")
+        logger.info(f"Saving geopackages with problem lake points/polygons. Output dir: {duplicate_gpkg_save_dir}")
+        nwm_lakes_to_report_gdf.to_file(duplicate_gpkg_save_dir / "nwm_problem_lake_polygons.gpkg", layer="multi_point_lakes", driver="GPKG")
+        nhf_points_no_match.to_file(duplicate_gpkg_save_dir / "nhf_problem_lake_points.gpkg", layer="problem_lake_points", driver="GPKG")
+    else:
+        logger.info("Skipping saving geopackage results...")
 
+    logger.info("Lake duplication validation complete!")
     return nwm_lakes_to_report
 
 
@@ -336,6 +350,7 @@ def validate_lakes(
     list
         a list of missing lakes, lakes with no flowpaths/virtual flowpath, and lakes with multiple (duplicate) points
     """
+    logger.info("Loading NHF and NWM Lakes for validation...")
     try:
         lakes_layer = gpd.read_file(gpkg_path_filename, layer="lakes")
     except FileNotFoundError:
@@ -343,7 +358,7 @@ def validate_lakes(
         logger.warning(error_str)
         return [error_str]
     except ValueError:
-        error_str = f"Error reading gages layer from {gpkg_path_filename}"
+        error_str = f"Error reading 'lakes' layer from {gpkg_path_filename}"
         logger.warning(error_str)
         return [error_str]
 
@@ -358,40 +373,56 @@ def validate_lakes(
 
     # Normalize types: NHF lake_id is often str, NWM id_col is often int
     # Cast both to int for a fair comparison; skip non-numeric values
+    logger.info("Normalizing ID types between NHF and NWM lakes...")
     lakes_layer.dropna(subset=["lake_id"], inplace=True)
-    lakes_layer = lakes_layer[lakes_layer['lake_id'].astype(str).str.isdigit()]
+    lakes_layer = lakes_layer[lakes_layer["lake_id"].astype(str).str.isdigit()]
     lakes_layer.loc[:, "lake_id"] = lakes_layer["lake_id"].astype(int)
     nhf_lake_ids = set(lakes_layer["lake_id"].tolist())
     nwm_lake_ids = set(nwm_lakes[id_col].tolist())
 
     lake_diffs = list(nwm_lake_ids - nhf_lake_ids)
+    if lake_diffs:
+        logger.info(f"{len(lake_diffs)} missing NWM/Lakeparm lakes found.")
+    else:
+        logger.info("No missing NWM/Lakeparm lakes!")
     lakes_out.append({"Missing NWM or Lakeparm Lakes": lake_diffs})
 
     missing_fp = lakes_layer[lakes_layer["fp_id"].isna() & lakes_layer["virtual_fp_id"].isna()][
         "lake_id"
     ].to_list()
-
     missing_fp_lakes = list(nwm_lake_ids.intersection(missing_fp))
+    if missing_fp_lakes:
+        logger.info(f"{len(missing_fp_lakes)} lakes found with no flowpath/virtual flowpath.")
+    else:
+        logger.info("No lakes found with a missing flowpath/virtual flowpath!")
     lakes_out.append({"Lakes with no flowpath or vitual flowpath": missing_fp_lakes})
 
     if validate_duplicates:
+        logger.info("Now validating lakes for any duplicate points...")
         try:
             buffered_nwm_lakes = gpd.read_file(buffer_path, layer="nwm_lakes", driver="GPKG")
         except FileNotFoundError:
             error_str = f"Error: The file {buffer_path} was not found."
             logger.warning(error_str)
-            return [error_str]
-        dups = find_lake_duplicates(
-            lakes_layer=lakes_layer,
-            buffered_nwm_lakes=buffered_nwm_lakes,
-            id_col=id_col,
-            save_duplicate_gpkgs=save_duplicate_gpkgs,
-            duplicate_gpkg_save_dir=buffer_path.parent,
-        )
-        lakes_out.append({"Lakes with multiple/duplicate points": dups})
+            lakes_out.append({"Lakes with multiple/duplicate points": error_str})
+        except ValueError:
+            error_str = f"Error reading 'nwm_lakes' layer from {buffer_path}"
+            logger.warning(error_str)
+            lakes_out.append({"Lakes with multiple/duplicate points": error_str})
+        else:
+            dups = find_lake_duplicates(
+                lakes_layer=lakes_layer,
+                buffered_nwm_lakes=buffered_nwm_lakes,
+                id_col=id_col,
+                save_duplicate_gpkgs=save_duplicate_gpkgs,
+                duplicate_gpkg_save_dir=buffer_path.parent,
+            )
+            lakes_out.append({"Lakes with multiple/duplicate points": dups})
     else:
+        logger.info("Skipping lake duplicate validation...")
         lakes_out.append({"Lakes with multiple/duplicate points": {}})
 
+    logger.info("Lakes validation complete!")
     return lakes_out
 
 
