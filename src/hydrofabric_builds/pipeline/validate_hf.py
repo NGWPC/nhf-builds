@@ -395,7 +395,7 @@ def validate_lakes(
         logger.info(f"{len(missing_fp_lakes)} lakes found with no flowpath/virtual flowpath.")
     else:
         logger.info("No lakes found with a missing flowpath/virtual flowpath!")
-    lakes_out.append({"Lakes with no flowpath or vitual flowpath": missing_fp_lakes})
+    lakes_out.append({"Lakes with no flowpath or virtual flowpath": missing_fp_lakes})
 
     if validate_duplicates:
         logger.info("Now validating lakes for any duplicate points...")

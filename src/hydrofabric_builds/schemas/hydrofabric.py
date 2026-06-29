@@ -1068,7 +1068,7 @@ class LakesConfig(BaseModel):
     )
     great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
     validate_duplicates: bool = Field(
-        default=False,
+        default=True,
         description="Flag to search for duplicate lake points during lakes validation. Defaults to false",
     )
     save_duplicate_gpkgs: bool = Field(
