@@ -9,13 +9,7 @@ from pandantic import Pandantic
 from pydantic import ValidationError
 
 from hydrofabric_builds.config import HFConfig
-from hydrofabric_builds.schemas.validate_hydrofabric import (
-    CRS,
-    Divides,
-    Domain,
-    Flowpaths,
-    Layer,
-)
+from hydrofabric_builds.schemas.validate_hydrofabric import CRS, Divides, Domain, Flowpaths, Layer, VegTypes
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +57,7 @@ def validate_layer(gpkg_path_filename: Path, layer_name: Layer, crs: CRS) -> lis
         domain = Domain.PRVI.value
 
     # Create empty list to store output items
-    layer_out: list[dict[str, int | list[str]]] = []
+    layer_out: list[dict[str, int | list[str] | dict[Any, Any]]] = []
 
     # Get total number of rows in layer
     layer_out.append({f"Total number of {layer_name.value} rows": len(layer)})
@@ -75,6 +69,19 @@ def validate_layer(gpkg_path_filename: Path, layer_name: Layer, crs: CRS) -> lis
     # Get NaN counts by attribute
     nan_counts = layer.isna().sum().to_dict()
     layer_out.append({"Number of NaNs per attribute": nan_counts})
+
+    if layer_name.value == Layer.DIVIDES.value:
+        with_nans = layer.columns[layer.isna().any()].tolist()
+        attr_dict = {}
+        for col in with_nans:
+            counts = layer[layer[col].isna()]["ivgtyp_mode"].value_counts().to_frame(name="NA counts")
+            counts = counts.reset_index()
+            counts["ivgtyp_mode"] = counts["ivgtyp_mode"].astype(int)
+            counts["ivgtyp_name"] = counts["ivgtyp_mode"].map(VegTypes.veg_types)
+            values_dict = counts.to_dict(orient="records")
+            attr_dict.update({col: values_dict})
+
+        layer_out.append({"Vegetation type for NaN divide attributes": attr_dict})
 
     # Use Pandantic to validate the data frames with the Pydantic schema.
     if layer_name == Layer.DIVIDES:
