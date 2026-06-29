@@ -306,7 +306,7 @@ def find_lake_duplicates(
     if nwm_lakes_to_report:
         logger.info(f"{len(nwm_lakes_to_report)} lakes found with duplicate point(s).")
     else:
-        logger.info(f"No lakes were found with any duplicate points!")
+        logger.info("No lakes were found with any duplicate points!")
 
     # Save results as a geopackage, if wanted
     if save_duplicate_gpkgs:
