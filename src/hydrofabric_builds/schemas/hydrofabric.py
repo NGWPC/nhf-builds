@@ -660,7 +660,7 @@ class GagesInputs(BaseModel):
         default_factory=lambda: GageInput(path=Path("nwm_calib/nwm_calib_gages_07112025.csv"))
     )
     routelink: GageInput = Field(
-        default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"))
+        default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"), id_col_name="gages")
     )
     rfc: GageInput = Field(
         default_factory=lambda: GageInput(
