@@ -160,19 +160,45 @@ def _associate_lake_flowpaths(
 def _fold_ref_res_to_nwm_lakes(
     cfg: HFConfig,
     nwm_lakes_pt: gpd.GeoDataFrame,
-    nwm_lakes_orig: gpd.GeoDataFrame,
     ref_res: gpd.GeoDataFrame,
     ref_hf: gpd.GeoDataFrame,
     ref_fp: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """
-    TODO
-    Takes in nwm_lakes GeoDataFrame with polygons and and returns a GeoDataFrame with points derived from reference reservoirs OR centroid if no reference available.
+    """Improve NWM lake placement by foldingin reference reservoirs
 
-    Attempts to find the most downstream reference reservoir candidate by searching in proximity of the most downstream
-    intersecting flowpath rather than searching in proximity of lake polygon.
+    Match reference reservoirs to NWM lakes based on buffering the outlet flowpath of lake polygon
+    If reference reservoir is within max search distance (set in cfg.lakes.nwm.max_refres_search_distance_m),
+    the point geometry will be updated and reference reservoir dam_name, dam_id, and nid ID will be added
+    If there is no reference reservoir, original point geometry will be retained
 
-    If reference point is available, also retains "dam_id", "dam_name" and "nid" columns from reference datapoint.
+    Algorithm:
+    1. The outlet virtual flowpath is crosswalked to get the corresponding reference flowpath ID
+    (reference_flowpaths table in NHF).
+    2. The reference flowpath geometry (reference_flowpaths linestring input to NHF builds) is
+    spatially joined (nearest) to reference reservoirs with max search distance (meters)
+    3. The closest (minimum distance) reference reservoir in the spatial join is selected.
+    4. The geometry and attributes for the NWM lake are replaced with the reference reservoir
+    5. ref_fp_id is used to join `hydrosequence` which is used in downstream code
+
+    Parameters
+    ----------
+    cfg : HFConfig
+        Main HFConfig
+    nwm_lakes_pt : gpd.GeoDataFrame
+        NWM Lakes points with associated outlet flowpaths
+    ref_res : gpd.GeoDataFrame
+        Reference Reservoirs point dataset with dam attributes
+    ref_hf : gpd.GeoDataFrame
+        Table `reference_flowpaths` in NHF. Includes crosswalk between ref_fp_id, fp_id, and virtual_fp_id
+        Crosswalks virtual_fp_id to ref_fp_id
+    ref_fp : gpd.GeoDataFrame
+        Linestring layer `reference_flowpaths` that is input to NHF builds.
+        Includes reference flowpath geometry and hydrosequence
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        _description_
     """
     # only run if reference reservoirs are present and requested
     if cfg.lakes.nwm.improve_placement_path.exists() and cfg.lakes.nwm.use_cached_improve_placement:
@@ -181,22 +207,15 @@ def _fold_ref_res_to_nwm_lakes(
 
     elif cfg.lakes.nwm.improve_placement_ref_res and not ref_res.empty:
         logger.info("Improving NWM lake placement with reference reservoirs.")
+        # insure reference flowpaths geometry and reference reservoirs are in correct CRS
         ref_fp = ref_fp.to_crs(cfg.crs)
-        nwm_lakes_poly = nwm_lakes_orig.copy().to_crs(cfg.crs)
+        ref_res = ref_res.to_crs(cfg.crs)
 
         max_distance = cfg.lakes.nwm.max_refres_search_distance_m
-        lake_id = cfg.lakes.output_comid_field
 
-        nwm_lakes_poly[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
-        nwm_lakes_poly.rename(columns={cfg.lakes.nwm.id_field: lake_id}, inplace=True)
+        nwm_lakes_pt[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
 
-        # merge to get associated VFP (maybe don't need polys and can change later)
-        nwm_lakes_poly[lake_id] = nwm_lakes_poly[lake_id].astype(str)
-        nwm_lakes_poly = nwm_lakes_poly.merge(
-            nwm_lakes_pt[[lake_id, "virtual_fp_id"]], on=lake_id, how="left"
-        )
-
-        # deduplicate refrence crosswalk : virtual flowpath relationship
+        # deduplicate ref_hf: refrence crosswalk : virtual flowpath relationship needs to be 1:1
         ref_hf = (
             ref_hf.drop_duplicates(subset=["virtual_fp_id", "ref_fp_id"], ignore_index=True)
             .drop(columns=["fp_id"])
@@ -211,37 +230,26 @@ def _fold_ref_res_to_nwm_lakes(
             best_idx = ref_hf.groupby("ref_fp_id").first()
             ref_hf = ref_hf.loc[best_idx]
 
-        # add ref_fp_id crosswalk to nwm lakes
-        nwm_lakes_poly = nwm_lakes_poly.merge(
+        # merge ref_fp_id in
+        nwm_lakes_pt = nwm_lakes_pt.merge(
             ref_hf[["ref_fp_id", "virtual_fp_id"]], how="left", on="virtual_fp_id"
         )
 
         # extract ref fp geometry and hydrosequence to use for spatial selection
         ref_fp.rename(columns={"flowpath_id": "ref_fp_id"}, inplace=True)
-        ref_fp = ref_fp[["ref_fp_id", "hydroseq", "geometry"]]
+        ref_fp = ref_fp[["ref_fp_id", "hydroseq", "geometry"]].copy()
 
         # for each lake, match the reference flowpath ID geometry to the nearest reference reservoir in buffer distance
-        # update the geometry and attributes of NWM with reference reservoir info
-        for idx, row in nwm_lakes_poly.iterrows():
+        # update the geometry and attributes of lakes with reference reservoir info
+        for idx, row in nwm_lakes_pt.iterrows():
             # extract matching ref FP geometry for spatial index
             fps = ref_fp.loc[(ref_fp["ref_fp_id"] == row["ref_fp_id"]), "geometry"]
             candidates = ref_res.sindex.nearest(fps, max_distance=max_distance)
-            # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, replace w/ centroid
+            # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, retain original point geometry
             if candidates.shape[1] != 0:
-                nwm_lakes_poly.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
+                nwm_lakes_pt.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
                     candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
                 ]
-            else:
-                nwm_lakes_poly.loc[idx, "geometry"] = nwm_lakes_poly["geometry"][idx].centroid
-
-        # join updated geometries and reference reservoir info back to nwm lakes points with associate flowpaths dataframe
-        nwm_lakes_pt.drop(columns=["geometry"], inplace=True)
-        nwm_lakes_pt = nwm_lakes_pt.merge(
-            nwm_lakes_poly[["geometry", lake_id, "dam_name", "nid", "dam_id", "ref_fp_id"]],
-            on=lake_id,
-            how="left",
-        )
-        nwm_lakes_pt.set_geometry("geometry", crs=cfg.crs)
 
         # get hydroseq and rename to what downstream code expects
         nwm_lakes_pt = nwm_lakes_pt.merge(ref_fp[["ref_fp_id", "hydroseq"]], on="ref_fp_id", how="left")
@@ -252,7 +260,7 @@ def _fold_ref_res_to_nwm_lakes(
 
     else:
         nwm_lakes_pt[["nid", "dam_id"]] = None
-        return gpd.GeoDataFrame(nwm_lakes_pt)
+        return gpd.GeoDataFrame(nwm_lakes_pt, crs=cfg.crs)
 
 
 def _calculate_elevation__nwm(

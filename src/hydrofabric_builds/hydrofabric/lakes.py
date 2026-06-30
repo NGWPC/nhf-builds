@@ -96,11 +96,10 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 graph_id_to_idx=vfp_graph_id_to_idx,
                 gdf_vfp=inputs["virtual_flowpaths"],
             )
-            # improve placement
+            # improve placement with reference reservoirs
             gdf_nwm_lakes = _fold_ref_res_to_nwm_lakes(
                 cfg,
                 nwm_lakes_pt=gdf_nwm_lakes,
-                nwm_lakes_orig=inputs["nwm_lakes"],
                 ref_res=inputs["ref_res"].copy(),
                 ref_hf=inputs["hf_ref"].copy(),
                 ref_fp=inputs["ref_fp"].copy(),
