@@ -313,6 +313,8 @@ lakes:
   use_cached_lakes: False
   output_comid_field: "lake_id"
   lakes_path: "output/hi_lakes.gpkg"
+  validate_duplicates: False # flag to search for duplicate lake points during lakes validation. Defaults to true
+  save_duplicate_gpkgs: False # flag to (in addition to normal output) save the resulting duplicate lake points/polygons as geopackages. Defaults to false
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association

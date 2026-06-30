@@ -660,7 +660,7 @@ class GagesInputs(BaseModel):
         default_factory=lambda: GageInput(path=Path("nwm_calib/nwm_calib_gages_07112025.csv"))
     )
     routelink: GageInput = Field(
-        default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"))
+        default_factory=lambda: GageInput(path=Path("RouteLink_CONUS_EPSG4326.gpkg"), id_col_name="gages")
     )
     rfc: GageInput = Field(
         default_factory=lambda: GageInput(
@@ -841,6 +841,10 @@ class NWMLakeInput(BaseModel):
     path: Path = Field(
         default=Path("input/nwm_lakes.gpkg"),
         description="Source path. LakesConfig will inject preceding input path.",
+    )
+    buffered_path: Path = Field(
+        default=Path("input/nwm_lakes_sconus_input_500m_buffer.gpkg"),
+        description="Source path, with polygons buffered out (for validating duplicate lake points). LakesConfig will inject preceding input path.",
     )
     layer: str = Field(default="lakes", description="GPKG layer")
     fp_associated_path: Path = Field(
@@ -1063,6 +1067,14 @@ class LakesConfig(BaseModel):
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
     )
     great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
+    validate_duplicates: bool = Field(
+        default=True,
+        description="Flag to search for duplicate lake points during lakes validation. Defaults to true",
+    )
+    save_duplicate_gpkgs: bool = Field(
+        default=False,
+        description="Flag to save the resulting duplicate lake points/polygons as geopackages. Defaults to false",
+    )
     fields: list[str] = Field(
         default=[
             "dam_id",
