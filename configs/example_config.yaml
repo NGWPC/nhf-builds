@@ -389,6 +389,8 @@ lakes:
   use_cached_lakes: False
   output_comid_field: "lake_id"
   lakes_path: "output/sconus_lakes.gpkg"
+  validate_duplicates: True # flag to search for duplicate lake points during lakes validation. Defaults to true
+  save_duplicate_gpkgs: False # flag to (in addition to normal output) save the resulting duplicate lake points/polygons as geopackages. Defaults to false
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association
@@ -396,6 +398,7 @@ lakes:
     improve_placement_path: "output/nwm_lakes_improved_placement.gpkg"
     use_cached_improve_placement: False # change to true to skip if you have already built
     path: "input/nwm_lakes_sconus_input.gpkg"
+    buffered_path: "input/nwm_lakes_sconus_input_500m_buffer.gpkg" # source path, with polygons buffered out (for validating duplicate lake points). LakesConfig will inject preceding input path.
     layer: "nwm_lakes"
     fp_associated_path: "output/sconus_lakes_fp_associated.gpkg" # can be empty or populated
     flowpath_association_method: "polygon_outlet" # "nearest_point" or "polygon_outlet"
