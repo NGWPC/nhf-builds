@@ -6,12 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio
+import rustworkx as rx
 from geopandas.testing import assert_geodataframe_equal
 from pyprojroot import here
 from rasterio.transform import from_bounds
 from shapely import Point, box
 
 from hydrofabric_builds.config import HFConfig, TaskSelection
+from hydrofabric_builds.helpers.flowpath_association import associate_flowpaths_polygon_graph, make_vfp_graph
 from hydrofabric_builds.hydrofabric.lakes import lakes_pipeline
 from hydrofabric_builds.lakes.lakes import _dedup_lake_id, _join_nid
 from hydrofabric_builds.schemas.hydrofabric import BuildHydrofabricConfig
@@ -46,10 +48,21 @@ def dummy_dem(lakes_root: Path) -> Path:
         dtype=data.dtype,
         crs=5070,
         transform=transform,
+        nodata=-999,
     ) as dst:
         dst.write(data, 1)
 
     return dem
+
+
+@pytest.fixture
+def graph_vfp(lakes_root: Path, main_lakes_nhf: str) -> tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame]:
+    """Return the lakes graph, ID mapping, and virtual flowpaths GDF for graph testing"""
+    vfp = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_flowpaths")
+    vn = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_nexus")
+    graph, id_to_idx = make_vfp_graph(vfp=vfp, vn=vn)
+    del vn
+    return graph, id_to_idx, vfp
 
 
 @pytest.fixture
@@ -221,13 +234,13 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
                 "nhf_lake_id": [1261204677721496],
                 "ref_fp_id": [9999572],
                 "fp_id": [np.nan],
-                "virtual_fp_id": [1261203455606765.0],
+                "virtual_fp_id": [1261203455606765],
                 "dn_nex_id": [np.nan],
                 "dn_virtual_nex_id": [1261203489061613.0],
                 "div_id": [1261204749791466.0],
                 "dam_id": [None],
                 "nidid": [None],
-                "lake_id": [1],
+                "lake_id": ["1"],
                 "res_id": [None],
                 "LkArea": [np.float32(1.0)],
                 "LkMxE": [np.float32(2.0)],
@@ -504,3 +517,29 @@ def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
     gdf = _join_nid(main_cfg, res_df, nid_df)
     gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "geometry"]].copy()
     assert_geodataframe_equal(gdf, expected, check_like=True)
+
+
+def test_associate_flowpaths_polygon_graph(
+    graph_vfp: tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame],
+) -> None:
+    """Associate one flowpath using subgraph method"""
+    graph, id_to_idx, vfp = graph_vfp
+
+    geom = [box(-1718569.5, 1363475.7, -1717437.7, 1363977.3)]
+    gdf_nwm_lk = gpd.GeoDataFrame(crs=5070, geometry=geom, data={"lake_id": [1]})
+
+    gdf_expected = gdf_nwm_lk.copy()
+    gdf_expected["geometry"] = gdf_expected.centroid
+    gdf_expected["virtual_fp_id"] = pd.Series([1261203455606765], dtype=pd.Int64Dtype())
+    gdf_expected["lake_id"] = gdf_expected["lake_id"].astype(pd.Int64Dtype()).astype(str)
+
+    gdf = associate_flowpaths_polygon_graph(
+        gdf_poly=gdf_nwm_lk,
+        gdf_vfp=vfp,
+        graph=graph,
+        id_to_idx=id_to_idx,
+        poly_id="lake_id",
+        vfp_id="virtual_fp_id",
+    )
+
+    assert_geodataframe_equal(gdf, gdf_expected)

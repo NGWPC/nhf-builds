@@ -11,7 +11,7 @@ import rustworkx as rx
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import (
     associate_flowpaths_nearest_point,
-    associate_flowpaths_polyon_graph,
+    associate_flowpaths_polygon_graph,
     join_attributes,
 )
 from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
@@ -120,7 +120,7 @@ def _associate_lake_flowpaths(
             poly_id = cfg.id_field if cfg.id_field in gdf.columns else main_cfg.lakes.output_comid_field
 
             logger.info("Associating flowpaths")
-            gdf = associate_flowpaths_polyon_graph(
+            gdf = associate_flowpaths_polygon_graph(
                 gdf_poly=gdf,
                 graph=graph,
                 gdf_vfp=gdf_vfp,
@@ -161,7 +161,7 @@ def _fold_ref_res_to_nwm_lakes(
     cfg: HFConfig,
     nwm_lakes_pt: gpd.GeoDataFrame,
     ref_res: gpd.GeoDataFrame,
-    ref_hf: gpd.GeoDataFrame,
+    hf_ref: gpd.GeoDataFrame,
     ref_fp: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Improve NWM lake placement by foldingin reference reservoirs
@@ -188,7 +188,7 @@ def _fold_ref_res_to_nwm_lakes(
         NWM Lakes points with associated outlet flowpaths
     ref_res : gpd.GeoDataFrame
         Reference Reservoirs point dataset with dam attributes
-    ref_hf : gpd.GeoDataFrame
+    hf_ref : gpd.GeoDataFrame
         Table `reference_flowpaths` in NHF. Includes crosswalk between ref_fp_id, fp_id, and virtual_fp_id
         Crosswalks virtual_fp_id to ref_fp_id
     ref_fp : gpd.GeoDataFrame
@@ -198,7 +198,7 @@ def _fold_ref_res_to_nwm_lakes(
     Returns
     -------
     gpd.GeoDataFrame
-        _description_
+        Updated NWM lakes points
     """
     # only run if reference reservoirs are present and requested
     if cfg.lakes.nwm.improve_placement_path.exists() and cfg.lakes.nwm.use_cached_improve_placement:
@@ -216,23 +216,19 @@ def _fold_ref_res_to_nwm_lakes(
         nwm_lakes_pt[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
 
         # deduplicate ref_hf: refrence crosswalk : virtual flowpath relationship needs to be 1:1
-        ref_hf = (
-            ref_hf.drop_duplicates(subset=["virtual_fp_id", "ref_fp_id"], ignore_index=True)
+        hf_ref = (
+            hf_ref.drop_duplicates(subset=["virtual_fp_id", "ref_fp_id"], ignore_index=True)
             .drop(columns=["fp_id"])
             .reset_index()
         )
         # use segment order first, then take first if there are still duplicates
-        if "segment_order" in ref_hf.columns:
-            segment_idx = ref_hf.groupby("ref_fp_id")["segment_order"].idxmax()
-            ref_hf = ref_hf.loc[segment_idx]
-            ref_hf = ref_hf.drop_duplicates(subset=["virtual_fp_id"], keep="first")
-        else:
-            best_idx = ref_hf.groupby("ref_fp_id").first()
-            ref_hf = ref_hf.loc[best_idx]
+        segment_idx = hf_ref.groupby("ref_fp_id")["segment_order"].idxmax()
+        hf_ref = hf_ref.loc[segment_idx]
+        hf_ref = hf_ref.drop_duplicates(subset=["virtual_fp_id"], keep="first")
 
         # merge ref_fp_id in
         nwm_lakes_pt = nwm_lakes_pt.merge(
-            ref_hf[["ref_fp_id", "virtual_fp_id"]], how="left", on="virtual_fp_id"
+            hf_ref[["ref_fp_id", "virtual_fp_id"]], how="left", on="virtual_fp_id"
         )
 
         # extract ref fp geometry and hydrosequence to use for spatial selection
@@ -272,10 +268,14 @@ def _calculate_elevation__nwm(
     """
     if cfg.lakes.calculate_elevation:
         logger.info("Calculating NWM elevations")
+
         # if original nwm lakes is polygons - join nwm lake polygons for polygon elevation (ref_elev)
         if gdf_nwm_orig.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]:
             gdf_nwm_poly = polygon_elevation(cfg.lakes.dem.path, gdf_nwm_orig, "ref_elev")
-            gdf_nwm_poly = gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field})
+            gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field}, inplace=True)
+            gdf_nwm_poly[cfg.lakes.output_comid_field] = (
+                gdf_nwm_poly[cfg.lakes.output_comid_field].astype(pd.Int64Dtype()).astype(str)
+            )
             gdf_nwm_poly = gdf_nwm_poly.to_crs(cfg.crs)
             gdf_nwm_poly["nwm_lakes_area"] = gdf_nwm_poly.area
             gdf_nwm_pts = gdf_nwm_pts.merge(
@@ -710,7 +710,9 @@ def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFram
             gdf[f] = None
 
     out_columns = (
-        ["nhf_lake_id", "fp_id", "virtual_fp_id", "dn_nex_id", "dn_virtual_nex_id"] + fields + ["geometry"]
+        ["nhf_lake_id", "ref_fp_id", "fp_id", "virtual_fp_id", "dn_nex_id", "dn_virtual_nex_id", "div_id"]
+        + fields
+        + ["geometry"]
     )
 
     gdf.replace(pd.NA, None, inplace=True)

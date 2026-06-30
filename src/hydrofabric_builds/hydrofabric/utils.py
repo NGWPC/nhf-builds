@@ -545,8 +545,8 @@ def _crosswalk_reference(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFra
     return gdf.merge(hf_ref, on="ref_fp_id", how="left")
 
 
-def _crosswalk_reference_vfp_only(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Crosswalk a gdf to refernce flowpaths to get fp_id and virtual_fp_id
+def _crosswalk_reference_to_vfp(hf_path: Path, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Crosswalk a gdf to reference flowpaths to get virtual_fp_id only
 
     Parameters
     ----------
@@ -600,11 +600,26 @@ def _crosswalk_fp_nexus(
 
     if pd.api.types.is_object_dtype(fp["fp_id"]):
         fp["fp_id"] = pd.to_numeric(vfp["fp_id"]).astype(pd.Int64Dtype())
-    hf_ref = hf_ref[["fp_id", "virtual_fp_id"]].drop_duplicates(
-        subset=["fp_id", "virtual_fp_id"], ignore_index=True
+
+    # extract needed data from hf_ref and create 1:1 relationship betwen ref_fp_id and virtual_fp_id
+    hf_ref = (
+        hf_ref[["ref_fp_id", "fp_id", "virtual_fp_id", "div_id", "segment_order"]]
+        .copy()
+        .reset_index(drop=True)
     )
+    # use segment order first, then take first if there are still duplicates
+    segment_idx = hf_ref.groupby("ref_fp_id")["segment_order"].idxmax()
+    hf_ref = hf_ref.loc[segment_idx]
+    hf_ref = hf_ref.drop_duplicates(subset=["virtual_fp_id"], keep="first")
+    hf_ref.drop(columns=["segment_order"], inplace=True)
+
+    # drop pre-existing ref_fp_id to ensure correct match in join
+    if "ref_fp_id" in gdf.columns:
+        gdf.drop(columns=["ref_fp_id"], inplace=True)
+
     gdf = gdf.merge(hf_ref, on="virtual_fp_id", how="left")
     gdf = gdf.merge(vfp[["virtual_fp_id", "dn_virtual_nex_id"]], on="virtual_fp_id", how="left")
     gdf = gdf.merge(fp[["fp_id", "dn_nex_id"]], on="fp_id", how="left")
+    gdf["ref_fp_id"] = gdf["ref_fp_id"].astype(pd.Int64Dtype())
 
     return gdf

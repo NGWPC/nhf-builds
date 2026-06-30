@@ -149,10 +149,12 @@ def join_attributes(
             if attrib_src_key in attrib_src_fields_valid:
                 attrib_src_fields_valid.remove(attrib_src_key)
 
-        if ~pd.api.types.is_object_dtype(gdf_attrib_src[attrib_src_key]):
-            gdf_attrib_src[attrib_src_key] = gdf_attrib_src[attrib_src_key].astype(str)
+        if not pd.api.types.is_object_dtype(gdf_attrib_src[attrib_src_key]):
+            gdf_attrib_src[attrib_src_key] = (
+                gdf_attrib_src[attrib_src_key].astype(pd.Int64Dtype()).astype(str)
+            )
 
-        if ~pd.api.types.is_object_dtype(gdf[attrib_dst_key]):
+        if not pd.api.types.is_object_dtype(gdf[attrib_dst_key]):
             gdf[attrib_dst_key] = gdf[attrib_dst_key].astype(str)
 
         gdf_merged = gdf.merge(
@@ -162,6 +164,7 @@ def join_attributes(
             right_on=attrib_src_key,
         )
         gdf_merged["attrib_src"] = attrib_src_path.name
+        gdf_merged.to_file("data/afer_merge.gpkg")
 
     return gdf_merged
 
@@ -210,7 +213,7 @@ def make_vfp_graph(vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame) -> tuple[rx.PyDi
     return graph, id_to_idx
 
 
-def associate_flowpaths_polyon_graph(
+def associate_flowpaths_polygon_graph(
     gdf_poly: gpd.GeoDataFrame,
     gdf_vfp: gpd.GeoDataFrame,
     graph: rx.PyDiGraph,
@@ -297,82 +300,4 @@ def associate_flowpaths_polyon_graph(
     gdf_poly = gdf_poly.merge(df_pairs, on=poly_id, how="left")
     gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     gdf_poly[vfp_id] = pd.to_numeric(gdf_poly[vfp_id]).astype(pd.Int64Dtype())
-    return gdf_poly
-
-
-def associate_flowpaths_polygon_outlet(
-    gdf_poly: gpd.GeoDataFrame,
-    flowpaths_path: Path,
-    search_radius_m: int | float,
-    min_preferred_intersection_len_m: float,
-    flowpath_id: str,
-    flowpath_id_out_field: str = "fp_id",
-    flowpath_layer: str | None = None,
-) -> gpd.GeoDataFrame:
-    """Associate the intersection of waterbody polygons and their flowpath outlets
-
-    Adapted from above
-
-    Parameters
-    ----------
-    polygon_path : Path
-        Polygons to associate with flowpath
-    flowpaths_path : Path
-        Flowpath linestrings
-    search_radius_m : int | float
-        Buffer radius for matching flowpaths
-    flowpath_id : str
-        Column name for ID in flowpath gdf
-    flowpath_id_out_field: str
-        Column name for the flowpath ID in output file, by default 'fp_id'
-    flowpath_layer: str | None
-        Layer name if reading from a GPKG, by default None
-
-    Returns
-    -------
-    gpd.GeoDataFrame
-    Original lake gdf including associated flowpath
-
-    """
-    gdf_flowpaths = (
-        gpd.read_parquet(flowpaths_path)
-        if ".parquet" in flowpaths_path.name
-        else gpd.read_file(flowpaths_path, layer=flowpath_layer)
-    )
-
-    # coerce geometry to 2D linestings
-    gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
-    gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].force_2d()
-
-    # change to reference flowpath CRS if not matching
-    if gdf_poly.crs != gdf_flowpaths.crs:
-        gdf_poly = gdf_poly.to_crs(gdf_flowpaths.crs)
-        assert gdf_poly.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
-
-    # iterates through buffers, intersects, chooses minimum hydrosequence
-    for idx, _lake in gdf_poly.iterrows():
-        for search_radius in range(0, int(search_radius_m), int(search_radius_m / 10)):
-            buffered = (
-                gdf_poly["geometry"][idx]
-                if search_radius == 0
-                else gdf_poly["geometry"][idx].buffer(search_radius)
-            )
-            candidates = gdf_flowpaths["geometry"].intersects(buffered, [flowpath_id, "hydroseq"])
-            candidates = gdf_flowpaths.loc[candidates]
-            num_candidates = len(candidates["hydroseq"])
-            if num_candidates == 0:
-                continue
-            candidates = candidates.sort_values("hydroseq")
-            # try to use a slightly better candidate if the intersection length is very small
-            intersection_len = candidates.iloc[0]["geometry"].intersection(buffered).length
-            selected_idx = (
-                1 if intersection_len < min_preferred_intersection_len_m and num_candidates > 1 else 0
-            )
-            selected = candidates.iloc[selected_idx]
-            gdf_poly.loc[idx, flowpath_id_out_field] = selected[flowpath_id]
-            gdf_poly.loc[idx, "_hydroseq"] = selected["hydroseq"]
-            gdf_poly.loc[idx, "buffer_radius"] = search_radius
-            break
-
-    gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     return gdf_poly
