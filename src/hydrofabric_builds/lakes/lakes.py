@@ -1,7 +1,6 @@
 """Contains all functions for building lakes"""
 
 import logging
-from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -106,11 +105,12 @@ def _associate_lake_flowpaths(
             logger.info(f"Associating {lake_type} flowpath with points")
             gdf = associate_flowpaths_nearest_point(
                 gdf_points=gdf,
-                flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
+                # flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
+                gdf_flowpaths=gdf_vfp,
                 search_radius_m=cfg.search_radius_m,
                 point_id=cfg.id_field,
-                flowpath_id=main_cfg.lakes.fp_id_field,
-                flowpath_id_out_field=main_cfg.lakes.fp_id_out_field,
+                flowpath_id="virtual_fp_id",
+                flowpath_id_out_field="virtual_fp_id",
             )
         # use polygon flowpath outlet method
         elif cfg.flowpath_association_method == "polygon_outlet":

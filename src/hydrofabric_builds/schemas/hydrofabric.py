@@ -1057,11 +1057,12 @@ class LakesConfig(BaseModel):
         description="Flag to perform virtual flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon or point.",
     )
     fp_id_field: str = Field(
-        default="flowpath_id",
+        default="virtual_fp_id",
         description="Name of flowpath ID in dataset from which flowpaths are associated.",
     )
     fp_id_out_field: str = Field(
-        default="ref_fp_id", description="Name of flowpath ID field for output after flowpaths are identified"
+        default="virtual_fp_id",
+        description="Name of flowpath ID field for output after flowpaths are identified",
     )
     output_comid_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"

@@ -11,13 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def associate_flowpaths_nearest_point(
-    flowpaths_path: Path,
+    gdf_flowpaths: gpd.GeoDataFrame,
     gdf_points: gpd.GeoDataFrame,
     search_radius_m: int | float,
     point_id: str,
     flowpath_id: str,
     flowpath_id_out_field: str,
-    flowpath_layer: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Associate point geometries with flowpath lines by buffering by a search radius and selecting mimnium distance
 
@@ -26,7 +25,7 @@ def associate_flowpaths_nearest_point(
     Parameters
     ----------
     points_path : Path
-        Points to associate with flowpath
+        Points to associate with flowpath - can be virtual, reference, or flowpath
     flowpaths_path : Path
         Flowpath linestrings
     search_radius_m : int | float
@@ -36,24 +35,13 @@ def associate_flowpaths_nearest_point(
     flowpath_id : str
         Column name for ID in flowpath gdf
     flowpath_id_out_field: str
-        Column name for the flowpath ID in output file, by default 'ref_fp_id'
-    flowpath_layer: str | None
-        Layer name if reading from a GPKG, by default None
-    flowpath_layer: str | None
-        Layer name if reading from a GPKG, by default None
+        Column name for the flowpath ID in output file
 
     Returns
     -------
     gpd.GeoDataFrame
         Original point gdf including associated flowpath
     """
-    # load
-    gdf_flowpaths = (
-        gpd.read_parquet(flowpaths_path)
-        if ".parquet" in flowpaths_path.name
-        else gpd.read_file(flowpaths_path, layer=flowpath_layer)
-    )
-
     # coerce geometry to 2D linestings
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].line_merge()
     gdf_flowpaths["geometry"] = gdf_flowpaths["geometry"].force_2d()
@@ -97,6 +85,10 @@ def associate_flowpaths_nearest_point(
     # assign dict of points and flowpaths to point gdf
     for k, v in out.items():
         gdf_points.loc[gdf_points[point_id] == k, flowpath_id_out_field] = v
+
+    # NOTE: forcing was needed in AK
+    if pd.api.types.is_object_dtype(gdf_points[flowpath_id_out_field]):
+        gdf_points["virtual_fp_id"] = pd.to_numeric(gdf_points["virtual_fp_id"]).astype(pd.Int64Dtype())
 
     return gdf_points
 
