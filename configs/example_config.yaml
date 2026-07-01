@@ -405,7 +405,7 @@ lakes:
     id_field: "newID"
     output_id_field: "lake_id"
     search_radius_m: 25000.0
-    min_preferred_intersection_len_m: 10.0
+    intersection_length_min_m: 3.0
     attrib_src_path: "input/nwm_patch_conus_nextgen.gpkg" # file to get attributes from
     attrib_src_layer: "lakes"
     attrib_src_key: "lake_id"
@@ -435,7 +435,7 @@ lakes:
     id_field: comid
     flowpath_association_method: "polygon_outlet"
     search_radius_m: 25000.0
-    min_preferred_intersection_len_m: 10.0
+    intersection_length_min_m: 3.0
   nid:
     path: input/NID2019_U.csv
   dem:

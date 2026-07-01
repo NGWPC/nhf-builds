@@ -877,8 +877,8 @@ class NWMLakeInput(BaseModel):
         default=500.0,
         description="Distance between NWM lake and reference reservoirs used when improving NWM lake placement.",
     )
-    min_preferred_intersection_len_m: float = Field(
-        default=10.0,
+    intersection_length_min_m: float = Field(
+        default=3.0,
         description="Minimum prefered intersection lenght when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
     )
     id_field: str = Field(default="newID", description="ID field for NWM lakes input")
@@ -943,8 +943,8 @@ class RefWaterbodyInput(BaseModel):
     output_id_field: str = Field(
         default="lake_id", description="ID field to change name to for reference waterbodies"
     )
-    min_preferred_intersection_len_m: float = Field(
-        default=10.0,
+    intersection_length_min_m: float = Field(
+        default=3.0,
         description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
     )
     attrib_src_path: Path | None = Field(
@@ -1057,11 +1057,12 @@ class LakesConfig(BaseModel):
         description="Flag to perform virtual flowpath-lake crosswalk. This crosswalk intersects all flowpaths with a lake polygon or point.",
     )
     fp_id_field: str = Field(
-        default="flowpath_id",
+        default="virtual_fp_id",
         description="Name of flowpath ID in dataset from which flowpaths are associated.",
     )
     fp_id_out_field: str = Field(
-        default="ref_fp_id", description="Name of flowpath ID field for output after flowpaths are identified"
+        default="virtual_fp_id",
+        description="Name of flowpath ID field for output after flowpaths are identified",
     )
     output_comid_field: str = Field(
         default="lake_id", description="The common name of 'comid' field that is present in various datasets"
