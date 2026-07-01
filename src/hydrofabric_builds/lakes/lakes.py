@@ -103,7 +103,6 @@ def _associate_lake_flowpaths(
             logger.info(f"Associating {lake_type} flowpath with points")
             gdf = associate_flowpaths_nearest_point(
                 gdf_points=gdf,
-                # flowpaths_path=Path(main_cfg.build.reference_flowpaths_path),
                 gdf_flowpaths=gdf_vfp,
                 search_radius_m=cfg.search_radius_m,
                 point_id=cfg.id_field,
@@ -144,6 +143,11 @@ def _associate_lake_flowpaths(
             )
         if main_cfg.lakes.output_comid_field not in gdf.columns:
             gdf = gdf.rename(columns={cfg.id_field: main_cfg.lakes.output_comid_field})
+
+        if pd.api.types.is_numeric_dtype(gdf[main_cfg.lakes.output_comid_field]):
+            gdf[main_cfg.lakes.output_comid_field] = (
+                gdf[main_cfg.lakes.output_comid_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
+            )
 
         # Save nwm_lakes layer to NHF
         gdf.to_file(cfg.fp_associated_path, layer="lakes", driver="GPKG", overwrite=True)
@@ -348,7 +352,7 @@ def _prep_ref_wb(
     # cast ID to string if ref wb to string
     if pd.api.types.is_object_dtype(gdf_ref_res[cfg.lakes.ref_res.ref_wb_id_col]):
         gdf_adhoc[cfg.lakes.ref_wb.output_id_field] = (
-            gdf_adhoc[cfg.lakes.ref_wb.output_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+            gdf_adhoc[cfg.lakes.ref_wb.output_id_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
         )
 
     # merge the ref res data
@@ -771,6 +775,11 @@ def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFra
 
     gdf_lake_polys = pd.concat(lake_polys)
 
+    if pd.api.types.is_numeric_dtype(gdf_lake_polys[lake_id_field]):
+        gdf_lake_polys[lake_id_field] = (
+            gdf_lake_polys[lake_id_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
+        )
+
     # filter to lakes that are present in lakes file
     gdf_lake_polys = gdf_lake_polys.loc[gdf_lake_polys[lake_id_field].isin(gdf_lakes[lake_id_field])].copy()
 
@@ -840,7 +849,7 @@ def _aggregate_lake_polygons(
     # cast all to string and rename inputs
     if pd.api.types.is_numeric_dtype(lake_points[lake_id_field]):
         lake_points[lake_id_field] = (
-            lake_points[lake_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+            lake_points[lake_id_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
         )
     if "nwm_lakes" in lake_polys.keys():
         if lake_id_field not in lake_polys["nwm_lakes"]:
@@ -858,7 +867,7 @@ def _aggregate_lake_polygons(
     for k, gdf_polys in lake_polys.items():
         if not pd.api.types.is_object_dtype(gdf_polys[lake_id_field].dtype):
             gdf_polys[lake_id_field] = (
-                gdf_polys[lake_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+                gdf_polys[lake_id_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
             )
         gdf_polys = gdf_polys.to_crs(cfg.crs)
         gdf_polys = (
