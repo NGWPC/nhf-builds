@@ -7,6 +7,7 @@ from hydrofabric_builds.helpers.flowpath_association import make_vfp_graph
 from hydrofabric_builds.hydrofabric.utils import _crosswalk_fp_nexus, _crosswalk_reference_to_vfp
 from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
+    _aggregate_lake_polygons,
     _assert_nwm_lakes,
     _associate_lake_flowpaths,
     _calculate_elevation__nwm,
@@ -75,6 +76,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
     # else run pipeline
     else:
         gdf_list = []
+        lake_polys = {}
         inputs = _read_inputs(cfg)
         vfp_graph, vfp_graph_id_to_idx = make_vfp_graph(
             vfp=inputs["virtual_flowpaths"], vn=inputs["virtual_nexus"]
@@ -106,6 +108,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             )
 
             gdf_list.append(gdf_nwm_lakes)
+
+            if cfg.lakes.nwm.flowpath_association_method == "polygon_outlet":
+                lake_polys["nwm_lakes"] = inputs["nwm_lakes"].copy()
         else:
             # an empty dataframe including dam_id column is needed to filter the reference reservoirs
             gdf_nwm_lakes = gpd.GeoDataFrame(columns=["dam_id"])
@@ -134,6 +139,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 cfg, gdf_refwb_pts=gdf_ref_wb, gdf_refwb_poly=inputs["ref_wb"].copy()
             )
             gdf_list.append(gdf_ref_wb)
+            lake_polys["ref_wb"] = inputs["ref_wb"].copy()
         else:
             # an empty dataframe including dam_id column is needed to filter the reference reservoirs
             gdf_ref_wb = gpd.GeoDataFrame(columns=["dam_id"])
@@ -152,6 +158,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             )
             gdf_ref_res = _crosswalk_reference_to_vfp(hf_path=cfg.output_file_path, gdf=gdf_ref_res)
             gdf_list.append(gdf_ref_res)
+            lake_polys["ref_wb"] = inputs["ref_wb"].copy()
 
         # ------------------------------------------------------
         # Concat all lakes
@@ -195,5 +202,10 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # assert all NWM lakes included if run
         if cfg.lakes.nwm.run:
             _assert_nwm_lakes(cfg, gdf_all_lks)
+
+        # create NWM lakes polygons layer
+        if lake_polys:
+            gdf_polygons = _aggregate_lake_polygons(cfg, lake_polys=lake_polys, lake_points=gdf_all_lks)
+            gdf_polygons.to_file(cfg.output_file_path, layer="lakes_polygons", driver="GPKG", overwrite=True)
 
         gdf_all_lks.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)

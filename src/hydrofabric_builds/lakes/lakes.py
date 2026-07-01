@@ -812,3 +812,77 @@ def crosswalk_vfp_lk(
         df_join = pd.concat([df_join, df_unmatched], ignore_index=True).reset_index(drop=True)
 
     return gpd.GeoDataFrame(df_join)
+
+
+def _aggregate_lake_polygons(
+    cfg: HFConfig, lake_polys: dict[str, gpd.GeoDataFrame], lake_points: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Aggregate lake polygons from the final lake points to save as layer
+
+    lake_id are de-duped between nwm_lakes and ref_wb. nwm_lakes is preferred.
+
+    Parameters
+    ----------
+    cfg : HFConfig
+        Main Config
+    lake_polys : dict[str, gpd.GeoDataFrame]
+        Lookup of polygon data source : geodataframe for `nwm_lakes` and `ref_wb`
+    lake_points : gpd.GeoDataFrame
+        Final points dataframe
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Polygon dataframe with 1:1 relationship to lake COMID
+    """
+    lake_id_field = cfg.lakes.output_comid_field
+
+    # cast all to string and rename inputs
+    if pd.api.types.is_numeric_dtype(lake_points[lake_id_field]):
+        lake_points[lake_id_field] = (
+            lake_points[lake_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+        )
+    if "nwm_lakes" in lake_polys.keys():
+        if lake_id_field not in lake_polys["nwm_lakes"]:
+            lake_polys["nwm_lakes"] = lake_polys["nwm_lakes"].rename(
+                columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field}
+            )
+    if "ref_wb" in lake_polys.keys():
+        if lake_id_field not in lake_polys["ref_wb"]:
+            lake_polys["ref_wb"] = lake_polys["ref_wb"].rename(
+                columns={cfg.lakes.ref_wb.id_field: cfg.lakes.output_comid_field}
+            )
+
+    # iterate through geodataframes and select lake_id present in points gdf
+    extracted_poly_list = []
+    for k, gdf_polys in lake_polys.items():
+        if not pd.api.types.is_object_dtype(gdf_polys[lake_id_field].dtype):
+            gdf_polys[lake_id_field] = (
+                gdf_polys[lake_id_field].astype(pd.Int32Dtype()).astype(pd.StringDtype())
+            )
+        gdf_polys = gdf_polys.to_crs(cfg.crs)
+        gdf_polys = (
+            gdf_polys.loc[
+                gdf_polys[lake_id_field].isin(lake_points[lake_id_field]), [lake_id_field, "geometry"]
+            ]
+            .copy()
+            .reset_index(drop=True)
+        )
+        gdf_polys = gdf_polys.merge(
+            lake_points[[lake_id_field, "virtual_fp_id", "nhf_lake_id"]], on=lake_id_field
+        )
+        gdf_polys["source"] = k
+        extracted_poly_list.append(gdf_polys)
+
+    # concat dataframes and set priority to `nwm_lakes`
+    all_polys = pd.concat(extracted_poly_list, ignore_index=True).reset_index(drop=True)
+    all_polys["priority"] = 0
+    all_polys.loc[all_polys["source"] == "nwm_lakes", "priority"] = 1
+    priority_idx = all_polys.groupby(lake_id_field)["priority"].idxmax()
+    all_polys = all_polys.loc[priority_idx].copy().reset_index(drop=True).drop(columns=["priority"])
+
+    if len(all_polys) != len(lake_points):
+        logger.warning("Lake polygon length does not match lake point length")
+    if len(all_polys[lake_id_field].unique()) != len(all_polys):
+        logger.warning("Lake polygons are not unique")
+    return all_polys
