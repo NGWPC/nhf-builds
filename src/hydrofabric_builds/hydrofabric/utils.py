@@ -599,7 +599,7 @@ def _crosswalk_fp_nexus(
         vfp["virtual_fp_id"] = pd.to_numeric(vfp["virtual_fp_id"]).astype(pd.Int64Dtype())
 
     if pd.api.types.is_object_dtype(fp["fp_id"]):
-        fp["fp_id"] = pd.to_numeric(vfp["fp_id"]).astype(pd.Int64Dtype())
+        fp["fp_id"] = pd.to_numeric(fp["fp_id"]).astype(pd.Int64Dtype())
 
     # extract needed data from hf_ref and create 1:1 relationship betwen ref_fp_id and virtual_fp_id
     hf_ref = (

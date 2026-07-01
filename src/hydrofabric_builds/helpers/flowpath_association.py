@@ -156,7 +156,6 @@ def join_attributes(
             right_on=attrib_src_key,
         )
         gdf_merged["attrib_src"] = attrib_src_path.name
-        gdf_merged.to_file("data/afer_merge.gpkg")
 
     return gdf_merged
 

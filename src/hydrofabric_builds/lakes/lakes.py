@@ -207,7 +207,7 @@ def _fold_ref_res_to_nwm_lakes(
 
     elif cfg.lakes.nwm.improve_placement_ref_res and not ref_res.empty:
         logger.info("Improving NWM lake placement with reference reservoirs.")
-        # insure reference flowpaths geometry and reference reservoirs are in correct CRS
+        # ensure reference flowpaths geometry and reference reservoirs are in correct CRS
         ref_fp = ref_fp.to_crs(cfg.crs)
         ref_res = ref_res.to_crs(cfg.crs)
 
