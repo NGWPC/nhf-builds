@@ -99,7 +99,6 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 nwm_lakes_pt=gdf_nwm_lakes,
                 ref_res=inputs["ref_res"].copy(),
                 hf_ref=inputs["hf_ref"].copy(),
-                # ref_fp=inputs["ref_fp"].copy(),
                 fp=inputs["flowpaths"].copy(),
             )
             gdf_nwm_lakes = _calculate_elevation__nwm(
