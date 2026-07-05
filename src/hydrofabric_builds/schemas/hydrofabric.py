@@ -1107,6 +1107,7 @@ class LakesConfig(BaseModel):
         self.lakes_path = self.input_dir / self.lakes_path
         self.nid.path = self.input_dir / self.nid.path
         self.nwm.path = self.input_dir / self.nwm.path
+        self.nwm.buffered_path = self.input_dir / self.nwm.buffered_path
         self.nwm.fp_associated_path = self.input_dir / self.nwm.fp_associated_path
         self.nwm.improve_placement_path = self.input_dir / self.nwm.improve_placement_path
         self.ref_wb.path = self.input_dir / self.ref_wb.path
