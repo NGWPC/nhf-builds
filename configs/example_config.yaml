@@ -444,19 +444,23 @@ lakes:
   great_lakes:
     superior:
       lake_id: "4800002"
-      fp_id: -9999
+      fp_id: 1278348162056612
+      virtual_fp_id: 1278346877373953
       site_no: "04127885"
     mi_huron:
       lake_id: "4800004"
-      fp_id: -9999
+      fp_id: 1276364270499315
+      virtual_fp_id: 1276364270423160
       site_no: "04159130"
     erie:
       lake_id: "4800006"
-      fp_id: -9999
+      fp_id: 1286192735893685
+      virtual_fp_id: 1286154743979494
       site_no: "02HA013"
     ontario:
       lake_id: "4800007"
-      fp_id: -9999
+      fp_id: 1287248237297035
+      virtual_fp_id: 1287248166320950
       site_no: "IJC"
 
 res_da:

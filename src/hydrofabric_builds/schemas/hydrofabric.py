@@ -981,6 +981,7 @@ class GreatLake(BaseModel):
 
     lake_id: str = Field(description="lake_id/NHD 2.2 COMID for Great Lake")
     fp_id: float = Field(description="NHF flowpath ID for Great Lake")
+    virtual_fp_id: float = Field(description="NHF virtual flowpath ID for Great Lake")
     site_no: str = Field(description="Gage ID / site_no for Great Lake")
     lat: float | None = Field(default=None, description="Add a manual latitude if needed to place gage")
     lon: float | None = Field(default=None, description="Add a manual longitude if needed to place gage")
@@ -990,11 +991,24 @@ class GreatLake(BaseModel):
 class GreatLakesMapping(BaseModel):
     """All Great Lakes mappings"""
 
-    superior: GreatLake = GreatLake(lake_id="4800002", fp_id=-9999, site_no="04127885", data_source="USGS")
-    mi_huron: GreatLake = GreatLake(lake_id="4800004", fp_id=-9999, site_no="04159130", data_source="USGS")
+    superior: GreatLake = GreatLake(
+        lake_id="4800002",
+        fp_id=1278348162056612,
+        virtual_fp_id=1278346877373953,
+        site_no="04127885",
+        data_source="USGS",
+    )
+    mi_huron: GreatLake = GreatLake(
+        lake_id="4800004",
+        fp_id=1276364270499315,
+        virtual_fp_id=1276364270423160,
+        site_no="04159130",
+        data_source="USGS",
+    )
     erie: GreatLake = GreatLake(
         lake_id="4800006",
-        fp_id=-9999,
+        fp_id=1286192735893685,
+        virtual_fp_id=1286154743979494,
         site_no="02HA013",
         lat=42.93028,
         lon=-78.91417,
@@ -1002,7 +1016,8 @@ class GreatLakesMapping(BaseModel):
     )
     ontario: GreatLake = GreatLake(
         lake_id="4800007",
-        fp_id=-9999,
+        fp_id=1287248237297035,
+        virtual_fp_id=1287248166320950,
         site_no="IJC",
         lat=45.00639,
         lon=-74.79500,

@@ -15,8 +15,41 @@ from hydrofabric_builds.helpers.flowpath_association import (
 )
 from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
 from hydrofabric_builds.pipeline.processing import _encode_unique
+from hydrofabric_builds.schemas.hydrofabric import GreatLakesMapping
 
 logger = logging.getLogger(__name__)
+
+
+def _override_great_lakes(
+    gdf: gpd.GeoDataFrame,
+    mapping: GreatLakesMapping,
+    lake_id_field: str = "lake_id",
+) -> gpd.GeoDataFrame:
+    """Override fp_id and virtual_fp_id for Great Lakes with hardcoded values.
+
+    Parameters
+    ----------
+    gdf : gpd.GeoDataFrame
+        Lakes dataframe
+    mapping : GreatLakesMapping
+        Great Lakes mapping with hardcoded fp_id and virtual_fp_id
+    lake_id_field : str
+        Field name for lake ID, by default "lake_id"
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated lakes dataframe
+    """
+    great_lakes = mapping.model_dump()
+    for _k, v in great_lakes.items():
+        lake_id = v[lake_id_field]
+        mask = gdf[lake_id_field].astype(str) == str(lake_id)
+        if mask.any():
+            gdf.loc[mask, "fp_id"] = v["fp_id"]
+            gdf.loc[mask, "virtual_fp_id"] = v["virtual_fp_id"]
+            logger.info(f"Overriding fp_id and virtual_fp_id for Great Lake {lake_id}")
+    return gdf
 
 
 def _read_inputs(cfg: HFConfig) -> dict[str, gpd.GeoDataFrame]:
