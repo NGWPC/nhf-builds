@@ -20,6 +20,7 @@ from hydrofabric_builds.lakes.lakes import (
     _filter_ref_res,
     _fold_ref_res_to_nwm_lakes,
     _join_nid,
+    _override_great_lakes,
     _prep_ref_wb,
     _read_inputs,
 )
@@ -193,6 +194,9 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             vfp=inputs["virtual_flowpaths"].copy(),
             fp=inputs["flowpaths"].copy(),
         )
+        # Override Great Lakes fp_id and virtual_fp_id with hardcoded values
+        if cfg.res_da.great_lakes:
+            gdf_all_lks = _override_great_lakes(gdf=gdf_all_lks, mapping=cfg.lakes.great_lakes)
         gdf_all_lks = _create_ids(gdf=gdf_all_lks)
         gdf_all_lks = _filter_columns(gdf=gdf_all_lks, fields=cfg.lakes.fields)
 

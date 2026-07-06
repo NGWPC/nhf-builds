@@ -290,7 +290,9 @@ def find_lake_duplicates(
 
     # Add NWM lake geometries to the found NWM lakes
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.drop_duplicates(subset=id_col)
-    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.merge(buffered_nwm_lakes[[id_col, "geometry"]], on=id_col)
+    nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.merge(
+        buffered_nwm_lakes[[id_col, "geometry"]], on=id_col
+    )
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.drop(columns=["geometry_x"])
     nwm_lake_mult_nhf_points = nwm_lake_mult_nhf_points.rename(columns={"geometry_y": "geometry"})
 
@@ -308,7 +310,9 @@ def find_lake_duplicates(
         a = nhf_points_no_match.loc[(nhf_points_no_match[id_col] == x)]["lake_id"].tolist()
         if len(a) != 0:
             nwm_lakes_to_report[x] = a
-    nwm_lakes_to_report_gdf = nwm_lake_mult_nhf_points[nwm_lake_mult_nhf_points[id_col].isin(nwm_lakes_to_report.keys())]
+    nwm_lakes_to_report_gdf = nwm_lake_mult_nhf_points[
+        nwm_lake_mult_nhf_points[id_col].isin(nwm_lakes_to_report.keys())
+    ]
 
     if nwm_lakes_to_report:
         logger.info(f"{len(nwm_lakes_to_report)} lakes found with duplicate point(s).")
@@ -317,9 +321,19 @@ def find_lake_duplicates(
 
     # Save results as a geopackage, if wanted
     if save_duplicate_gpkgs:
-        logger.info(f"Saving geopackages with problem lake points/polygons. Output dir: {duplicate_gpkg_save_dir}")
-        nwm_lakes_to_report_gdf.to_file(duplicate_gpkg_save_dir / "nwm_problem_lake_polygons.gpkg", layer="multi_point_lakes", driver="GPKG")
-        nhf_points_no_match.to_file(duplicate_gpkg_save_dir / "nhf_problem_lake_points.gpkg", layer="problem_lake_points", driver="GPKG")
+        logger.info(
+            f"Saving geopackages with problem lake points/polygons. Output dir: {duplicate_gpkg_save_dir}"
+        )
+        nwm_lakes_to_report_gdf.to_file(
+            duplicate_gpkg_save_dir / "nwm_problem_lake_polygons.gpkg",
+            layer="multi_point_lakes",
+            driver="GPKG",
+        )
+        nhf_points_no_match.to_file(
+            duplicate_gpkg_save_dir / "nhf_problem_lake_points.gpkg",
+            layer="problem_lake_points",
+            driver="GPKG",
+        )
     else:
         logger.info("Skipping saving geopackage results...")
 
@@ -411,11 +425,11 @@ def validate_lakes(
         except FileNotFoundError:
             error_str = f"Error: The file {buffer_path} was not found."
             logger.warning(error_str)
-            lakes_out.append({"Lakes with multiple/duplicate points": error_str})
+            lakes_out.append({"Lakes with multiple/duplicate points": [error_str]})
         except ValueError:
             error_str = f"Error reading 'nwm_lakes' layer from {buffer_path}"
             logger.warning(error_str)
-            lakes_out.append({"Lakes with multiple/duplicate points": error_str})
+            lakes_out.append({"Lakes with multiple/duplicate points": [error_str]})
         else:
             dups = find_lake_duplicates(
                 lakes_layer=lakes_layer,
@@ -424,10 +438,10 @@ def validate_lakes(
                 save_duplicate_gpkgs=save_duplicate_gpkgs,
                 duplicate_gpkg_save_dir=buffer_path.parent,
             )
-            lakes_out.append({"Lakes with multiple/duplicate points": dups})
+            lakes_out.append({"Lakes with multiple/duplicate points": [dups]})
     else:
         logger.info("Skipping lake duplicate validation...")
-        lakes_out.append({"Lakes with multiple/duplicate points": {}})
+        lakes_out.append({"Lakes with multiple/duplicate points": [{}]})
 
     logger.info("Lakes validation complete!")
     return lakes_out
