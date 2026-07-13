@@ -1,12 +1,22 @@
-"""USBR RISE feature service as of 7/13/26 https://services1.arcgis.com/ixD30sld6F8MQ7V5/ArcGIS/rest/services/RISE_point_locations_(view)/FeatureServer/0 Calling with default args will save to ./usbr.gpkg"""
-import requests
-import geopandas as gpd
+"""USBR RISE feature service as of 7/13/26
+
+https://services1.arcgis.com/ixD30sld6F8MQ7V5/ArcGIS/rest/services/RISE_point_locations_(view)/FeatureServer/0
+Calling with default args will save to ./usbr.gpkg
+Call with download_usbr.py --lakes-only to filter by lakes
+"""
+
 import argparse
 from pathlib import Path
 
+import geopandas as gpd
+import requests
 
-def download_usbr(output: Path, url: str):
-    """Download USBR gpkg from RISE ArcGIS Feature Service"""
+
+def download_usbr(output: Path, url: str, lakes_only: bool = True) -> None:
+    """Download USBR gpkg from RISE ArcGIS Feature Service
+
+    Use lakes_only to filter to location type 'Lake/Reservoir'
+    """
     all_features = []
     offset = 0
     chunk_size = 1000
@@ -18,26 +28,30 @@ def download_usbr(output: Path, url: str):
             "f": "geojson",
             "resultOffset": offset,
             "resultRecordCount": chunk_size,
-            "returnGeometry": "true"
+            "returnGeometry": "true",
         }
-        
+
         response = requests.post(url, data=params).json()
         features = response.get("features", [])
-        
+
         if not features:
             break
-            
+
         all_features.extend(features)
         offset += len(features)
 
     print(f"Downloaded {len(all_features)} features.")
 
     gdf = gpd.GeoDataFrame.from_features(all_features, crs=4326)
+
+    if lakes_only:
+        gdf = gdf.loc[gdf["type"] == "Lake/Reservoir", :].copy().reset_index(drop=True)
+
     gdf.to_file(output)
     print(f"Saved USBR to {output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output",
@@ -51,7 +65,8 @@ if __name__ == '__main__':
         default="https://services1.arcgis.com/ixD30sld6F8MQ7V5/ArcGIS/rest/services/RISE_point_locations_(view)/FeatureServer/0/query",
         help="Input feature service URL",
     )
+    parser.add_argument("--lakes-only", action="store_true", help="Filter to only Lakes/Reservoir type")
 
     args = parser.parse_args()
 
-    download_usbr(output=Path(args.output), url=args.url)
+    download_usbr(output=Path(args.output), url=args.url, lakes_only=args.lakes_only)
