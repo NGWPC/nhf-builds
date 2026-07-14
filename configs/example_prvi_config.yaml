@@ -1,7 +1,7 @@
 # global settings
 output_dir: data/
 crs: EPSG:6566
-output_name: prvi_nhf_1.2.0.gpkg # If not specified, will default to version
+output_name: prvi_nhf_1.2.2.gpkg # If not specified, will default to version
 
 # hf builds
 build:
@@ -20,6 +20,7 @@ tasks:
   lakes: True
   fp_crosswalk: True
   validate_hf: True
+  res_da: True
 
 # flowpaths
 flowpath_attributes:
@@ -315,7 +316,7 @@ lakes:
   save_duplicate_gpkgs: False # flag to (in addition to normal output) save the resulting duplicate lake points/polygons as geopackages. Defaults to false
   nwm:
     run: True
-    associate_flowpaths: False # this will run the flowpath association
+    associate_flowpaths: True # regenerate current virtual-flowpath associations
     path: "input/nwm_lakes_prvi_input.gpkg"
     layer: "nwm_lakes"
     fp_associated_path: "output/prvi_lakes_fp_associated.gpkg"
