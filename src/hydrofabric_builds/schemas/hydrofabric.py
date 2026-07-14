@@ -688,11 +688,18 @@ class GagesInputs(BaseModel):
     adhoc_lakes: GageInput = Field(
         default_factory=lambda: GageInput(
             path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
-        )
+        ),
+        description="Adhoc lakes from reference waterbodies",
     )
     canada_great_lakes: bool = Field(
         default=False,
         description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
+    )
+    usbr: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("other/usbr_lakes.gpkg"), id_col_name="locId", x_col_name="Lon", y_col_name="Lat"
+        ),
+        description="USBR lakes",
     )
 
 

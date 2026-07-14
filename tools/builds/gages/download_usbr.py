@@ -2,7 +2,7 @@
 
 https://services1.arcgis.com/ixD30sld6F8MQ7V5/ArcGIS/rest/services/RISE_point_locations_(view)/FeatureServer/0
 Calling with default args will save to ./usbr.gpkg
-Call with download_usbr.py --lakes-only to filter by lakes
+Call `download_usbr.py --lakes-only` to filter by lakes
 """
 
 import argparse
