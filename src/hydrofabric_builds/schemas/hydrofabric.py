@@ -697,7 +697,7 @@ class GagesInputs(BaseModel):
     )
     usbr: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path("other/usbr_lakes.gpkg"), id_col_name="locId", x_col_name="Lon", y_col_name="Lat"
+            path=Path("other/usbr.gpkg"), id_col_name="locId", x_col_name="Lon", y_col_name="Lat"
         ),
         description="USBR lakes",
     )
