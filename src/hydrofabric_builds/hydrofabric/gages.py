@@ -12,7 +12,7 @@ from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_re
 from hydrofabric_builds.streamflow_gauges.append_from_routelink import (
     append_from_routelink,
 )
-from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import run_assignment
+from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import override_flowpath_id, run_assignment
 from hydrofabric_builds.streamflow_gauges.CIROH_UA_gages_upstream_area import fill_usgs_basin_from_csv
 from hydrofabric_builds.streamflow_gauges.NLDI_upstream_area_builder import (
     attach_nldi_cache,
@@ -327,6 +327,16 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # ---------------------------------------------------------------------
     gages = _crosswalk_reference(cfg.output_file_path, gages)
     gages = _crosswalk_nexus(cfg.output_file_path, gages)
+
+    # update fp_id and virtual_fp_id to a csv of hardcoded values
+    if gage_cfg.assign_fp_to_gages.override_fp_path:
+        override_fp_path = local_root / gage_cfg.assign_fp_to_gages.override_fp_path
+        if override_fp_path.exists():
+            override_fp = pd.read_csv(
+                override_fp_path,
+                dtype={"site_no": str, "fp_id": pd.Int64Dtype(), "virtual_fp_id": pd.Int64Dtype()},
+            )
+            gages = override_flowpath_id(gages, override_fp)
 
     # ---------------------------------------------------------------------
     # 13) Write final output and return
