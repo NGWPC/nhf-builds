@@ -10,6 +10,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import requests
+from requests.exceptions import RequestException
 
 
 def download_usbr(output: Path, url: str, lakes_only: bool = True) -> None:
@@ -20,6 +21,7 @@ def download_usbr(output: Path, url: str, lakes_only: bool = True) -> None:
     all_features = []
     offset = 0
     chunk_size = 1000
+    max_retries = 3
 
     while True:
         params = {
@@ -31,7 +33,17 @@ def download_usbr(output: Path, url: str, lakes_only: bool = True) -> None:
             "returnGeometry": "true",
         }
 
-        response = requests.post(url, data=params).json()
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, data=params, timeout=60)
+                response.raise_for_status()
+            except RequestException as e:
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    raise e
+
+        response = response.json()
         features = response.get("features", [])
 
         if not features:
