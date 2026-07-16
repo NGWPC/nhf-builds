@@ -599,7 +599,7 @@ def merge_rfc_gages(
     return gages
 
 
-def merge_nid_gages(
+def merge_nid_res_index_gages(
     gages: gpd.GeoDataFrame,
     nid_path: Path,
     nwm_rfc_path: Path,
@@ -662,7 +662,9 @@ def merge_nid_gages(
             f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
         )
     else:
-        logger.info("No NID gages added because USACE crosswalk not available in NWM reservoir index.")
+        logger.info("No NID gages added from USACE crosswalk because it was not available in NWM reservoir index.")
+
+    if 
 
     return gages
 

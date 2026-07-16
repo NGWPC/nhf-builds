@@ -26,7 +26,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_canadian_great_lakes,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
-    merge_nid_gages,
+    merge_nid_res_index_gages,
     merge_rfc_gages,
     merge_usgs_shapefile_into_gages,
 )
@@ -219,7 +219,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.info(f"gages: 'rfc' file not found, skipping: {rfc_gages_path}")
 
         if nid_path.exists():
-            gages = merge_nid_gages(
+            gages = merge_nid_res_index_gages(
                 gages,
                 nid_path=nid_path,
                 nwm_rfc_path=nwm_rfc_path,
@@ -231,6 +231,12 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             )
         else:
             logger.info(f"gages: 'nid' file not found, skipping: {nid_path}")
+
+        layers = gpd.list_layers(cfg.output_file_path)
+        if layers['name'].isin(['lakes']).any():
+            # run
+
+        
 
         if adhoc_path.exists():
             gages = merge_adhoc_lakes_gages(
