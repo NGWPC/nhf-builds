@@ -28,6 +28,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_minimal_gages,
     merge_nid_gages,
     merge_rfc_gages,
+    merge_usbr,
     merge_usgs_shapefile_into_gages,
 )
 
@@ -196,12 +197,13 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.warning(f"gages: NWM calibration list not found, skipping: {usgs_cal_gages_path}")
 
         # ---------------------------------------------------------------------
-        # 6) Add RFC gages from RFC, USACE, Adhoc, Canadian Great Lakes
+        # 6) Add RFC gages from RFC, USACE, Adhoc, Canadian Great Lakes, USBR
         # ---------------------------------------------------------------------
         rfc_gages_path = local_root / gage_cfg.gages.inputs.rfc.path
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
         nid_path = local_root / gage_cfg.gages.inputs.nid.path
         adhoc_path = local_root / gage_cfg.gages.inputs.adhoc_lakes.path
+        usbr_path = local_root / gage_cfg.gages.inputs.usbr.path
 
         if rfc_gages_path.exists():
             gages = merge_rfc_gages(
@@ -246,6 +248,13 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
 
         if gage_cfg.gages.inputs.canada_great_lakes:
             gages = merge_canadian_great_lakes(gages, great_lakes_cfg=cfg.lakes.great_lakes)
+
+        if usbr_path.exists():
+            gages = merge_usbr(
+                gages, usbr_path=usbr_path, usbr_gage_id=gage_cfg.gages.inputs.usbr.id_col_name
+            )
+        else:
+            logger.info(f"gages: 'usbr' file list not found, skipping: {usbr_path}")
 
         # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set

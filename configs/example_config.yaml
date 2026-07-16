@@ -20,6 +20,7 @@ tasks:
   lakes: True
   fp_crosswalk: True
   validate_hf: True
+  res_da: True
 
 # flowpaths
 flowpath_attributes:
@@ -321,6 +322,9 @@ gages:
         path: rfc/reservoir_index_AnA.nc
         rfc_id_col: 'rfc_gage_id'
         usace_id_col: 'usace_gage_id'
+      usbr:
+        path: other/usbr.gpkg
+        id_col_name: 'locId'
       canada_great_lakes: True
     target:
       crs: EPSG:5070
