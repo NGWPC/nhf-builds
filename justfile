@@ -1,6 +1,6 @@
 # Settings
 set dotenv-load := true
-oconus-version := "0.1.7"
+oconus-version := "0.1.8"
 
 alias download := sync
 alias download-ak := sync-ak
