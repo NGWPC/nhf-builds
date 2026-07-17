@@ -12,7 +12,7 @@ from hydrofabric_builds.hydrofabric.utils import _crosswalk_nexus, _crosswalk_re
 from hydrofabric_builds.streamflow_gauges.append_from_routelink import (
     append_from_routelink,
 )
-from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import run_assignment
+from hydrofabric_builds.streamflow_gauges.assign_fp_to_gage import override_flowpath_id, run_assignment
 from hydrofabric_builds.streamflow_gauges.CIROH_UA_gages_upstream_area import fill_usgs_basin_from_csv
 from hydrofabric_builds.streamflow_gauges.NLDI_upstream_area_builder import (
     attach_nldi_cache,
@@ -35,6 +35,13 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
 logger = logging.getLogger(__name__)
 
 
+def _required_local_path(local_root: Path, path: Path | None, input_name: str) -> Path:
+    """Resolve a required gage input path beneath the local gage data root."""
+    if path is None:
+        raise ValueError(f"Gage input '{input_name}' requires a path")
+    return local_root / path
+
+
 def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     """
     Build the unified `gages` GeoDataFrame from local sources.
@@ -50,6 +57,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         The merged `gages` GeoDataFrame that was written to disk.
     """
     gage_cfg = cfg.gages
+    local_root = here() / "data" / "gages"
 
     if gage_cfg.gages.prebuilt_gages:
         # -----------------------------------------------------------------
@@ -94,8 +102,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
 
         update_existing = gage_cfg.gages.target.update_existing
         exclude_ids = gage_cfg.gages.target.exclude_ids
-        local_root = here() / "data" / "gages"
-        usgs_discontinued_dir = local_root / gage_cfg.gages.inputs.usgs_discontinued.dir
+        usgs_discontinued_dir = _required_local_path(
+            local_root, gage_cfg.gages.inputs.usgs_discontinued.dir, "usgs_discontinued.dir"
+        )
         crs_usgs_discontinued = gage_cfg.gages.inputs.usgs_discontinued.gage_source_crs
         gages = build_usgs_gages_from_kmz(
             usgs_discontinued_dir, src_crs=crs_usgs_discontinued
@@ -104,7 +113,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 2) USGS live (SHP) — merge a set of known shapefiles
         # ---------------------------------------------------------------------
-        usgs_active_main_dir = local_root / gage_cfg.gages.inputs.usgs_active.dir
+        usgs_active_main_dir = _required_local_path(
+            local_root, gage_cfg.gages.inputs.usgs_active.dir, "usgs_active.dir"
+        )
         shp_file_paths = [
             usgs_active_main_dir / "mv01dstx_shp" / "mv01dstx.shp",
             usgs_active_main_dir / "pa01dstx_shp" / "pa01dstx.shp",
@@ -141,7 +152,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         As of Oct 2025, it is not publicly available
         https://waterservices.usgs.gov/nwis/site/?format=rdb&siteStatus=all&sites=08030530,08031005,08031020,08041788,08041790,08041940,08041945,08041970,08042455,08042468,08042470,08042515,08042539,08064990,08065080,08065310,08065340,08065420,08065700,08065820,08065925,08066087,08066138,08066380,08067280,08067505,08067520,08067653,08068020,08068025,08070220,08070550,08070900,08076990,08077110,08077640,08077670,08077888,08078400,08078890,08078910,08078935,08097000,08098295,08100950,08102730,08108705,08108710,08109310,08110520,08111006,08111051,08111056,08111070,08111080,08111085,08111090,08111110,08117375,08117403,08117857,08117858,08162580,08163720,08163880,08163900,08164150,08164200,08164410,08167000,08169778,08173210,08174545,08180990,08189298,08189320,08189520,08189585,08189590,08189718
         """
-        txdot_path = local_root / gage_cfg.gages.inputs.txdot_gages.path
+        txdot_path = _required_local_path(
+            local_root, gage_cfg.gages.inputs.txdot_gages.path, "txdot_gages.path"
+        )
         src_crs_txdot = gage_cfg.gages.inputs.txdot_gages.gage_source_crs
         if txdot_path.exists():
             gdf_TXDOT_gages = txdot_read_file(path=txdot_path, src_crs=src_crs_txdot)
@@ -156,7 +169,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 4) CADWR/ENVCA/AK/HI/PR & misc. XY CSVs
         # ---------------------------------------------------------------------
-        gages_xy_path = local_root / gage_cfg.gages.inputs.other.path
+        gages_xy_path = _required_local_path(local_root, gage_cfg.gages.inputs.other.path, "other.path")
         src_crs = gage_cfg.gages.inputs.other.gage_source_crs
         if gages_xy_path.exists():
             gages = merge_gage_xy_into_gages(
@@ -173,12 +186,14 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 5) NWM calibration gages — ensure presence; fill missing via NWIS Site Service
         # ---------------------------------------------------------------------
-        usgs_cal_gages_path = local_root / gage_cfg.gages.inputs.nwm_calib_gages.path
+        usgs_cal_gages_path = _required_local_path(
+            local_root, gage_cfg.gages.inputs.nwm_calib_gages.path, "nwm_calib_gages.path"
+        )
         if usgs_cal_gages_path.exists():
             usgs_cal_gages = pd.read_csv(usgs_cal_gages_path, header=0, dtype=str)  # sep="\t",
             keep_cols = ["Gage ID", "Agency"]
             usgs_cal_gages = usgs_cal_gages[keep_cols]
-            usgs_cal_gages.columns = ["site_no", "Agency"]
+            usgs_cal_gages.columns = pd.Index(["site_no", "Agency"])
             missed_gages = usgs_cal_gages.loc[
                 ~usgs_cal_gages["site_no"].isin(gages["site_no"].astype(str).unique()), "site_no"
             ].tolist()
@@ -199,11 +214,13 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         # 6) Add RFC gages from RFC, USACE, Adhoc, Canadian Great Lakes, USBR
         # ---------------------------------------------------------------------
-        rfc_gages_path = local_root / gage_cfg.gages.inputs.rfc.path
+        rfc_gages_path = _required_local_path(local_root, gage_cfg.gages.inputs.rfc.path, "rfc.path")
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
-        nid_path = local_root / gage_cfg.gages.inputs.nid.path
-        adhoc_path = local_root / gage_cfg.gages.inputs.adhoc_lakes.path
-        usbr_path = local_root / gage_cfg.gages.inputs.usbr.path
+        nid_path = _required_local_path(local_root, gage_cfg.gages.inputs.nid.path, "nid.path")
+        adhoc_path = _required_local_path(
+            local_root, gage_cfg.gages.inputs.adhoc_lakes.path, "adhoc_lakes.path"
+        )
+        usbr_path = _required_local_path(local_root, gage_cfg.gages.inputs.usbr.path, "usbr.path")
 
         if rfc_gages_path.exists():
             gages = merge_rfc_gages(
@@ -261,7 +278,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         gages = append_from_routelink(
             gdf=gages,
-            routelink=local_root / gage_cfg.gages.inputs.routelink.path,
+            routelink=_required_local_path(
+                local_root, gage_cfg.gages.inputs.routelink.path, "routelink.path"
+            ),
             id_col_name=gage_cfg.gages.inputs.routelink.id_col_name,
             shape=None,
         )
@@ -300,7 +319,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         cfg_CIROH_UA = gage_cfg.gages.inputs.CIROH_UA
         gages = fill_usgs_basin_from_csv(
             gages,
-            csv_path=local_root / cfg_CIROH_UA.path,
+            csv_path=_required_local_path(local_root, cfg_CIROH_UA.path, "CIROH_UA.path"),
             gage_col_csv=cfg_CIROH_UA.id_col_name,
             area_col_csv=cfg_CIROH_UA.area_col_name,
         )
@@ -335,6 +354,19 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
     # 12) Crosswalk ref_fp_id to fp_id
     # ---------------------------------------------------------------------
     gages = _crosswalk_reference(cfg.output_file_path, gages)
+
+    # Update fp_id and virtual_fp_id before crosswalking their downstream nexuses.
+    if gage_cfg.assign_fp_to_gages.override_fp_path:
+        override_fp_path = local_root / gage_cfg.assign_fp_to_gages.override_fp_path
+        if override_fp_path.exists():
+            override_fp = pd.read_csv(
+                override_fp_path,
+                dtype={"site_no": str, "fp_id": pd.Int64Dtype(), "virtual_fp_id": pd.Int64Dtype()},
+            )
+            gages = override_flowpath_id(gages, override_fp)
+        else:
+            logger.warning(f"Gage flowpath override CSV not found; skipping overrides: {override_fp_path}")
+
     gages = _crosswalk_nexus(cfg.output_file_path, gages)
 
     # ---------------------------------------------------------------------

@@ -748,6 +748,10 @@ class AssignFPConfig(BaseModel):
     max_workers: int | None = None
     USGS_NLDI_crs: str = "EPSG:4326"
     work_crs: str = "EPSG:5070"
+    override_fp_path: Path | None = Field(
+        default=None,
+        description="A csv with columns `site_no`, `fp_id`, and `virtual_fp_id` to override algorithmically chosen flowpath associations",
+    )
 
 
 # --- your top-level gages config now has defaults ---
