@@ -26,9 +26,11 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_canadian_great_lakes,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
+    merge_nid_gages_from_lakes,
     merge_nid_res_index_gages,
     merge_rfc_gages,
     merge_usgs_shapefile_into_gages,
+    open_nid,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,24 +221,24 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.info(f"gages: 'rfc' file not found, skipping: {rfc_gages_path}")
 
         if nid_path.exists():
+            gdf_nid = open_nid(gage_cfg.gages.inputs.nid, nid_path, gages.crs)
+
+            # get reservoir index gages
             gages = merge_nid_res_index_gages(
                 gages,
-                nid_path=nid_path,
+                gdf_nid=gdf_nid,
                 nwm_rfc_path=nwm_rfc_path,
-                nid_id_col=gage_cfg.gages.inputs.nid.id_col_name,
                 nwm_usace_id=gage_cfg.gages.inputs.nwm_rfc.usace_id_col,
-                x_col=gage_cfg.gages.inputs.nid.x_col_name,
-                y_col=gage_cfg.gages.inputs.nid.y_col_name,
-                nid_crs=gage_cfg.gages.inputs.nid.gage_source_crs,
             )
+
+            # if lakes layer is available, add NID gages
+            layers = gpd.list_layers(cfg.output_file_path)
+            if "lakes" in layers["name"].tolist():
+                lakes = gpd.read_file(cfg.output_file_path, layer="lakes")
+                gages = merge_nid_gages_from_lakes(gages, lakes, gdf_nid)
+
         else:
             logger.info(f"gages: 'nid' file not found, skipping: {nid_path}")
-
-        layers = gpd.list_layers(cfg.output_file_path)
-        if layers['name'].isin(['lakes']).any():
-            # run
-
-        
 
         if adhoc_path.exists():
             gages = merge_adhoc_lakes_gages(
