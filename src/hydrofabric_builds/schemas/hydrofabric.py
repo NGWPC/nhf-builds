@@ -688,11 +688,18 @@ class GagesInputs(BaseModel):
     adhoc_lakes: GageInput = Field(
         default_factory=lambda: GageInput(
             path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
-        )
+        ),
+        description="Adhoc lakes from reference waterbodies",
     )
     canada_great_lakes: bool = Field(
         default=False,
         description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
+    )
+    usbr: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("other/usbr.gpkg"), id_col_name="locId", x_col_name="Lon", y_col_name="Lat"
+        ),
+        description="USBR lakes",
     )
 
 
@@ -741,6 +748,10 @@ class AssignFPConfig(BaseModel):
     max_workers: int | None = None
     USGS_NLDI_crs: str = "EPSG:4326"
     work_crs: str = "EPSG:5070"
+    override_fp_path: Path | None = Field(
+        default=None,
+        description="A csv with columns `site_no`, `fp_id`, and `virtual_fp_id` to override algorithmically chosen flowpath associations",
+    )
 
 
 # --- your top-level gages config now has defaults ---

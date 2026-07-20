@@ -752,3 +752,33 @@ def merge_canadian_great_lakes(
     gages = pd.concat([gages, gdf])
     logger.info("Added Canadian Great Lakes")
     return gages
+
+
+def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "locId") -> gpd.GeoDataFrame:
+    """Merge USBR gages from gpkg
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        _Master table
+    usbr_path : Path
+        USBR path
+    usbr_gage_id : str, optional
+        _ID col, by default "locId"
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        _Updated gages
+    """
+    gdf = gpd.read_file(usbr_path)
+    gdf = gdf.to_crs(gages.crs)
+    gdf = gdf[[usbr_gage_id, "geometry"]].copy().rename(columns={usbr_gage_id: "site_no"})
+    gdf["status"] = "USBR"
+
+    # ensure no collisions with usgs
+    gdf["site_no"] = "usbr-" + gdf["site_no"].astype(pd.Int64Dtype()).astype(str)
+
+    gages = pd.concat([gages, gdf])
+    logger.info(f"Added {len(gdf)} gages from from USBR layer. Some may be dropped if outside domain.")
+    return gages
