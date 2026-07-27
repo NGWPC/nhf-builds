@@ -26,12 +26,11 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_canadian_great_lakes,
     merge_gage_xy_into_gages,
     merge_minimal_gages,
-    merge_nid_gages_from_lakes,
-    merge_nid_res_index_gages,
+    merge_nid_gages,
     merge_rfc_gages,
+    merge_usace,
     merge_usbr,
     merge_usgs_shapefile_into_gages,
-    open_nid,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,11 +217,12 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         rfc_gages_path = _required_local_path(local_root, gage_cfg.gages.inputs.rfc.path, "rfc.path")
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
-        nid_path = _required_local_path(local_root, gage_cfg.gages.inputs.nid.path, "nid.path")
         adhoc_path = _required_local_path(
             local_root, gage_cfg.gages.inputs.adhoc_lakes.path, "adhoc_lakes.path"
         )
+        nid_path = _required_local_path(local_root, gage_cfg.gages.inputs.nid.path, "nid.path")
         usbr_path = _required_local_path(local_root, gage_cfg.gages.inputs.usbr.path, "usbr.path")
+        usace_path = _required_local_path(local_root, gage_cfg.gages.inputs.usace.path, "usace.path")
 
         if rfc_gages_path.exists():
             gages = merge_rfc_gages(
@@ -240,22 +240,16 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             logger.info(f"gages: 'rfc' file not found, skipping: {rfc_gages_path}")
 
         if nid_path.exists():
-            gdf_nid = open_nid(gage_cfg.gages.inputs.nid, nid_path, gages.crs)
-
-            # get reservoir index gages
-            gages = merge_nid_res_index_gages(
+            gages = merge_nid_gages(
                 gages,
-                gdf_nid=gdf_nid,
+                nid_path=nid_path,
                 nwm_rfc_path=nwm_rfc_path,
+                nid_id_col=gage_cfg.gages.inputs.nid.id_col_name,
                 nwm_usace_id=gage_cfg.gages.inputs.nwm_rfc.usace_id_col,
+                x_col=gage_cfg.gages.inputs.nid.x_col_name,
+                y_col=gage_cfg.gages.inputs.nid.y_col_name,
+                nid_crs=gage_cfg.gages.inputs.nid.gage_source_crs,
             )
-
-            # if lakes layer is available, add NID gages
-            layers = gpd.list_layers(cfg.output_file_path)
-            if "lakes" in layers["name"].tolist():
-                lakes = gpd.read_file(cfg.output_file_path, layer="lakes")
-                gages = merge_nid_gages_from_lakes(gages, lakes, gdf_nid)
-
         else:
             logger.info(f"gages: 'nid' file not found, skipping: {nid_path}")
 
@@ -280,6 +274,13 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             )
         else:
             logger.info(f"gages: 'usbr' file list not found, skipping: {usbr_path}")
+
+        if usace_path.exists():
+            gages = merge_usace(
+                gages, usace_path=usace_path, usace_gage_id=gage_cfg.gages.inputs.usace.id_col_name
+            )
+        else:
+            logger.info(f"gages: 'usace' file list not found, skipping: {usace_path}")
 
         # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set
@@ -365,7 +366,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
 
     # Update fp_id and virtual_fp_id before crosswalking their downstream nexuses.
     if gage_cfg.assign_fp_to_gages.override_fp_path:
-        override_fp_path = local_root / gage_cfg.assign_fp_to_gages.override_fp_path
+        override_fp_path = _required_local_path(
+            local_root, gage_cfg.assign_fp_to_gages.override_fp_path, "override_fp_path"
+        )
         if override_fp_path.exists():
             override_fp = pd.read_csv(
                 override_fp_path,

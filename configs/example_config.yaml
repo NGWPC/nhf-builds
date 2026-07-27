@@ -325,6 +325,9 @@ gages:
       usbr:
         path: other/usbr.gpkg
         id_col_name: 'locId'
+      usace:
+        path: other/usace_crosswalk.gpkg
+        id_col_name: 'location'
       canada_great_lakes: True
     target:
       crs: EPSG:5070
@@ -487,4 +490,9 @@ res_da:
   active_rfc:
     path: input/nwps_all_gauges_report.csv
     id_field: nws shef id
+  usace:
+    run: True
+    path: input/usace_crosswalk.gpkg
+    id_field: location
+    lake_id_field: lake_id
   usgs_fix_list: ['137462010', '208250410', '21556525']

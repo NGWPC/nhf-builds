@@ -1,3 +1,21 @@
+"""
+Script to crosswalk USACE gages with flow data to 1 or 2 input lake polygon layers.
+
+The second polygon layer will be used to fill any missing values in first polygon layer.
+Sample calls:
+Download USACE only:  uv run tools/builds/gages/download_usace.py --download
+Crosswalk only: uv run tools/builds/gages/download_usace.py --crosswalk
+Download and crosswalk: uv run tools/builds/gages/download_usace.py --download --crosswalk
+Specify crosswalk polygons and output: uv run tools/builds/gages/download_usace.py --download --crosswalk
+    --output data/usace.gpkg --lakes-1 data/lakes_1.gpkg --lakes-1-key comid --lakes-2 data/lakes_2.gpkg
+    --lakes-2-key id
+Polygons default to the NHF path for NWM lakes and reference waterbodies
+    NWM lakes: ./data/sconus/lakes/input/nwm_lakes_sconus_input.gpkg
+    reference-waterbodies: "./data/sconus/lakes/input/reference_waterbodies.gpkg"
+Lakes-2 is used for any missing values in lakes-1.
+Outputs a GPKG with location, office, full-name, dist_to_lake, lake_id
+"""
+
 import argparse
 from pathlib import Path
 
@@ -130,6 +148,8 @@ def crosswalk_usace_lakes(
         .copy()
         .reset_index(drop=True)
     )
+    if pd.api.types.is_numeric_dtype(gages_joined["lake_id"].dtype):
+        gages_joined["lake_id"] = gages_joined["lake_id"].astype(pd.Int64Dtype()).astype(str)
 
     # join missing lakes to optional second lakes polygons layer
     if isinstance(lakes_2, gpd.GeoDataFrame):
@@ -149,9 +169,14 @@ def crosswalk_usace_lakes(
             .copy()
             .reset_index(drop=True)
         )
+        if pd.api.types.is_numeric_dtype(gages_joined_2["lake_id"].dtype):
+            gages_joined_2["lake_id"] = gages_joined_2["lake_id"].astype(pd.Int64Dtype()).astype(str)
         output = pd.concat([gages_joined, gages_joined_2])
+
     else:
         output = gages_joined
+
+    output["lake_id"] = output["lake_id"].replace("<NA>", None)
 
     return output
 
@@ -196,7 +221,7 @@ if __name__ == "__main__":
         "--lakes-2",
         type=Path,
         default="./data/sconus/lakes/input/reference_waterbodies.gpkg",
-        help="Input path for lakes reference waterbodies to crosswalk. This will be the second crosswalk.",
+        help="Input path for lakes reference waterbodies to crosswalk. This will be the second crosswalk for any lakes missing in crossswalk 1.",
     )
     parser.add_argument(
         "--lakes-2-key",

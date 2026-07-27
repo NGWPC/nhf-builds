@@ -102,6 +102,21 @@ def _read_adhoc(
     return df
 
 
+def _read_usace(
+    gdf: gpd.GeoDataFrame,
+    id_field: str = "location",
+    gage_id_field: str = "site_no",
+    res_da_field: str = "da_type",
+    lake_id_field: str = "lake_id",
+) -> pd.DataFrame:
+    """Read the crosswalked USACE table"""
+    df = gdf.loc[~gdf[lake_id_field].isnull(), [lake_id_field, id_field]].copy()
+    df[res_da_field] = DA_MAPPING.usace_persistence
+    df.rename(columns={id_field: gage_id_field}, inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    return df
+
+
 def _add_great_lakes(
     mapping: GreatLakesMapping,
     gage_id_field: str = "site_no",

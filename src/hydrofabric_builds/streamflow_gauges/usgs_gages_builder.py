@@ -12,7 +12,7 @@ import geopandas as gpd
 import pandas as pd
 import xarray as xr
 
-from hydrofabric_builds.schemas.hydrofabric import GageInput, GreatLakesMapping
+from hydrofabric_builds.schemas.hydrofabric import GreatLakesMapping
 
 logger = logging.getLogger(__name__)
 
@@ -599,23 +599,15 @@ def merge_rfc_gages(
     return gages
 
 
-def open_nid(cfg: GageInput, nid_path: Path, gage_crs: str | int) -> gpd.GeoDataFrame:
-    """Read in NID file to gepdataframe"""
-    df_nid = pd.read_csv(nid_path)
-    gdf_nid = gpd.GeoDataFrame(
-        geometry=gpd.points_from_xy(x=df_nid[cfg.x_col_name], y=df_nid[cfg.y_col_name]),
-        data={"site_no": df_nid[cfg.id_col_name]},
-        crs=cfg.gage_source_crs,
-    )
-    gdf_nid = gdf_nid.to_crs(gage_crs)
-    return gdf_nid
-
-
-def merge_nid_res_index_gages(
+def merge_nid_gages(
     gages: gpd.GeoDataFrame,
-    gdf_nid: gpd.GeoDataFrame,
+    nid_path: Path,
     nwm_rfc_path: Path,
     nwm_usace_id: str = "usace_gage_id",
+    nid_id_col: str = "NIDID",
+    x_col: str | None = "LONGITUDE",
+    y_col: str | None = "LATITUDE",
+    nid_crs: str | int = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
     """Adds USACE gages that are in NWM v3 reservoir index. IDs are extracted from NID (National Inventory of Dams)
 
@@ -623,18 +615,28 @@ def merge_nid_res_index_gages(
     ----------
     gages : gpd.GeoDataFrame
         Master table
-    gdf_nid : gpd.GeoDataFrame
-        NID as geodataframe in gages CRS
+    nid_path : Path
+        Path to NID csv
     nwm_rfc_path : Path
         Path to NWM reservoir index. If this does not exist, function will pass over_
     nwm_usace_id : str, optional
         Gage ID in NWM reservoir index USACE table, by default "usace_gage_id"
+    nid_id_col : str, optional
+        Gage ID in NID table, by default 'NIDID'
+    x_col : str | None, optional
+        x geometry, by default "LONGITUDE"
+    y_col : str | None, optional
+        y geometry, by default "LATITUDE"
+    nid_crs : _str, optional
+        CRS of NID table, by default "EPSG:4326"
 
     Returns
     -------
     gpd.GeoDataFrame
         Updated gages
     """
+    df_nid = pd.read_csv(nid_path)
+
     if nwm_rfc_path.exists():
         if ".nc" not in nwm_rfc_path.name:
             logger.info(
@@ -646,33 +648,22 @@ def merge_nid_res_index_gages(
 
     if nwm_usace_id in ds.variables:
         df_nwm = ds[nwm_usace_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
-        gdf_nid = gdf_nid.loc[gdf_nid["site_no"].isin(df_nwm.values)].copy()
+        df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
+
+        gdf_nid = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
+            data={"site_no": df_nid[nid_id_col]},
+            crs=nid_crs,
+        )
+        gdf_nid = gdf_nid.to_crs(gages.crs)
         gdf_nid["status"] = "USACE"
         gages = pd.concat([gages, gdf_nid])
         logger.info(
             f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
         )
     else:
-        logger.info(
-            "No NID gages added from USACE crosswalk because it was not available in NWM reservoir index."
-        )
+        logger.info("No NID gages added because USACE crosswalk not available in NWM reservoir index.")
 
-    return gages
-
-
-def merge_nid_gages_from_lakes(
-    gages: gpd.GeoDataFrame, lakes: gpd.GeoDataFrame, nid: gpd.GeoDataFrame, nidid_col_lakes: str = "nidid"
-) -> gpd.GeoDataFrame:
-    nid_in_lake = set(lakes[nidid_col_lakes].unique())
-    nid_in_gages = set(gages["site_no"].unique())
-    nid_to_add = nid_in_lake - nid_in_gages
-    nid = nid.loc[nid["site_no"].isin(nid_to_add), ["site_no", "geometry"]].copy().reset_index(drop=True)
-    nid["status"] = "USACE"
-    gages = pd.concat([gages, nid])
-
-    logger.info(
-        f"Added {len(nid)} USACE gages that were found in lakes layer. Some may be dropped if outside domain."
-    )
     return gages
 
 
@@ -760,16 +751,16 @@ def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "lo
     Parameters
     ----------
     gages : gpd.GeoDataFrame
-        _Master table
+        Master table
     usbr_path : Path
         USBR path
     usbr_gage_id : str, optional
-        _ID col, by default "locId"
+        ID col, by default "locId"
 
     Returns
     -------
     gpd.GeoDataFrame
-        _Updated gages
+        Updated gages
     """
     gdf = gpd.read_file(usbr_path)
     gdf = gdf.to_crs(gages.crs)
@@ -781,4 +772,33 @@ def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "lo
 
     gages = pd.concat([gages, gdf])
     logger.info(f"Added {len(gdf)} gages from from USBR layer. Some may be dropped if outside domain.")
+    return gages
+
+
+def merge_usace(
+    gages: gpd.GeoDataFrame, usace_path: Path, usace_gage_id: str = "location"
+) -> gpd.GeoDataFrame:
+    """Adds USACE gages associated with reservoirs.
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master table
+    usace_path : Path
+        USACE path
+    usace_gage_id : str, optional
+        ID col, by default 'location'
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    gdf = gpd.read_file(usace_path)
+    gdf = gdf.to_crs(gages.crs)
+    gdf = gdf[[usace_gage_id, "geometry"]].copy().rename(columns={usace_gage_id: "site_no"})
+    gdf["status"] = "USACE"
+
+    gages = pd.concat([gages, gdf])
+    logger.info(f"Added {len(gdf)} gages from from USACE layer. Some may be dropped if outside domain.")
     return gages
