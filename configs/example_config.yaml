@@ -327,7 +327,7 @@ gages:
         id_col_name: 'locId'
       usace:
         path: other/usace_crosswalk.gpkg
-        id_col_name: 'location'
+        id_col_name: location
       canada_great_lakes: True
     target:
       crs: EPSG:5070

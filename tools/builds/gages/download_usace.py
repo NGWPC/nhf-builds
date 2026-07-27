@@ -115,7 +115,13 @@ def crosswalk_usace_lakes(
     lakes_2_key: str | None,
     buffer: int = 300,
 ) -> gpd.GeoDataFrame:
-    """Crosswalk gages to 1 or 2 lake polygon layers. The output will be called `lake_id`
+    """Crosswalk gages to 1 or 2 lake polygon layers.
+
+    The first polygon layer will be joined. Any gages missing in the first layer will be joined in
+    the second layer.
+
+    A spatial nearest join is used with a max buffer. The distance column is retained in output
+    as dist_to_lake
 
     Parameters
     ----------
@@ -160,6 +166,7 @@ def crosswalk_usace_lakes(
         ].copy()
         gages_joined = gages_joined.loc[~gages_joined["lake_id"].isnull()].copy()
 
+        # spatial join nearest
         gages_joined_2 = gpd.sjoin_nearest(
             gages_missing, lakes_2, how="left", max_distance=buffer, distance_col="dist_to_lake"
         )
