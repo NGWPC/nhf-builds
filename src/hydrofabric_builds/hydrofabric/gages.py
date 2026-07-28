@@ -28,6 +28,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_minimal_gages,
     merge_nid_gages,
     merge_rfc_gages,
+    merge_usace,
     merge_usbr,
     merge_usgs_shapefile_into_gages,
 )
@@ -216,11 +217,12 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         # ---------------------------------------------------------------------
         rfc_gages_path = _required_local_path(local_root, gage_cfg.gages.inputs.rfc.path, "rfc.path")
         nwm_rfc_path = local_root / gage_cfg.gages.inputs.nwm_rfc.path
-        nid_path = _required_local_path(local_root, gage_cfg.gages.inputs.nid.path, "nid.path")
         adhoc_path = _required_local_path(
             local_root, gage_cfg.gages.inputs.adhoc_lakes.path, "adhoc_lakes.path"
         )
+        nid_path = _required_local_path(local_root, gage_cfg.gages.inputs.nid.path, "nid.path")
         usbr_path = _required_local_path(local_root, gage_cfg.gages.inputs.usbr.path, "usbr.path")
+        usace_path = _required_local_path(local_root, gage_cfg.gages.inputs.usace.path, "usace.path")
 
         if rfc_gages_path.exists():
             gages = merge_rfc_gages(
@@ -272,6 +274,13 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
             )
         else:
             logger.info(f"gages: 'usbr' file list not found, skipping: {usbr_path}")
+
+        if usace_path.exists():
+            gages = merge_usace(
+                gages, usace_path=usace_path, usace_gage_id=gage_cfg.gages.inputs.usace.id_col_name
+            )
+        else:
+            logger.info(f"gages: 'usace' file list not found, skipping: {usace_path}")
 
         # ---------------------------------------------------------------------
         # 6) Append RouteLink gages not already in set
@@ -357,7 +366,9 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
 
     # Update fp_id and virtual_fp_id before crosswalking their downstream nexuses.
     if gage_cfg.assign_fp_to_gages.override_fp_path:
-        override_fp_path = local_root / gage_cfg.assign_fp_to_gages.override_fp_path
+        override_fp_path = _required_local_path(
+            local_root, gage_cfg.assign_fp_to_gages.override_fp_path, "override_fp_path"
+        )
         if override_fp_path.exists():
             override_fp = pd.read_csv(
                 override_fp_path,

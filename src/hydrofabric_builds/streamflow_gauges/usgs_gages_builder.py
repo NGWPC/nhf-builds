@@ -751,16 +751,16 @@ def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "lo
     Parameters
     ----------
     gages : gpd.GeoDataFrame
-        _Master table
+        Master table
     usbr_path : Path
         USBR path
     usbr_gage_id : str, optional
-        _ID col, by default "locId"
+        ID col, by default "locId"
 
     Returns
     -------
     gpd.GeoDataFrame
-        _Updated gages
+        Updated gages
     """
     gdf = gpd.read_file(usbr_path)
     gdf = gdf.to_crs(gages.crs)
@@ -772,4 +772,33 @@ def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "lo
 
     gages = pd.concat([gages, gdf])
     logger.info(f"Added {len(gdf)} gages from from USBR layer. Some may be dropped if outside domain.")
+    return gages
+
+
+def merge_usace(
+    gages: gpd.GeoDataFrame, usace_path: Path, usace_gage_id: str = "location"
+) -> gpd.GeoDataFrame:
+    """Adds USACE gages associated with reservoirs.
+
+    Parameters
+    ----------
+    gages : gpd.GeoDataFrame
+        Master table
+    usace_path : Path
+        USACE path
+    usace_gage_id : str, optional
+        ID col, by default 'location'
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Updated gages
+    """
+    gdf = gpd.read_file(usace_path)
+    gdf = gdf.to_crs(gages.crs)
+    gdf = gdf[[usace_gage_id, "geometry"]].copy().rename(columns={usace_gage_id: "site_no"})
+    gdf["status"] = "USACE"
+
+    gages = pd.concat([gages, gdf])
+    logger.info(f"Added {len(gdf)} gages from from USACE layer. Some may be dropped if outside domain.")
     return gages

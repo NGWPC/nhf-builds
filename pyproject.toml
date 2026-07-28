@@ -155,3 +155,8 @@ filterwarnings = [
   "ignore:The behavior of DataFrame concatenation with empty or all-NA entries is deprecated:FutureWarning",
   "ignore:Conversion of an array with *:DeprecationWarning"
 ]
+
+[tool.basilisk]
+
+[tool.basilisk.rule-tags]
+basilisk = "error"
