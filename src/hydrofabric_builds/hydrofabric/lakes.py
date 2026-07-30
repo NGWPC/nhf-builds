@@ -125,6 +125,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_ref_wb = _prep_ref_wb(
                 cfg,
                 gdf_adhoc=inputs["adhoc"].copy(),
+                gdf_usbr=inputs["usbr"].copy(),
                 gdf_ref_res=inputs["ref_res"].copy(),
                 gdf_wb_polys=inputs["ref_wb"].copy(),
             )

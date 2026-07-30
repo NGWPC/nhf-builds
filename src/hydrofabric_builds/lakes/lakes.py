@@ -70,6 +70,11 @@ def _read_inputs(cfg: HFConfig) -> dict[str, gpd.GeoDataFrame]:
         if cfg.lakes.adhoc.path.exists()
         else gpd.GeoDataFrame(geometry=[], crs=cfg.crs)
     )
+    inputs["usbr"] = (
+        gpd.read_file(cfg.lakes.usbr.path).to_crs(cfg.crs)
+        if cfg.lakes.usbr.path.exists()
+        else gpd.GeoDataFrame(geometry=[], crs=cfg.crs)
+    )
     inputs["ref_res"] = (
         gpd.read_file(cfg.lakes.ref_res.path).to_crs(cfg.crs)
         if cfg.lakes.ref_res.path.exists()
@@ -372,7 +377,11 @@ def _calculate_elevation__refres(
 
 
 def _prep_ref_wb(
-    cfg: HFConfig, gdf_adhoc: gpd.GeoDataFrame, gdf_ref_res: gpd.GeoDataFrame, gdf_wb_polys: gpd.GeoDataFrame
+    cfg: HFConfig,
+    gdf_adhoc: gpd.GeoDataFrame,
+    gdf_usbr: gpd.GeoDataFrame,
+    gdf_ref_res: gpd.GeoDataFrame,
+    gdf_wb_polys: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Filters adhoc lakes to lake ID only in reference waterbodies
 
@@ -380,32 +389,66 @@ def _prep_ref_wb(
 
     Returns required reference waterbodies with attributes
     """
-    # select where reference waterbody is required
-    gdf_adhoc = gdf_adhoc.loc[gdf_adhoc[cfg.lakes.adhoc.ref_wb_field] == True, :].copy()  # noqa: E712
-    # cast ID to string if ref wb to string
-    if pd.api.types.is_object_dtype(gdf_ref_res[cfg.lakes.ref_res.ref_wb_id_col]):
-        gdf_adhoc[cfg.lakes.ref_wb.output_id_field] = (
-            gdf_adhoc[cfg.lakes.ref_wb.output_id_field].astype(pd.Int64Dtype()).astype(pd.StringDtype())
-        )
+    ref_wb_id = cfg.lakes.ref_res.ref_wb_id_col
+    output_lake_id = cfg.lakes.output_comid_field
+    keep_columns = [
+        output_lake_id,
+        "ref_fab_fp",
+        "ref_fab_wb",
+        "nid",
+        "dam_id",
+        "LkArea",
+        "attrib_src",
+        "geometry",
+    ]
+    processed_gdf = []
+    for (
+        gdf,
+        keep_field,
+    ) in zip(
+        [gdf_adhoc, gdf_usbr],
+        [cfg.lakes.adhoc.ref_wb_field, cfg.lakes.usbr.ref_wb_field],
+        strict=False,
+    ):
+        # select where reference waterbody is required
+        if not gdf.empty:
+            print(keep_field)
+            gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()  # noqa: E712
+            print(gdf)
+            # cast ID to string if ref wb to string
+            if pd.api.types.is_object_dtype(gdf_ref_res[ref_wb_id]) and not pd.api.types.is_object_dtype(
+                gdf[output_lake_id]
+            ):
+                gdf[output_lake_id] = gdf[output_lake_id].astype(pd.Int64Dtype()).astype(pd.StringDtype())
 
-    # merge the ref res data
-    gdf_adhoc = gdf_adhoc.merge(
-        gdf_ref_res[["ref_fab_fp", "ref_fab_wb", "nid"]],
-        left_on=cfg.lakes.ref_wb.output_id_field,
-        right_on=cfg.lakes.ref_res.ref_wb_id_col,
-        how="left",
-    )
+            # merge the ref res data
+            gdf = gdf.merge(
+                gdf_ref_res[["ref_fab_fp", "ref_fab_wb", "nid"]],
+                left_on=cfg.lakes.ref_wb.output_id_field,
+                right_on=cfg.lakes.ref_res.ref_wb_id_col,
+                how="left",
+            )
 
-    # get geometry from ref wb polygons (area in m², convert to km²)
-    gdf_wb_polys["LkArea"] = gdf_wb_polys.geometry.area / 1_000_000.0
-    gdf_adhoc = gdf_adhoc.merge(
-        gdf_wb_polys[[cfg.lakes.ref_wb.id_field, "LkArea"]],
-        left_on=cfg.lakes.ref_wb.output_id_field,
-        right_on=cfg.lakes.ref_wb.id_field,
-        how="inner",
-    ).drop(columns=[cfg.lakes.ref_wb.id_field])
+            # get geometry from ref wb polygons (area in m², convert to km²)
+            gdf_wb_polys["LkArea"] = gdf_wb_polys.geometry.area / 1_000_000.0
+            gdf = gdf.merge(
+                gdf_wb_polys[[cfg.lakes.ref_wb.id_field, "LkArea"]],
+                left_on=cfg.lakes.ref_wb.output_id_field,
+                right_on=cfg.lakes.ref_wb.id_field,
+                how="inner",
+            ).drop(columns=[cfg.lakes.ref_wb.id_field])
 
-    return gdf_adhoc
+            for col in keep_columns:
+                if col not in gdf.columns:
+                    gdf[col] = None
+
+            gdf = gdf[keep_columns].reset_index(drop=True).copy()
+            processed_gdf.append(gdf)
+
+    output = pd.concat(processed_gdf).reset_index(drop=True)
+    output = output.drop_duplicates(subset=[ref_wb_id])
+
+    return output
 
 
 def _filter_ref_res(
