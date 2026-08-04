@@ -98,6 +98,11 @@ def _read_adhoc(
     df = gdf.loc[gdf[lake_id_field] != null_value, [lake_id_field, rfc_field]].copy()
     df[res_da_field] = DA_MAPPING.rfc_forecast
     df.rename(columns={rfc_field: gage_id_field}, inplace=True)
+    # drop OT suffix from Ohio RFC gages
+    df[gage_id_field] = np.where(
+        df[gage_id_field].str[-2:] == "OT", df[gage_id_field].str[:-2], df[gage_id_field]
+    )
+
     df.reset_index(drop=True, inplace=True)
     return df
 
