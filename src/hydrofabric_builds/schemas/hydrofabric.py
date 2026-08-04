@@ -1266,6 +1266,21 @@ class USACEResDAInput(BaseModel):
     id_field: str = Field(default="location", description="Field containing shared reservoir/gage ID.")
 
 
+class USBRResDAInput(BaseModel):
+    """USACE : lake_id crosswalk for reservoir DA."""
+
+    path: Path = Field(
+        default=Path("input/usbr_lake_crosswalk.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    run: bool = Field(
+        default=False,
+        description="Flag to use USBR reservoir input. Must be set to false if file is not present.",
+    )
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    id_field: str = Field(default="locId", description="Field containing shared reservoir/gage ID.")
+
+
 class ResDAConfig(BaseModel):
     """Configuration for reservoir DA"""
 
@@ -1303,6 +1318,9 @@ class ResDAConfig(BaseModel):
     usace: USACEResDAInput = Field(
         default=USACEResDAInput(), description="Crosswalked table of USACE reservoir/gages to lake_id."
     )
+    usbr: USBRResDAInput = Field(
+        default=USBRResDAInput(), description="Crosswalked table of USBR reservoir/gages to lake_id."
+    )
     usgs_fix_list: list[str] | None = Field(
         default=None,
         description="List of USGS site_no in the reservoir index that are missing a leading 0. These values will have 0 prepended during the pipeline.",
@@ -1315,6 +1333,7 @@ class ResDAConfig(BaseModel):
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
         self.active_rfc.path = self.input_dir / self.active_rfc.path
         self.usace.path = self.input_dir / self.usace.path
+        self.usbr.path = self.input_dir / self.usbr.path
         return self
 
 

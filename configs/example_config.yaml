@@ -495,4 +495,9 @@ res_da:
     path: input/usace_crosswalk.gpkg
     id_field: location
     lake_id_field: lake_id
+  usbr:
+    run: True
+    path: input/usbr_lake_crosswalk.gpkg
+    id_field: locId
+    lake_id_field: lake_id
   usgs_fix_list: ['137462010', '208250410', '21556525']
