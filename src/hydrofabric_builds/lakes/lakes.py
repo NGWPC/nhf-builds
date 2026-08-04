@@ -412,9 +412,7 @@ def _prep_ref_wb(
     ):
         # select where reference waterbody is required
         if not gdf.empty:
-            print(keep_field)
             gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()  # noqa: E712
-            print(gdf)
             # cast ID to string if ref wb to string
             if pd.api.types.is_object_dtype(gdf_ref_res[ref_wb_id]) and not pd.api.types.is_object_dtype(
                 gdf[output_lake_id]
