@@ -421,7 +421,7 @@ def validate_lakes(
     if validate_duplicates:
         logger.info("Now validating lakes for any duplicate points...")
         try:
-            buffered_nwm_lakes = gpd.read_file(buffer_path, layer="nwm_lakes", driver="GPKG")
+            buffered_nwm_lakes = gpd.read_file(buffer_path, layer="nwm_lakes")
         except FileNotFoundError:
             error_str = f"Error: The file {buffer_path} was not found."
             logger.warning(error_str)

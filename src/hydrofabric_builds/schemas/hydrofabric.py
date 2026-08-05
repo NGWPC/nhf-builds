@@ -991,6 +991,23 @@ class AdhocLakeInput(BaseModel):
     )
 
 
+class USBRLakeInput(BaseModel):
+    """Lakes: USBR lakes are mapped to COMID/lake_id. Add USBR lakes from reference reservoirs when not included in nwm lakes."""
+
+    path: Path = Field(
+        default=Path("input/usbr_lake_crosswalk.gpkg"),
+        description="Source path. LakesConfig will inject preceding input path.",
+    )
+    layer: str = "usbr_lake_crosswalk"
+    run: bool = Field(
+        default=True, description="Flag to run USBR Lake input. Must be set to false if file is not present."
+    )
+    ref_wb_field: str = Field(
+        default="ref_wb_lake",
+        description="Field in the USBR table that flags if a lake is only in the reference waterbodies dataset (not in NWM lakes)",
+    )
+
+
 class GreatLake(BaseModel):
     """Defines parameters about a Great Lake"""
 
@@ -1044,7 +1061,7 @@ class LakesConfig(BaseModel):
     """Main Config for Lakes"""
 
     input_dir: Path = Field(
-        default=here() / "data/lakes",
+        default=here() / "data/sconus/lakes",
         description="Input directory. This will be prepended to all paths for other inputs",
     )
     lakes_path: Path = Field(
@@ -1061,7 +1078,11 @@ class LakesConfig(BaseModel):
     )
     adhoc: AdhocLakeInput = Field(
         default=AdhocLakeInput(),
-        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible. If Adhoc Lakes are not found in other datasets, points will be created at lat-lon.",
+        description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID, site_no (gage), and dam_id (reference reservoirs) when possible.",
+    )
+    usbr: USBRLakeInput = Field(
+        default=USBRLakeInput(),
+        description="All USBR Lakes Input configs. USBR lakes have been mapped to COMID when possible. If USBR lakes are missing in NWM lakes but available in reference waterbodies, theey will be added.",
     )
     ref_wb: RefWaterbodyInput = Field(
         default=RefWaterbodyInput(),
@@ -1145,6 +1166,7 @@ class LakesConfig(BaseModel):
         self.ref_res.path = self.input_dir / self.ref_res.path
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
+        self.usbr.path = self.input_dir / self.usbr.path
 
         # optional paths
         self.nwm.attrib_src_path = (
@@ -1244,6 +1266,21 @@ class USACEResDAInput(BaseModel):
     id_field: str = Field(default="location", description="Field containing shared reservoir/gage ID.")
 
 
+class USBRResDAInput(BaseModel):
+    """USACE : lake_id crosswalk for reservoir DA."""
+
+    path: Path = Field(
+        default=Path("input/usbr_lake_crosswalk.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    run: bool = Field(
+        default=False,
+        description="Flag to use USBR reservoir input. Must be set to false if file is not present.",
+    )
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    id_field: str = Field(default="locId", description="Field containing shared reservoir/gage ID.")
+
+
 class ResDAConfig(BaseModel):
     """Configuration for reservoir DA"""
 
@@ -1281,6 +1318,9 @@ class ResDAConfig(BaseModel):
     usace: USACEResDAInput = Field(
         default=USACEResDAInput(), description="Crosswalked table of USACE reservoir/gages to lake_id."
     )
+    usbr: USBRResDAInput = Field(
+        default=USBRResDAInput(), description="Crosswalked table of USBR reservoir/gages to lake_id."
+    )
     usgs_fix_list: list[str] | None = Field(
         default=None,
         description="List of USGS site_no in the reservoir index that are missing a leading 0. These values will have 0 prepended during the pipeline.",
@@ -1293,6 +1333,7 @@ class ResDAConfig(BaseModel):
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
         self.active_rfc.path = self.input_dir / self.active_rfc.path
         self.usace.path = self.input_dir / self.usace.path
+        self.usbr.path = self.input_dir / self.usbr.path
         return self
 
 
