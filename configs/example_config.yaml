@@ -422,6 +422,11 @@ lakes:
     path: "input/adhoc_lakes.gpkg"
     layer: "adhoc_lakes"
     ref_wb_field: ref_waterbodies_only
+  usbr:
+    run: True
+    path: input/usbr_lake_crosswalk.gpkg
+    id_field: locId
+    lake_id_field: lake_id
   ref_res:
     run: True
     path: input/reference-reservoirs-v1.gpkg
