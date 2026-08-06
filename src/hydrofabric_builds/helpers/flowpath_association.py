@@ -240,7 +240,8 @@ def associate_flowpaths_polygon_graph(
         _description_
     """
     # Cast all IDs to string
-    gdf_poly[poly_id] = gdf_poly[poly_id].astype(pd.Int64Dtype()).astype(str)
+    if pd.api.types.is_numeric_dtype(gdf_poly[poly_id]):
+        gdf_poly[poly_id] = gdf_poly[poly_id].astype(pd.Int64Dtype()).astype(str)
     gdf_vfp[vfp_id] = gdf_vfp[vfp_id].astype(pd.Int64Dtype()).astype(str)
 
     # intersect polygons and linestrings resulting in linestring intersections
