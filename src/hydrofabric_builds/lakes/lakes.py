@@ -445,7 +445,6 @@ def _prep_ref_wb(
 
     output = pd.concat(processed_gdf).reset_index(drop=True)
     output = output.drop_duplicates(subset=[output_lake_id])
-    output.to_file("tmp_output.gpkg")
 
     return output
 
@@ -699,9 +698,6 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         # Compute distance between lake (geometry_x) and NID point (geometry_y)
         dupes = dupes.loc[dupes["dam_id"].notna()]
         dupes["_dam_nid_dist"] = dupes["geometry_x"].distance(dupes["geometry_y"])
-        tmp = dupes.copy()
-        tmp.drop(columns=["geometry_y", "dam_length"], inplace=True)
-        tmp.to_file("dupes22.gpkg")
         keep_idx = dupes.groupby(dam_dupe_cols)["_dam_nid_dist"].idxmin()
         deduped = dupes.loc[keep_idx].drop(columns=["_dam_nid_dist"])
 
