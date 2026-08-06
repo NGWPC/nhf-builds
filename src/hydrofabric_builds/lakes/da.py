@@ -98,6 +98,11 @@ def _read_adhoc(
     df = gdf.loc[gdf[lake_id_field] != null_value, [lake_id_field, rfc_field]].copy()
     df[res_da_field] = DA_MAPPING.rfc_forecast
     df.rename(columns={rfc_field: gage_id_field}, inplace=True)
+    # drop OT suffix from Ohio RFC gages
+    df[gage_id_field] = np.where(
+        df[gage_id_field].str[-2:] == "OT", df[gage_id_field].str[:-2], df[gage_id_field]
+    )
+
     df.reset_index(drop=True, inplace=True)
     return df
 
@@ -113,6 +118,22 @@ def _read_usace(
     df = gdf.loc[~gdf[lake_id_field].isnull(), [lake_id_field, id_field]].copy()
     df[res_da_field] = DA_MAPPING.usace_persistence
     df.rename(columns={id_field: gage_id_field}, inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    return df
+
+
+def _read_usbr(
+    gdf: gpd.GeoDataFrame,
+    id_field: str = "locId",
+    gage_id_field: str = "site_no",
+    res_da_field: str = "da_type",
+    lake_id_field: str = "lake_id",
+) -> pd.DataFrame:
+    """Read the crosswalked USACE table"""
+    df = gdf.loc[~gdf[lake_id_field].isnull(), [lake_id_field, id_field]].copy()
+    df[res_da_field] = DA_MAPPING.usbr_persistence
+    df.rename(columns={id_field: gage_id_field}, inplace=True)
+    df[gage_id_field] = "usbr-" + df[gage_id_field].astype(pd.Int64Dtype()).astype(str)
     df.reset_index(drop=True, inplace=True)
     return df
 
@@ -157,11 +178,12 @@ def _merge(
     """Merge all dataframe sources and de-duplicate lake_id"""
     df_lakes = df_lakes[[gid_field, lake_id_field]].copy()
 
-    if not pd.api.types.is_object_dtype(df_lakes[lake_id_field].dtype):
+    if pd.api.types.is_numeric_dtype(df_lakes[lake_id_field].dtype):
         df_lakes[lake_id_field] = df_lakes[lake_id_field].astype(int).astype(str)
 
     for df in df_list:
-        df[lake_id_field] = df[lake_id_field].astype(int).astype(str)
+        if pd.api.types.is_numeric_dtype(df[lake_id_field].dtype):
+            df[lake_id_field] = df[lake_id_field].astype(int).astype(str)
 
     df_all = pd.concat(df_list)
 
@@ -205,7 +227,6 @@ def _check_gages_exist(
     if gdf_gages.empty:
         logger.info("Gages layer is not available. Cannot check if reservoir DA gages are available.")
         return
-
     res_gages = df_res_da.loc[~df_res_da[gage_id_field].isnull()].copy()
     missing_gages = res_gages.loc[~res_gages[gage_id_field].isin(gdf_gages[gage_id_field])].copy()
     len_missing = len(missing_gages)

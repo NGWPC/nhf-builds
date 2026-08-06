@@ -260,7 +260,7 @@ def test_read_adhoc() -> None:
             "lake_id": [-99999, 486928],
         },
     )
-    expected = pd.DataFrame(data={"lake_id": [486928], "site_no": ["BUCK2OT"], "da_type": [4]})
+    expected = pd.DataFrame(data={"lake_id": [486928], "site_no": ["BUCK2"], "da_type": [4]})
 
     output = _read_adhoc(gdf)
     assert_frame_equal(output, expected)

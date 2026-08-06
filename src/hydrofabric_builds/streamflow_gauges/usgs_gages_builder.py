@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -705,6 +706,10 @@ def merge_adhoc_lakes_gages(
     )
     gdf_adhoc = gdf_adhoc.to_crs(gages.crs)
     gdf_adhoc["status"] = "adhoc_lakes"
+    # drop OT suffix from Ohio RFC gages
+    gdf_adhoc["site_no"] = np.where(
+        gdf_adhoc["site_no"].str[-2:] == "OT", gdf_adhoc["site_no"].str[:-2], gdf_adhoc["site_no"]
+    )
     gages = pd.concat([gages, gdf_adhoc])
     logger.info(
         f"Added {len(gdf_adhoc)} gages from from adhoc lakes layer. Some may be dropped if outside domain."

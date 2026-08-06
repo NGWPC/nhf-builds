@@ -15,6 +15,7 @@ from hydrofabric_builds.lakes.da import (
     _read_adhoc,
     _read_res_index,
     _read_usace,
+    _read_usbr,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,20 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
             _read_usace(
                 gdf,
                 id_field=cfg.res_da.usace.id_field,
+                gage_id_field=cfg.res_da.gage_id_field,
+                lake_id_field=cfg.res_da.lake_id_field,
+                res_da_field=cfg.res_da.da_type_field,
+            )
+        )
+        del gdf
+
+    if cfg.res_da.usbr.run:
+        logger.info("Retrieving reservoirs from USBR crosswalk table")
+        gdf = gpd.read_file(cfg.res_da.usbr.path)
+        df_list.append(
+            _read_usbr(
+                gdf,
+                id_field=cfg.res_da.usbr.id_field,
                 gage_id_field=cfg.res_da.gage_id_field,
                 lake_id_field=cfg.res_da.lake_id_field,
                 res_da_field=cfg.res_da.da_type_field,
