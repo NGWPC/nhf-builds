@@ -444,7 +444,8 @@ def _prep_ref_wb(
             processed_gdf.append(gdf)
 
     output = pd.concat(processed_gdf).reset_index(drop=True)
-    output = output.drop_duplicates(subset=[ref_wb_id])
+    output = output.drop_duplicates(subset=[output_lake_id])
+    output.to_file("tmp_output.gpkg")
 
     return output
 
@@ -639,6 +640,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         nid_df, geometry=gpd.points_from_xy(nid_df["longitude"], nid_df["latitude"]), crs=4326
     )
     nid_gdf = nid_gdf.to_crs(res_df.crs)
+    nid_gdf = nid_gdf.replace(["<NA>", "None", "nan"], None)
 
     # Rename for merge
     nid_gdf = nid_gdf.rename(columns={"nidid": "nid", "dam_name": "dam_name_nid"})
@@ -648,7 +650,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     nid_gdf = nid_gdf[nid_gdf["nid"].isin(nid_vals)].copy()
 
     # Clean string nulls
-    res_df = res_df.replace(["<NA>", "None"], None)
+    res_df = res_df.replace(["<NA>", "None", "nan"], None)
     res_df = res_df.drop_duplicates(keep="first")
 
     # Separate NWM lakes (already have NID data from placement improvement)
@@ -678,6 +680,9 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
 
+    # Continue to handle nulls as they keep popping back in
+    res_df = res_df.replace(["<NA>", "None", "nan"], None)
+
     # Dedup: same (dam_id, nid) across different lake_ids -> keep closest to NID point
     dam_dupe_cols = ["dam_id", "nid"]
     dam_dupe_mask = (
@@ -692,7 +697,11 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         non_dupes = res_df[~dam_dupe_mask].copy()
 
         # Compute distance between lake (geometry_x) and NID point (geometry_y)
+        dupes = dupes.loc[dupes["dam_id"].notna()]
         dupes["_dam_nid_dist"] = dupes["geometry_x"].distance(dupes["geometry_y"])
+        tmp = dupes.copy()
+        tmp.drop(columns=["geometry_y", "dam_length"], inplace=True)
+        tmp.to_file("dupes22.gpkg")
         keep_idx = dupes.groupby(dam_dupe_cols)["_dam_nid_dist"].idxmin()
         deduped = dupes.loc[keep_idx].drop(columns=["_dam_nid_dist"])
 
