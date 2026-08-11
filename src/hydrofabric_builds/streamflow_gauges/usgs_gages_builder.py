@@ -50,7 +50,11 @@ def strip_html(name_html: str | None) -> str | None:
 def infer_state_from_filename(path: Path) -> str:
     """Finds state''s name in abbreviation from the file's name"""
     stem = path.stem.lower()
-    state_part = stem.split("streamgages_", 1)[-1] if "streamgages_" in stem else stem.split("_")[-1]
+    state_part = (
+        stem.split("streamgages_", 1)[-1]
+        if "streamgages_" in stem
+        else stem.split("_")[-1]
+    )
     state_clean = state_part.replace("_", " ").replace("-", " ").strip()
     return " ".join(w.capitalize() for w in state_clean.split())
 
@@ -113,10 +117,26 @@ def build_usgs_gages_from_kmz(
         gdf[state_col] = infer_state_from_filename(kmz)
 
         try:
-            keep = ["geometry", state_col, "site_no", "name_plain", "Name", "Description"]
-            gdf = gdf[keep].rename(columns={"Name": "name_raw", "Description": "description"})
+            keep = [
+                "geometry",
+                state_col,
+                "site_no",
+                "name_plain",
+                "Name",
+                "Description",
+            ]
+            gdf = gdf[keep].rename(
+                columns={"Name": "name_raw", "Description": "description"}
+            )
         except KeyError:
-            keep = ["geometry", state_col, "site_no", "name_plain", "Name", "description"]
+            keep = [
+                "geometry",
+                state_col,
+                "site_no",
+                "name_plain",
+                "Name",
+                "description",
+            ]
             gdf = gdf[keep].rename(columns={"Name": "name_raw"})
         ## adding a column to show the status
         gdf["status"] = "USGS-discontinued"
@@ -124,7 +144,15 @@ def build_usgs_gages_from_kmz(
 
     if not frames:
         return gpd.GeoDataFrame(
-            columns=["geometry", state_col, "site_no", "name_plain", "name_raw", "description", "status"],
+            columns=[
+                "geometry",
+                state_col,
+                "site_no",
+                "name_plain",
+                "name_raw",
+                "description",
+                "status",
+            ],
             geometry="geometry",
             crs=src_crs,
         )
@@ -134,7 +162,11 @@ def build_usgs_gages_from_kmz(
 
 
 def merge_minimal_gages(
-    gages: gpd.GeoDataFrame, source: gpd.GeoDataFrame, *, update_existing: bool = False, fill_value: str = "-"
+    gages: gpd.GeoDataFrame,
+    source: gpd.GeoDataFrame,
+    *,
+    update_existing: bool = False,
+    fill_value: str = "-",
 ) -> gpd.GeoDataFrame:
     """
     Merge `source` into `gages` using ONLY these mappings:
@@ -206,7 +238,11 @@ def merge_minimal_gages(
         add = gpd.GeoDataFrame(columns=out.columns, crs=out.crs)
         # Put the mapped fields in place
         add = pd.concat(
-            [add, to_add[out.columns.intersection(["geometry", "site_no", "name_plain"])]], ignore_index=True
+            [
+                add,
+                to_add[out.columns.intersection(["geometry", "site_no", "name_plain"])],
+            ],
+            ignore_index=True,
         )
 
         # Fill everything else with '-'
@@ -311,7 +347,10 @@ def merge_gage_xy_into_gages(
         # start with all columns gages has
         add = gpd.GeoDataFrame(columns=out.columns, crs=out.crs)
         # put mapped fields in place
-        add = pd.concat([add, to_add.reindex(columns=["geometry", "site_no", "status"])], ignore_index=True)
+        add = pd.concat(
+            [add, to_add.reindex(columns=["geometry", "site_no", "status"])],
+            ignore_index=True,
+        )
 
         # fill every other column with '-'
         for col in add.columns:
@@ -502,7 +541,14 @@ def merge_usgs_shapefile_into_gages(
 
         # Fill every other column with fill_value
         for col in add.columns:
-            if col not in {"geometry", "site_no", "name_plain", "name_raw", "state", "status"}:
+            if col not in {
+                "geometry",
+                "site_no",
+                "name_plain",
+                "name_raw",
+                "state",
+                "status",
+            }:
                 add[col] = add[col].fillna(fill_value)
 
         add = gpd.GeoDataFrame(add, geometry="geometry", crs=out.crs)
@@ -573,7 +619,9 @@ def merge_rfc_gages(
         Updated gages
     """
     df_rfc = pd.read_csv(rfc_path)
-    df_rfc.loc[df_rfc[status_col] == "Forecasts are issued routinely year-round.", "priority"] = 1
+    df_rfc.loc[
+        df_rfc[status_col] == "Forecasts are issued routinely year-round.", "priority"
+    ] = 1
 
     if nwm_rfc_path.exists():
         if ".nc" not in nwm_rfc_path.name:
@@ -583,7 +631,12 @@ def merge_rfc_gages(
 
         else:
             ds = xr.open_dataset(nwm_rfc_path)
-            df_nwm = ds[nwm_rfc_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
+            df_nwm = (
+                ds[nwm_rfc_id]
+                .to_pandas()
+                .apply(lambda x: x.decode("utf-8"))
+                .str.strip()
+            )
             df_rfc.loc[df_rfc[rfc_id_col].isin(df_nwm.values), "priority"] = 1
 
     df_rfc = df_rfc.loc[df_rfc["priority"] == 1, [rfc_id_col, x_col, y_col]].copy()
@@ -595,7 +648,9 @@ def merge_rfc_gages(
     gdf_rfc = gdf_rfc.to_crs(gages.crs)
     gdf_rfc["status"] = "RFC"
     gages = pd.concat([gages, gdf_rfc])
-    logger.info(f"Added {len(gdf_rfc)} RFC gages. Some may be dropped if outside domain.")
+    logger.info(
+        f"Added {len(gdf_rfc)} RFC gages. Some may be dropped if outside domain."
+    )
     return gages
 
 
@@ -642,28 +697,40 @@ def merge_nid_gages(
             logger.info(
                 "NWM reservoir index path with RFC gages is not type netcdf. Cannot be read. Filtering RFC gages by NWM reservoirs will be skipped."
             )
-
+            return gages
         else:
             ds = xr.open_dataset(nwm_rfc_path)
 
-    if nwm_usace_id in ds.variables:
-        df_nwm = ds[nwm_usace_id].to_pandas().apply(lambda x: x.decode("utf-8")).str.strip()
-        df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
+        if nwm_usace_id in ds.variables:
+            df_nwm = (
+                ds[nwm_usace_id]
+                .to_pandas()
+                .apply(lambda x: x.decode("utf-8"))
+                .str.strip()
+            )
+            df_nid = df_nid.loc[df_nid[nid_id_col].isin(df_nwm.values)].copy()
 
-        gdf_nid = gpd.GeoDataFrame(
-            geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
-            data={"site_no": df_nid[nid_id_col]},
-            crs=nid_crs,
-        )
-        gdf_nid = gdf_nid.to_crs(gages.crs)
-        gdf_nid["status"] = "USACE"
-        gages = pd.concat([gages, gdf_nid])
-        logger.info(
-            f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
-        )
+            gdf_nid = gpd.GeoDataFrame(
+                geometry=gpd.points_from_xy(x=df_nid[x_col], y=df_nid[y_col]),
+                data={"site_no": df_nid[nid_id_col]},
+                crs=nid_crs,
+            )
+            gdf_nid = gdf_nid.to_crs(gages.crs)
+            gdf_nid["status"] = "USACE"
+            gages = pd.concat([gages, gdf_nid])
+            logger.info(
+                f"Added {len(gdf_nid)} USACE gages from reservoir index. Some may be dropped if outside domain."
+            )
+        else:
+            logger.info(
+                "No NID gages added because USACE crosswalk not available in NWM reservoir index."
+            )
+            return gages
     else:
-        logger.info("No NID gages added because USACE crosswalk not available in NWM reservoir index.")
-
+        logger.info(
+            f"No NID gages added because NWM reservoir NetCDF file {nwm_rfc_path} is not available."
+        )
+        return gages
     return gages
 
 
@@ -736,7 +803,9 @@ def merge_canadian_great_lakes(
             "site_no": [erie.site_no, ontario.site_no],
             "status": ["canada_great_lakes", "canada_great_lakes"],
         },
-        geometry=gpd.points_from_xy(x=[erie.lon, ontario.lon], y=[erie.lat, ontario.lat]),
+        geometry=gpd.points_from_xy(
+            x=[erie.lon, ontario.lon], y=[erie.lat, ontario.lat]
+        ),
         crs=4326,
     )
     gdf = gdf.to_crs(gages.crs)
@@ -745,7 +814,9 @@ def merge_canadian_great_lakes(
     return gages
 
 
-def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "locId") -> gpd.GeoDataFrame:
+def merge_usbr(
+    gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "locId"
+) -> gpd.GeoDataFrame:
     """Merge USBR gages from gpkg
 
     Parameters
@@ -764,14 +835,18 @@ def merge_usbr(gages: gpd.GeoDataFrame, usbr_path: Path, usbr_gage_id: str = "lo
     """
     gdf = gpd.read_file(usbr_path)
     gdf = gdf.to_crs(gages.crs)
-    gdf = gdf[[usbr_gage_id, "geometry"]].copy().rename(columns={usbr_gage_id: "site_no"})
+    gdf = (
+        gdf[[usbr_gage_id, "geometry"]].copy().rename(columns={usbr_gage_id: "site_no"})
+    )
     gdf["status"] = "USBR"
 
     # ensure no collisions with usgs
     gdf["site_no"] = "usbr-" + gdf["site_no"].astype(pd.Int64Dtype()).astype(str)
 
     gages = pd.concat([gages, gdf])
-    logger.info(f"Added {len(gdf)} gages from from USBR layer. Some may be dropped if outside domain.")
+    logger.info(
+        f"Added {len(gdf)} gages from from USBR layer. Some may be dropped if outside domain."
+    )
     return gages
 
 
@@ -796,9 +871,15 @@ def merge_usace(
     """
     gdf = gpd.read_file(usace_path)
     gdf = gdf.to_crs(gages.crs)
-    gdf = gdf[[usace_gage_id, "geometry"]].copy().rename(columns={usace_gage_id: "site_no"})
+    gdf = (
+        gdf[[usace_gage_id, "geometry"]]
+        .copy()
+        .rename(columns={usace_gage_id: "site_no"})
+    )
     gdf["status"] = "USACE"
 
     gages = pd.concat([gages, gdf])
-    logger.info(f"Added {len(gdf)} gages from from USACE layer. Some may be dropped if outside domain.")
+    logger.info(
+        f"Added {len(gdf)} gages from from USACE layer. Some may be dropped if outside domain."
+    )
     return gages
