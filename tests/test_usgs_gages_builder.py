@@ -1,20 +1,16 @@
-"""Tests for all modules under hydrofabric_builds.streamflow_gauges."""
+"""Tests for module usgs_gages_builder."""
 
 from __future__ import annotations
 
 import tempfile
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
 
 import geopandas as gpd
-import numpy as np
-import pandas as pd
 import pytest
 from pyprojroot import here
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 
-from hydrofabric_builds.hydrofabric import gages
 from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     extract_site_no,
     infer_state_from_filename,
@@ -309,12 +305,11 @@ class TestMergeRfcGages:
             "RFC002,-99.0,34.0,Forecasts are issued as needed during times of high water but are not routinely available.\n"
         )
         rfc_path = rfc_csv
-        nwm_rfc_path = res_index_path
         nwm_rfc_path_bad = res_index_path_bad
         result = merge_rfc_gages(base_gages_5070, rfc_path, res_index_path)
         result_nonc = merge_rfc_gages(base_gages_5070, rfc_path, nwm_rfc_path_bad)
         assert len(result) == 3
-        # assert len(result_nonc) == 3
+        assert len(result_nonc) == 3
 
 
 class TestMergeNIdGages:
@@ -331,16 +326,18 @@ class TestMergeNIdGages:
         )
         nwm_rfc_path = res_index_path
         result = merge_nid_gages(base_gages_5070, nid_csv, nwm_rfc_path)
-        newLength = len(base_gages_5070) + 1
-        assert len(result) == newLength
+        new_length = len(base_gages_5070) + 1
+        assert len(result) == new_length
 
         nwm_rfc_path_bad = res_index_path_bad
         result_bad = merge_nid_gages(base_gages_5070, nid_csv, nwm_rfc_path_bad)
+        assert len(result_bad) == len(base_gages_5070)
         nid_csv_bad = tmp_path / "nid_bad.csv"
         nid_csv_bad.write_text(
             "NIDID,LONGITUDE,LATITUDE\nTX0001,-98.0,33.0\nTX0002,-99.0,34.0\n"
         )
         result_bad_noadd = merge_nid_gages(base_gages_5070, nid_csv_bad, nwm_rfc_path)
+        assert len(result_bad_noadd) == len(base_gages_5070)
 
 
 class TestMergeAdhocLakes:

@@ -160,3 +160,4 @@ filterwarnings = [
 
 [tool.basilisk.rule-tags]
 basilisk = "error"
+
