@@ -103,7 +103,7 @@ def base_gages_5070() -> gpd.GeoDataFrame:
 @pytest.fixture
 def res_index_path() -> Path:
     """Path to a sample reservoir index file."""
-    return here() / "tests/data/lakes/reservoir_index_AnA.nc"
+    return here() / "tests/data/gages/reservoir_index_AnA_test.nc"
 
 
 @pytest.fixture
@@ -115,38 +115,38 @@ def res_index_path_bad() -> Path:
 @pytest.fixture
 def adhoc_path() -> Path:
     """Path to adhoc_lakes.gpkg"""
-    return here() / "tests/data/gages/adhoc_lakes.gpkg"
+    return here() / "tests/data/gages/adhoc_lakes_test.gpkg"
 
 
 @pytest.fixture
 def gages() -> gpd.GeoDataFrame:
     """Minimal gages GeoDataFrame with standard columns."""
-    gages = gpd.read_file(here() / "tests/data/gages/gages_v1.gpkg")
+    gages = gpd.read_file(here() / "tests/data/gages/gages_v1_test.gpkg")
     return gages
 
 
 @pytest.fixture
 def usbr() -> Path:
     """Path to USBR gages."""
-    return here() / "tests/data/gages/usbr.gpkg"
+    return here() / "tests/data/gages/usbr_test.gpkg"
 
 
 @pytest.fixture
 def usace_gages() -> Path:
     """Path to USACE gages."""
-    return here() / "tests/data/gages/usace_crosswalk.gpkg"
+    return here() / "tests/data/gages/usace_crosswalk_test.gpkg"
 
 
 @pytest.fixture
 def kmz_file() -> Path:
     """Path to a sample KMZ file."""
-    return here() / "tests/data/gages/streamgages_co.kmz"
+    return here() / "tests/data/gages/streamgages_co_test.kmz"
 
 
 @pytest.fixture
 def kmz_blank_file() -> Path:
     """Path to a sample KMZ file with no gages."""
-    return here() / "tests/data/gages/Blank.kmz"
+    return here() / "tests/data/gages/Blank_test.kmz"
 
 
 # ===================================================================
@@ -245,9 +245,7 @@ class TestMergeMinimalGages:
 
 
 class TestMergeGageXy:
-    def test_adds_new_from_csv(
-        self, base_gages: gpd.GeoDataFrame, tmp_path: Path
-    ) -> None:
+    def test_adds_new_from_csv(self, base_gages: gpd.GeoDataFrame, tmp_path: Path) -> None:
         csv = tmp_path / "gage_xy.csv"
         csv.write_text("gageid,lon,lat\n99999999,-100.0,35.0\n")
         result = merge_gage_xy_into_gages(base_gages, csv)
@@ -260,9 +258,7 @@ class TestMergeGageXy:
         assert "99999999" not in result["site_no"].values
         assert "88888888" in result["site_no"].values
 
-    def test_updates_existing_geometry(
-        self, base_gages: gpd.GeoDataFrame, tmp_path: Path
-    ) -> None:
+    def test_updates_existing_geometry(self, base_gages: gpd.GeoDataFrame, tmp_path: Path) -> None:
         csv = tmp_path / "gage_xy.csv"
         csv.write_text("gageid,lon,lat\n00000001,-101.0,36.0\n")
         result = merge_gage_xy_into_gages(base_gages, csv, update_existing=True)
@@ -270,9 +266,7 @@ class TestMergeGageXy:
 
 
 class TestMergeUsgsShapefile:
-    def test_appends_from_shapefile(
-        self, base_gages: gpd.GeoDataFrame, tmp_path: Path
-    ) -> None:
+    def test_appends_from_shapefile(self, base_gages: gpd.GeoDataFrame, tmp_path: Path) -> None:
         src = gpd.GeoDataFrame(
             {
                 "STAID": ["55555555"],
@@ -333,9 +327,7 @@ class TestMergeNIdGages:
         result_bad = merge_nid_gages(base_gages_5070, nid_csv, nwm_rfc_path_bad)
         assert len(result_bad) == len(base_gages_5070)
         nid_csv_bad = tmp_path / "nid_bad.csv"
-        nid_csv_bad.write_text(
-            "NIDID,LONGITUDE,LATITUDE\nTX0001,-98.0,33.0\nTX0002,-99.0,34.0\n"
-        )
+        nid_csv_bad.write_text("NIDID,LONGITUDE,LATITUDE\nTX0001,-98.0,33.0\nTX0002,-99.0,34.0\n")
         result_bad_noadd = merge_nid_gages(base_gages_5070, nid_csv_bad, nwm_rfc_path)
         assert len(result_bad_noadd) == len(base_gages_5070)
 
