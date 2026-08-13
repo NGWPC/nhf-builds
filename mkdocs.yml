@@ -49,5 +49,15 @@ nav:
   - Home:
     - index.md
   - Builds:
-    - builds/index.md
+
     - Irrigation: builds/irrigation.md
+  - Hydrofabric:
+    - builds/index.md
+    - Divide Attributes: builds/divide_attributes.md
+    - Flowpath Attributes: builds/flowpath_attributes.md
+    - Lakes: builds/lakes.md
+    - Reservoir Attributes: builds/reservoir_attrs.md
+    - Gage Snapping: builds/snap_gages_to_flowpaths.md
+    - Gages: builds/POI_gages_builder.md
+  - Development:
+    - development/development.md
