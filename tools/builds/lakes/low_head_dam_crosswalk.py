@@ -74,13 +74,6 @@ def lhdi_to_gdf(lhdi_path) -> gpd.GeoDataFrame:
         max_storage=np.nan,
         hazard="",
     )
-    # Convert values to meters
-    lhdi_verified_numeric_fields = lhdi_verified.select_dtypes(
-        include=[np.number]
-    ).columns.tolist()
-    for field in lhdi_verified_numeric_fields:
-        lhdi_verified[field] = lhdi_verified[field] * 0.3048
-
     return lhdi_verified
 
 
