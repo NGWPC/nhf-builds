@@ -20,16 +20,16 @@ import numpy as np
 
 
 def lhdi_to_gdf(lhdi_path: Path) -> gpd.GeoDataFrame:
-    """Read LHDI data and convert to GeoDataFrame.
+    """Read LHD data and convert to GeoDataFrame.
 
-    Reads the raw LHDI data and filters on the review status being Confirmed.  Gathers
+    Reads the raw LHD data and filters on the review status being Confirmed.  Gathers
     necessary column to populate the standard dam information fields and adds default
     values for missing attributes.
 
     Parameters
     ----------
     lhdi_path : Path
-        Path to the LHDI geopackage file.
+        Path to the LHD geopackage file.
 
     Returns
     -------
@@ -120,23 +120,17 @@ def crosswalk_low_head_dams(
     """
     lhd = lhd.to_crs(lakes_1.crs)
     lhd_columns = lhd.columns.tolist()
-    lhd_join_lakes_1 = gpd.sjoin_nearest(
-        lhd, lakes_1, how="left", distance_col="dist_to_lake_1"
-    )
+    lhd_join_lakes_1 = gpd.sjoin_nearest(lhd, lakes_1, how="left", distance_col="dist_to_lake_1")
     lhd_columns.append("dist_to_lake_1")
     lhd_join_lakes_1 = lhd_join_lakes_1[lhd_columns]
 
     # If available, join lhd point to second lake layer
     if isinstance(lakes_2, gpd.GeoDataFrame):
         lakes_2 = lakes_2.to_crs(lakes_1.crs)
-        lhd_join_lakes_2 = gpd.sjoin_nearest(
-            lhd, lakes_2, how="left", distance_col="dist_to_lake_2"
-        )
+        lhd_join_lakes_2 = gpd.sjoin_nearest(lhd, lakes_2, how="left", distance_col="dist_to_lake_2")
         lhd_join_lakes_2 = lhd_join_lakes_2[["nidid", "dist_to_lake_2"]]
         output = lhd_join_lakes_1.merge(lhd_join_lakes_2, on="nidid")
-        output = output[
-            (output.dist_to_lake_1 > buffer) & (output.dist_to_lake_2 > buffer)
-        ]
+        output = output[(output.dist_to_lake_1 > buffer) & (output.dist_to_lake_2 > buffer)]
 
     else:
         output = lhd_join_lakes_1[lhd_join_lakes_1.dist_to_lake_1 > buffer]
@@ -160,9 +154,7 @@ def create_lhd_polygons(crosswalk_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     lhd_gdf = crosswalk_gdf.to_crs("EPSG:5070")
     lhd_gdf["buffer_dist"] = (lhd_gdf["dam_length"].fillna(20)) / 2
-    lhd_gdf["geometry"] = lhd_gdf.buffer(
-        distance=(lhd_gdf.buffer_dist), cap_style="square"
-    )
+    lhd_gdf["geometry"] = lhd_gdf.buffer(distance=(lhd_gdf.buffer_dist), cap_style="square")
     lhd_gdf = lhd_gdf.drop(columns=["dist_to_lake_1", "dist_to_lake_2", "buffer_dist"])
     return lhd_gdf
 
@@ -171,10 +163,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--lhd-crosswalk",
-        action=Path,
-        default="./data/sconus/lakes/input/lhd_crosswalk.gpkg",
+        "--crosswalk",
+        action="store true",
         help="Option to crosswalk low head dam data to lakes polygon layer",
+    )
+    parser.add_argument(
+        "--output-lhd-poly",
+        type=Path,
+        default="./data/sconus/lakes/input/lhd_crosswalk.gpkg",
+        help="Output path for low head dam polygons",
     )
     parser.add_argument(
         "--lhd-inventory",
@@ -208,7 +205,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.lhd_crosswalk:
+    if args.crosswalk:
         lakes_1 = gpd.read_file(args.lakes_1)
         lakes_2 = gpd.read_file(args.lakes_2) if Path(args.lakes_2).exists() else None
         print("Reading low head dams inventory")
@@ -223,5 +220,5 @@ if __name__ == "__main__":
         )
         print("Creating low head dam polygons from crosswalked data")
         lhd_polygons = create_lhd_polygons(gdf_cross)
-        lhd_polygons.to_file(args.output_crosswalk)
-        print(f"Saved crosswalked low head dam data to {args.output_crosswalk}")
+        lhd_polygons.to_file(args.output_lhd_poly)
+        print(f"Saved crosswalked low head dam data to {args.output_lhd_poly}")
