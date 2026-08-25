@@ -13,22 +13,29 @@ Outputs to a GPKG with standard dam information
 """
 
 import argparse
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 
-"""Read LHDI data and convert to GeoDataFrame
 
-Reads the raw LHDI data and filters on the review status being "Confirmed."  Gathers
-necessary column to populate the standard dam information fields and adds default 
-values for missing attributes.
+def lhdi_to_gdf(lhdi_path: Path) -> gpd.GeoDataFrame:
+    """Read LHDI data and convert to GeoDataFrame.
 
-Converts values from feet to meters currently.
+    Reads the raw LHDI data and filters on the review status being Confirmed.  Gathers
+    necessary column to populate the standard dam information fields and adds default
+    values for missing attributes.
 
-"""
+    Parameters
+    ----------
+    lhdi_path : Path
+        Path to the LHDI geopackage file.
 
-
-def lhdi_to_gdf(lhdi_path) -> gpd.GeoDataFrame:
+    Returns
+    -------
+    gpd.GeoDataFrame
+        GeoDataFrame containing the verified low head dam data with standard dam columns.
+    """
     lhdi_gdf = gpd.read_file(lhdi_path, layer="low_head_dams_raw")
     lhdi_verified = lhdi_gdf[lhdi_gdf.reviewStatusId == "Confirmed"]
     lhdi_verified = lhdi_verified.reset_index(drop=True)
@@ -77,14 +84,6 @@ def lhdi_to_gdf(lhdi_path) -> gpd.GeoDataFrame:
     return lhdi_verified
 
 
-"""Crosswalk low head dams to lake layers.
-
-Creates a crosswalk between low head dams and lake layers, identifying dams that are
- within a specified buffer distance from lakes.  Dams that are less than the buffer
- distance from a lake are excluded from the crosswalk.
-"""
-
-
 def crosswalk_low_head_dams(
     lhd: gpd.GeoDataFrame,
     lakes_1: gpd.GeoDataFrame,
@@ -93,7 +92,32 @@ def crosswalk_low_head_dams(
     lakes_2_key: str | None,
     buffer: int = 300,
 ) -> gpd.GeoDataFrame:
-    # Join lhd polygons to first lake layer
+    """Crosswalk low head dams to lake layers.
+
+    Creates a crosswalk between low head dams and lake layers, identifying dams that are
+    within a specified buffer distance from lakes.  Dams that are less than the buffer
+    distance from a lake are excluded from the crosswalk.
+
+    Parameters
+    ----------
+    lhd : gpd.GeoDataFrame
+        GeoDataFrame containing low head dam points.
+    lakes_1 : gpd.GeoDataFrame
+        The primary lake polygons to crosswalk to.
+    lakes_2 : gpd.GeoDataFrame | None
+        A secondary set of lake polygons to crosswalk to.
+    lakes_1_key : str
+        ID in first lake layer
+    lakes_2_key : str | None
+        ID in second lake layer
+    buffer : int, optional
+        Buffer distance to exclude dams near lakes, by default 300.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Crosswalked low head dam points with distance to lakes and filtered by buffer distance.
+    """
     lhd = lhd.to_crs(lakes_1.crs)
     lhd_columns = lhd.columns.tolist()
     lhd_join_lakes_1 = gpd.sjoin_nearest(
@@ -119,36 +143,85 @@ def crosswalk_low_head_dams(
     return output
 
 
-"""Create buffered low head dam polygons.
+def create_lhd_polygons(crosswalk_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Create buffered low head dam polygons.
 
-Generates square buffer polygons around low head dam points based on the dam length.
-"""
+    Generates square buffer polygons around low head dam points based on the dam length.
 
+    Parameters
+    ----------
+    crosswalk_gdf : gpd.GeoDataFrame
+        GDF containing crosswalked low head dam points.
 
-def create_lhd_polygons(crosswalk_gdf):
+    Returns
+    -------
+    gpd.GeoDataFrame
+        GDF containing buffered low head dam polygons.
+    """
     lhd_gdf = crosswalk_gdf.to_crs("EPSG:5070")
     lhd_gdf["buffer_dist"] = (lhd_gdf["dam_length"].fillna(20)) / 2
     lhd_gdf["geometry"] = lhd_gdf.buffer(
         distance=(lhd_gdf.buffer_dist), cap_style="square"
     )
     lhd_gdf = lhd_gdf.drop(columns=["dist_to_lake_1", "dist_to_lake_2", "buffer_dist"])
-    lhd_gdf.to_file(lhd_polygons_path, layer="low_head_dams_polygons")
+    return lhd_gdf
 
 
-lakes_1_path = (
-    "/mnt/d/NOAA/EDFS/NGWPC-11532/low_head_dams/Data/nwm_lakes_sconus_input.gpkg"
-)
-lakes_2_path = (
-    "/mnt/d/NOAA/EDFS/NGWPC-11532/low_head_dams/Data/reference_waterbodies.gpkg"
-)
-lhd_path = "/mnt/d/NOAA/EDFS/NGWPC-11532/low_head_dams/Data/low_head_dams.gpkg"
-lhd_polygons_path = (
-    "/mnt/d/NOAA/EDFS/NGWPC-11532/low_head_dams/Data/low_head_dams_polygons.gpkg"
-)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
 
-lakes_1 = gpd.read_file(lakes_1_path)
-lakes_2 = gpd.read_file(lakes_2_path)
+    parser.add_argument(
+        "--lhd-crosswalk",
+        action=Path,
+        default="./data/sconus/lakes/input/lhd_crosswalk.gpkg",
+        help="Option to crosswalk low head dam data to lakes polygon layer",
+    )
+    parser.add_argument(
+        "--lhd-inventory",
+        type=Path,
+        default="./data/sconus/lakes/input/low_head_dams.gpkg",
+        help="Input path for the low head dams inventory.",
+    )
+    parser.add_argument(
+        "--lakes-1",
+        type=Path,
+        default="./data/sconus/lakes/input/nwm_lakes_sconus_input.gpkg",
+        help="Input path for nwm lakes data to crosswalk. This will be the first crosswalk.",
+    )
+    parser.add_argument(
+        "--lakes-1-key",
+        type=str,
+        default="newID",
+        help="The ID key for lakes 1 layer.",
+    )
+    parser.add_argument(
+        "--lakes-2",
+        type=Path,
+        default="./data/sconus/lakes/input/reference_waterbodies.gpkg",
+        help="Input path for lakes reference waterbodies to crosswalk. This will be the second crosswalk for any lakes missing in crossswalk 1.",
+    )
+    parser.add_argument(
+        "--lakes-2-key",
+        type=str,
+        default="comid",
+        help="The ID key for lakes 2 layer.",
+    )
+    args = parser.parse_args()
 
-lhd = lhdi_to_gdf(lhd_path)
-lhd_crosswalk = crosswalk_low_head_dams(lhd, lakes_1, lakes_2, "newID", "comid")
-create_lhd_polygons(lhd_crosswalk)
+    if args.lhd_crosswalk:
+        lakes_1 = gpd.read_file(args.lakes_1)
+        lakes_2 = gpd.read_file(args.lakes_2) if Path(args.lakes_2).exists() else None
+        print("Reading low head dams inventory")
+        lhd = lhdi_to_gdf(args.lhd_inventory)
+        print("Crosswalking low head dams to lakes")
+        gdf_cross = crosswalk_low_head_dams(
+            lhd=lhd,
+            lakes_1=lakes_1,
+            lakes_2=lakes_2,
+            lakes_1_key=args.lakes_1_key,
+            lakes_2_key=args.lakes_2_key,
+        )
+        print("Creating low head dam polygons from crosswalked data")
+        lhd_polygons = create_lhd_polygons(gdf_cross)
+        lhd_polygons.to_file(args.output_crosswalk)
+        print(f"Saved crosswalked low head dam data to {args.output_crosswalk}")
