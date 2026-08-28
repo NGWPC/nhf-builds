@@ -13,54 +13,8 @@ uv sync --all-extras --all-groups
 
 Python 3.12 or newer is required.
 
-## Sync input data using the `justfile`
-
-`just` calls series of commands called "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to set up the data sources for `nhf-builds`. You can also use `just` to build hydrofabrics for each domain or specify a config.
-
-Provide AWS credentials in the current shell:
-
-```bash
-export AWS_DEFAULT_REGION="us-east-1"
-export AWS_ACCESS_KEY_ID="..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_SESSION_TOKEN="..."  # Required for temporary credentials
-```
-
-Verify that AWS recognizes the credentials:
-
-```bash
-aws sts get-caller-identity
-```
-
-Then sync the input data for the desired domain:
-
-```bash
-just sync       # CONUS
-just sync-ak    # Alaska
-just sync-hi    # Hawaii
-just sync-prvi  # Puerto Rico and the US Virgin Islands
-```
-
-To select a different OCONUS reference-fabric version, pass the `oconus-version` variable:
-
-```bash
-just oconus-version=0.1.8 sync-ak
-```
-
-> **Warning:** The sync recipes overwrite the corresponding input datasets under `data/`.
-
-### AWS credential handling
-
-Exporting AWS credentials in the shell is functionally sufficient because `just` and its child processes inherit those environment variables. The `justfile` also automatically loads variables from a repository-root `.env` file.
-
-Avoid committing credentials or entering long-lived secrets directly into commands that may be saved in shell history. When available, prefer an AWS SSO or named-profile workflow for data synchronization:
-
-```bash
-aws sso login --profile ngwpc-test
-AWS_PROFILE=ngwpc-test just sync
-```
-
-An AWS profile is sufficient for the `aws s3` commands used by the sync recipes. Some hydrofabric build paths access S3 credentials directly through `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`, so a profile alone may not be sufficient for every build configuration.
+## Unpack Data
+Extract the `hydrofabric_builds_data.tar` archive to the `data` folder. This archive includes all data for running the canonical NHF for all domains.
 
 ## Run the hydrofabric build
 
@@ -70,7 +24,9 @@ Run the main build script directly with the CONUS example configuration:
 uv run python scripts/hf_runner.py --config configs/example_config.yaml
 ```
 
-Alternatively, use a domain-specific `just` recipe:
+Alternatively, use a domain-specific `just` recipe.
+
+`just` calls series of commands called "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to build the hydrofabric.
 
 ```bash
 just build-conus

@@ -3,42 +3,55 @@ Building Hydrofabric &amp; Processing Ancillary Data
 
 <img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/hydrofabric.png" alt="hydrofabric" width="40%" height="40%"/>
 
-
-#### Proposed Schema
+# About the Data
+## Schema
 
 The following schema is the proposed data model for NGWPC hydrofabric datasets produced by this repo.
 
+TODO: Update
+
 <img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_v1.1.2_schema.png" alt="nhf_v1.1.2_schema.png" width="100%" height="100%"/>
 
-##### Flowpaths FACT Table
+## Flowpaths FACT Table
 
 The central table (or FACT Table) is `Flowpaths`. Each `flowpath` has a downstream, and upstream `nexus` point, allowing for traversal of a river network through a single table. Additionally, there is a 1:1 relationship between `flowpath` and `divide`.
 
-##### NGEN Tables
+## NGEN Tables
 
 The tables highlighted in green are the infomation needed for lumped modeling to take place. Lumped models require attributes, the shape of the `divide` that is being modeled, and a `nexus` point for flow to be aggregated to.
 
-##### Routing Tables
+## Routing Tables
 
 The tables highlighted in blue contain the information needed for routing at a high resolution. T-Route is expected to run at a fine-scale (~300m segments) with many `virtual_flowpaths`. Each virtual flowpath is delineated based on the reference fabric, and there should be a many -> one relationship between `virtual_flowpaths` and `flowpaths`, with some `virtual flowpaths` not being represented in the `flowpaths` table. These non-represented `flowpaths` have the parameter of `routing_segment` set to False, and will have flow estimated through flow-scaling.
 
-##### Reference Crosswalks
+The `reservoir_da` table encodes crosswalks between lakes and gages with an assigned data assimilation code. The `lakes_polygons` layer mirrors the traditional `lakes` point layer, but includes the polygon representation. This polygon representation is used to derive the flowpaths associated with lakes for routing. The `lake_vfp_crosswalk` table contains the intersection of lake polygons and virtual flowpaths so that T-route treats all lake flowpaths as lakes rather than channels.
 
-The NGWPC Hydrofabric is build using many reference materials:
+## Reference Crosswalks
+
+The NGWPC Hydrofabric is built using many reference materials:
 - Reference Flowpaths
 - Reference Reservoirs
-- USGS/ENVCA/CADWR/TXDOT Streamflow Gages
+- Reference Waterbodies
+- NWM v3 Lakes
+- National Inventory of Dams
+- USGS/ENVCA/CADWR/TXDOT/RFC/USBR/USACE Streamflow Gages
 - NHD+
 
 To ensure `flowpaths` can be mapped to back to the materials that created them, each of the reference materials is mapped to `flowpaths`, `hydrolocations`, and `virtual flowpaths`. The following IDs pairings are used:
 
 - Reference Flowpaths -> `ref_fp_id`
 - Reference Reservoirs -> `dam_id`
-- USGS/ENVCA/CADWR/TXDOT Streamflow Gages -> `site_no`
+- Reference Reservoirs -> `ref_fab_wb` is `lake_id` / NHD `COMID`
+- Streamflow Gages -> `site_no`
 - NHD+ -> `nhd_feature_id`
 
-##### Visual Diagram
+## Validation
+The `validate_hf` task in the pipeline produces a JSON report called `nhf_{version}_validation.json`. This report details various metrics from the built product, such as: number of null divide attributes, number of attributes out of defined minimum and maxium range, and assertions that necessary lakes and gages are present and assigned to flowpaths.
+
+
+## Visual Diagram
 <img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_diagram.png" alt="NHF Diagram" width="100%" height="100%"/>
+
 
 # Development Commands
 
@@ -53,56 +66,8 @@ The following command installs the project's base dependencies, the `docs` optio
 uv sync --all-extras --all-groups
 ```
 
-Python 3.12 or newer is required.
-
-## Sync input data using the `justfile`
-
-`just` calls series of commands called "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to set up the data sources for `nhf-builds`. You can also use `just` to build hydrofabrics for each domain or specify a config.
-
-Provide AWS credentials in the current shell:
-
-```bash
-export AWS_DEFAULT_REGION="us-east-1"
-export AWS_ACCESS_KEY_ID="..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_SESSION_TOKEN="..."  # Required for temporary credentials
-```
-
-Verify that AWS recognizes the credentials:
-
-```bash
-aws sts get-caller-identity
-```
-
-Then sync the input data for the desired domain:
-
-```bash
-just sync       # CONUS
-just sync-ak    # Alaska
-just sync-hi    # Hawaii
-just sync-prvi  # Puerto Rico and the US Virgin Islands
-```
-
-To select a different OCONUS reference-fabric version, pass the `oconus-version` variable:
-
-```bash
-just oconus-version=0.1.8 sync-ak
-```
-
-> **Warning:** The sync recipes overwrite the corresponding input datasets under `data/`.
-
-### AWS credential handling
-
-Exporting AWS credentials in the shell is functionally sufficient because `just` and its child processes inherit those environment variables. The `justfile` also automatically loads variables from a repository-root `.env` file.
-
-Avoid committing credentials or entering long-lived secrets directly into commands that may be saved in shell history. When available, prefer an AWS SSO or named-profile workflow for data synchronization:
-
-```bash
-aws sso login --profile ngwpc-test
-AWS_PROFILE=ngwpc-test just sync
-```
-
-An AWS profile is sufficient for the `aws s3` commands used by the sync recipes. Some hydrofabric build paths access S3 credentials directly through `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`, so a profile alone may not be sufficient for every build configuration.
+## Unpack Data
+Extract the `hydrofabric_builds_data.tar` archive to the `data` folder. This archive includes all data for running the canonical NHF for all domains.
 
 ## Run the hydrofabric build
 
@@ -112,7 +77,9 @@ Run the main build script directly with the CONUS example configuration:
 uv run python scripts/hf_runner.py --config configs/example_config.yaml
 ```
 
-Alternatively, use a domain-specific `just` recipe:
+Alternatively, use a domain-specific `just` recipe.
+
+`just` calls series of commands called "recipes" similar to a `make` file. Install on linux with `apt get just` or follow linked readme for other platforms. After installing `just`, you can use the following commands to build the hydrofabric.
 
 ```bash
 just build-conus
@@ -126,6 +93,21 @@ Run the build with a custom configuration:
 ```bash
 just build "configs/my_custom_config.yaml"
 ```
+
+## Documentation
+This repository has documentation that can be served via [mkdocs](https://www.mkdocs.org/).
+Ensure that dependencies are installed:
+
+```bash
+uv sync --extra docs
+```
+To serve docs locally, run:
+
+```bash
+mkdocs serve -a localhost:8080
+```
+Navigate to `localhost:8080/` in your browser.
+
 
 ## Run tests
 

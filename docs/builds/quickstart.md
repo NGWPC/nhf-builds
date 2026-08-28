@@ -1,5 +1,7 @@
 ### Quickstart
 
+TODO: Replace s3 paths with unpacking file
+
 ## CONUS
 Below are the data files needed for running a full build of the NHF dataset and their locations. Each of the `aws` commands should be run from the NGWPC Test account
 
