@@ -1267,7 +1267,7 @@ class USACEResDAInput(BaseModel):
 
 
 class USBRResDAInput(BaseModel):
-    """USACE : lake_id crosswalk for reservoir DA."""
+    """USBR : lake_id crosswalk for reservoir DA."""
 
     path: Path = Field(
         default=Path("input/usbr_lake_crosswalk.gpkg"),
