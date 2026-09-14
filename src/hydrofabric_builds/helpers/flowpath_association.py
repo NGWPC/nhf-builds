@@ -49,14 +49,20 @@ def associate_flowpaths_nearest_point(
     # change to reference flowpath CRS if not matching
     if gdf_points.crs != gdf_flowpaths.crs:
         gdf_points = gdf_points.to_crs(gdf_flowpaths.crs)
-        assert gdf_points.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
+        assert gdf_points.crs == gdf_flowpaths.crs, (
+            "CRS does not match for flowpaths and points"
+        )
 
     # buffer points with search radius
     gdf_points_buffer = gdf_points.copy()
-    gdf_points_buffer["geometry"] = gdf_points["geometry"].buffer(float(search_radius_m))
+    gdf_points_buffer["geometry"] = gdf_points["geometry"].buffer(
+        float(search_radius_m)
+    )
 
     # intersect points buffer with flowpaths
-    joined = gpd.sjoin(gdf_points_buffer, gdf_flowpaths, predicate="intersects", how="left")
+    joined = gpd.sjoin(
+        gdf_points_buffer, gdf_flowpaths, predicate="intersects", how="left"
+    )
 
     # prepare matches - based on gages nearest fp
     out = {}
@@ -67,7 +73,8 @@ def associate_flowpaths_nearest_point(
 
         # select flowpath geometry and ID from flowpath table for each candidate list
         candidates = gdf_flowpaths.loc[
-            gdf_flowpaths[flowpath_id].isin(sub[flowpath_id].values), [flowpath_id, "geometry"]
+            gdf_flowpaths[flowpath_id].isin(sub[flowpath_id].values),
+            [flowpath_id, "geometry"],
         ].copy()
 
         # if no flowpaths in buffer, skip
@@ -79,7 +86,9 @@ def associate_flowpaths_nearest_point(
 
         # select first minimum distance
         # TODO: take lower hydrosequence if tie?
-        best_fp = candidates.loc[candidates["dist"] == min(candidates["dist"]), flowpath_id].values[0]
+        best_fp = candidates.loc[
+            candidates["dist"] == min(candidates["dist"]), flowpath_id
+        ].values[0]
         out[pt_row] = str(best_fp)
 
     # assign dict of points and flowpaths to point gdf
@@ -88,7 +97,9 @@ def associate_flowpaths_nearest_point(
 
     # NOTE: forcing was needed in AK
     if pd.api.types.is_object_dtype(gdf_points[flowpath_id_out_field]):
-        gdf_points["virtual_fp_id"] = pd.to_numeric(gdf_points["virtual_fp_id"]).astype(pd.Int64Dtype())
+        gdf_points["virtual_fp_id"] = pd.to_numeric(gdf_points["virtual_fp_id"]).astype(
+            pd.Int64Dtype()
+        )
 
     return gdf_points
 
@@ -127,7 +138,9 @@ def join_attributes(
             "flowpath_association: `attrib_src_path` was provided but `attrib_src_fields` was `None`, attribute source fields must be specified in order to merge"
         )
     else:
-        attrib_src_fields_valid: list[str] = attrib_src_fields if attrib_src_fields else list[str]()
+        attrib_src_fields_valid: list[str] = (
+            attrib_src_fields if attrib_src_fields else list[str]()
+        )
         gdf_attrib_src = (
             gpd.read_file(attrib_src_path, layer=attrib_src_layer)
             if attrib_src_layer
@@ -160,7 +173,9 @@ def join_attributes(
     return gdf_merged
 
 
-def make_vfp_graph(vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame) -> tuple[rx.PyDiGraph, dict[str, int]]:
+def make_vfp_graph(
+    vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame
+) -> tuple[rx.PyDiGraph, dict[str, int]]:
     """Build graph from virtual flowpaths and virtual nexus
 
     Parameters
@@ -183,7 +198,9 @@ def make_vfp_graph(vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame) -> tuple[rx.PyDi
             left_on="dn_virtual_nex_id",
             right_on="virtual_nex_id",
         )
-        .rename(columns={"dn_virtual_fp_id": "to_vfp_id"})[["virtual_fp_id", "to_vfp_id"]]
+        .rename(columns={"dn_virtual_fp_id": "to_vfp_id"})[
+            ["virtual_fp_id", "to_vfp_id"]
+        ]
     )
 
     edges["virtual_fp_id"] = edges["virtual_fp_id"].astype(pd.Int64Dtype()).astype(str)
@@ -246,7 +263,6 @@ def associate_flowpaths_polygon_graph(
 
     # intersect polygons and linestrings resulting in linestring intersections
     int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
-
     poly_fp_pairs = {}
     missing_keys = []
 
@@ -288,7 +304,9 @@ def associate_flowpaths_polygon_graph(
         )
 
     # join flowpaths back to polygons
-    df_pairs = pd.DataFrame(data={poly_id: poly_fp_pairs.keys(), vfp_id: poly_fp_pairs.values()})
+    df_pairs = pd.DataFrame(
+        data={poly_id: poly_fp_pairs.keys(), vfp_id: poly_fp_pairs.values()}
+    )
     gdf_poly = gdf_poly.merge(df_pairs, on=poly_id, how="left")
     gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     gdf_poly[vfp_id] = pd.to_numeric(gdf_poly[vfp_id]).astype(pd.Int64Dtype())
