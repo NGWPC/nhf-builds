@@ -75,6 +75,16 @@ def _read_inputs(cfg: HFConfig) -> dict[str, gpd.GeoDataFrame]:
         if cfg.lakes.usbr.path.exists()
         else gpd.GeoDataFrame(geometry=[], crs=cfg.crs)
     )
+    inputs["low_head_dams"] = (
+        gpd.read_file(cfg.lakes.low_head_dams.path, layer=cfg.lakes.low_head_dams.layer).to_crs(cfg.crs)
+        if cfg.lakes.low_head_dams.path.exists()
+        else gpd.GeoDataFrame(geometry=[], crs=cfg.crs)
+    )
+    inputs["run_of_river"] = (
+        gpd.read_file(cfg.lakes.run_of_river.path).to_crs(cfg.crs)
+        if cfg.lakes.run_of_river.path.exists()
+        else gpd.GeoDataFrame(geometry=[], crs=cfg.crs)
+    )
     inputs["ref_res"] = (
         gpd.read_file(cfg.lakes.ref_res.path).to_crs(cfg.crs)
         if cfg.lakes.ref_res.path.exists()
@@ -150,10 +160,8 @@ def _associate_lake_flowpaths(
         # use polygon flowpath outlet method
         elif cfg.flowpath_association_method == "polygon_outlet":
             logger.info(f"Associating {lake_type} flowpaths with polygons using graph method")
-
             logger.info("Building VFP graph")
             poly_id = cfg.id_field if cfg.id_field in gdf.columns else main_cfg.lakes.output_comid_field
-
             logger.info("Associating flowpaths")
             gdf = associate_flowpaths_polygon_graph(
                 gdf_poly=gdf,
@@ -188,7 +196,10 @@ def _associate_lake_flowpaths(
             )
 
         # Save nwm_lakes layer to NHF
-        gdf.to_file(cfg.fp_associated_path, layer="lakes", driver="GPKG", overwrite=True)
+        if cfg.fp_associated_path.exists():
+            gdf.to_file(cfg.fp_associated_path, layer="lakes", driver="GPKG", overwrite=True)
+        else:
+            gdf.to_file(cfg.fp_associated_path, layer="lakes", driver="GPKG")
 
     else:
         # read the pre-processed file to return
@@ -288,7 +299,10 @@ def _calculate_elevation__nwm(
         # if original nwm lakes is polygons - join nwm lake polygons for polygon elevation (ref_elev)
         if gdf_nwm_orig.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]:
             gdf_nwm_poly = polygon_elevation(cfg.lakes.dem.path, gdf_nwm_orig, "ref_elev")
-            gdf_nwm_poly.rename(columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field}, inplace=True)
+            gdf_nwm_poly.rename(
+                columns={cfg.lakes.nwm.id_field: cfg.lakes.output_comid_field},
+                inplace=True,
+            )
             gdf_nwm_poly[cfg.lakes.output_comid_field] = (
                 gdf_nwm_poly[cfg.lakes.output_comid_field].astype(pd.Int64Dtype()).astype(str)
             )
@@ -344,6 +358,79 @@ def _calculate_elevation__refwb(
     return gdf_refwb_pts
 
 
+def _calculate_elevation__lhd(
+    cfg: HFConfig, gdf_lhdi_pts: gpd.GeoDataFrame, gdf_lhdi_orig: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Calculate elevation for low head dams.
+
+    Low head dams are joined to reference waterbodies (polygon) to get polygon elevation ('ref_elev').
+    Point elevation is used for 'dam_elev.'
+    """
+    if cfg.lakes.calculate_elevation:
+        # polygons - join low head dam polygons for polygon elevation (ref_elev)
+        # ref wb ID was changed to final output ID in filter step
+        logger.info("Calculating low head dams elevations")
+        if gdf_lhdi_orig.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]:
+            gdf_lhdi_poly = polygon_elevation(cfg.lakes.dem.path, gdf_lhdi_orig, "ref_elev")
+            gdf_lhdi_poly.rename(
+                columns={cfg.lakes.low_head_dams.id_field: cfg.lakes.output_comid_field},
+                inplace=True,
+            )
+            gdf_lhdi_poly[cfg.lakes.output_comid_field].astype(str)
+            gdf_lhdi_poly = gdf_lhdi_poly.to_crs(cfg.crs)
+            gdf_lhdi_pts = gdf_lhdi_pts.merge(
+                gdf_lhdi_poly[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
+                on=cfg.lakes.output_comid_field,
+                how="left",
+            )
+            gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
+        # Only Points
+        else:
+            gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
+            gdf_lhdi_pts["ref_elev"] = gdf_lhdi_pts["dam_elev"].copy()
+
+    else:
+        gdf_lhdi_pts["dam_elev"] = np.nan
+        gdf_lhdi_pts["ref_elev"] = np.nan
+
+    return gdf_lhdi_pts
+
+
+def _calculate_elevation__ror(
+    cfg: HFConfig, gdf_ror_pts: gpd.GeoDataFrame, gdf_ror_poly: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Calculate elevations for run of river dams.
+
+    Run of river dams are joined to reference waterbodies (polygon) to get polygon elevation ("ref_elev").
+    Point elevation is used for "dam_elev"
+    """
+    if cfg.lakes.calculate_elevation:
+        logger.info("Calculating run of river elevations")
+        if gdf_ror_poly.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]:
+            gdf_ror_poly = polygon_elevation(cfg.lakes.dem.path, gdf_ror_poly, "ref_elev")
+            gdf_ror_poly.rename(
+                columns={cfg.lakes.run_of_river.id_field: cfg.lakes.output_comid_field},
+                inplace=True,
+            )
+            gdf_ror_poly[cfg.lakes.output_comid_field].astype(str)
+            gdf_ror_poly = gdf_ror_poly.to_crs(cfg.crs)
+            gdf_ror_pts = gdf_ror_pts.merge(
+                gdf_ror_poly[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
+                on=cfg.lakes.output_comid_field,
+                how="left",
+            )
+            gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
+        # If only passed points
+        else:
+            gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
+            gdf_ror_pts["ref_elev"] = gdf_ror_pts["dam_elev"].copy()
+    else:
+        gdf_ror_pts["dam_elev"] = np.nan
+        gdf_ror_pts["ref_elev"] = np.nan
+
+    return gdf_ror_pts
+
+
 def _calculate_elevation__refres(
     cfg: HFConfig, gdf_ref_res: gpd.GeoDataFrame, gdf_wb_poly: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
@@ -380,6 +467,7 @@ def _prep_ref_wb(
     cfg: HFConfig,
     gdf_adhoc: gpd.GeoDataFrame,
     gdf_usbr: gpd.GeoDataFrame,
+    gdf_lhdi: gpd.GeoDataFrame,
     gdf_ref_res: gpd.GeoDataFrame,
     gdf_wb_polys: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
@@ -407,12 +495,16 @@ def _prep_ref_wb(
         keep_field,
     ) in zip(
         [gdf_adhoc, gdf_usbr],
-        [cfg.lakes.adhoc.ref_wb_field, cfg.lakes.usbr.ref_wb_field],
+        [
+            cfg.lakes.adhoc.ref_wb_field,
+            cfg.lakes.usbr.ref_wb_field,
+            cfg.lakes.low_head_dams.ref_wb_field,
+        ],
         strict=False,
     ):
         # select where reference waterbody is required
         if not gdf.empty:
-            gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()  # noqa: E712
+            gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()
             # cast ID to string if ref wb to string
             if pd.api.types.is_object_dtype(gdf_ref_res[ref_wb_id]) and not pd.api.types.is_object_dtype(
                 gdf[output_lake_id]
@@ -450,7 +542,10 @@ def _prep_ref_wb(
 
 
 def _filter_ref_res(
-    cfg: HFConfig, gdf_ref_res: gpd.GeoDataFrame, gdf_nwm: gpd.GeoDataFrame, gdf_ref_wb: gpd.GeoDataFrame
+    cfg: HFConfig,
+    gdf_ref_res: gpd.GeoDataFrame,
+    gdf_nwm: gpd.GeoDataFrame,
+    gdf_ref_wb: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Filter reference reservoirs based on criteria
 
@@ -468,7 +563,15 @@ def _filter_ref_res(
         ~gdf_ref_res["dam_id"].isin(gdf_nwm["dam_id"])
         & ~gdf_ref_res["dam_id"].isin(gdf_ref_wb["dam_id"])
         & (gdf_ref_res["ref_fab_wb"].isnull() == False),  # noqa: E712
-        ["geometry", "dam_id", "ref_fab_fp", "ref_fab_wb", "nid", "wb_areasqkm", "distance_to_fp_m"],
+        [
+            "geometry",
+            "dam_id",
+            "ref_fab_fp",
+            "ref_fab_wb",
+            "nid",
+            "wb_areasqkm",
+            "distance_to_fp_m",
+        ],
     ].copy()
 
     # filter to criteria
@@ -627,7 +730,13 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     for col in ("spillway_type", "dam_type"):
         if col in nid_df.columns:
             nid_df[col] = nid_df[col].astype("string")
-    for col in ("structural_height", "dam_height", "nid_height", "surface_area", "hydraulic_height"):
+    for col in (
+        "structural_height",
+        "dam_height",
+        "nid_height",
+        "surface_area",
+        "hydraulic_height",
+    ):
         if col in nid_df.columns:
             nid_df[col] = pd.to_numeric(nid_df[col], errors="coerce")
     if "surface_area" not in nid_df.columns:
@@ -636,7 +745,9 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # Make NID spatial
     nid_df = nid_df.loc[~nid_df["latitude"].isnull() & ~nid_df["longitude"].isnull()].copy()
     nid_gdf = gpd.GeoDataFrame(
-        nid_df, geometry=gpd.points_from_xy(nid_df["longitude"], nid_df["latitude"]), crs=4326
+        nid_df,
+        geometry=gpd.points_from_xy(nid_df["longitude"], nid_df["latitude"]),
+        crs=4326,
     )
     nid_gdf = nid_gdf.to_crs(res_df.crs)
     nid_gdf = nid_gdf.replace(["<NA>", "None", "nan"], None)
@@ -767,7 +878,15 @@ def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFram
             gdf[f] = None
 
     out_columns = (
-        ["nhf_lake_id", "ref_fp_id", "fp_id", "virtual_fp_id", "dn_nex_id", "dn_virtual_nex_id", "div_id"]
+        [
+            "nhf_lake_id",
+            "ref_fp_id",
+            "fp_id",
+            "virtual_fp_id",
+            "dn_nex_id",
+            "dn_virtual_nex_id",
+            "div_id",
+        ]
         + fields
         + ["geometry"]
     )
@@ -848,6 +967,13 @@ def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFra
         gdf_wb = gdf_wb[["geometry", lake_id_field]]
         lake_polys.append(gdf_wb)
 
+    # read run of river dams
+    if cfg.lakes.run_of_river.path.exists():
+        gdf_ror = gpd.read_file(cfg.lakes.run_of_river.path)
+        gdf_ror.rename(columns={cfg.lakes.run_of_river.ref_wb_field: lake_id_field}, inplace=True)
+        gdf_ror = gdf_ror[["geometry"], lake_id_field]
+        lake_polys.append(gdf_ror)
+
     if not lake_polys:
         logger.info("No lake polygons available, could not run lakes-flowpaths crosswalk.")
         return gpd.GeoDataFrame(columns=["nhf_lake_id", lake_id_field, "virtual_fp_id"])
@@ -903,7 +1029,9 @@ def crosswalk_vfp_lk(
 
 
 def _aggregate_lake_polygons(
-    cfg: HFConfig, lake_polys: dict[str, gpd.GeoDataFrame], lake_points: gpd.GeoDataFrame
+    cfg: HFConfig,
+    lake_polys: dict[str, gpd.GeoDataFrame],
+    lake_points: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Aggregate lake polygons from the final lake points to save as layer
 
@@ -951,13 +1079,15 @@ def _aggregate_lake_polygons(
         gdf_polys = gdf_polys.to_crs(cfg.crs)
         gdf_polys = (
             gdf_polys.loc[
-                gdf_polys[lake_id_field].isin(lake_points[lake_id_field]), [lake_id_field, "geometry"]
+                gdf_polys[lake_id_field].isin(lake_points[lake_id_field]),
+                [lake_id_field, "geometry"],
             ]
             .copy()
             .reset_index(drop=True)
         )
         gdf_polys = gdf_polys.merge(
-            lake_points[[lake_id_field, "virtual_fp_id", "nhf_lake_id"]], on=lake_id_field
+            lake_points[[lake_id_field, "virtual_fp_id", "nhf_lake_id"]],
+            on=lake_id_field,
         )
         gdf_polys["source"] = k
         extracted_poly_list.append(gdf_polys)

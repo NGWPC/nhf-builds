@@ -4,15 +4,20 @@ import geopandas as gpd
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import make_vfp_graph
-from hydrofabric_builds.hydrofabric.utils import _crosswalk_fp_nexus, _crosswalk_reference_to_vfp
+from hydrofabric_builds.hydrofabric.utils import (
+    _crosswalk_fp_nexus,
+    _crosswalk_reference_to_vfp,
+)
 from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
     _aggregate_lake_polygons,
     _assert_nwm_lakes,
     _associate_lake_flowpaths,
+    _calculate_elevation__lhd,
     _calculate_elevation__nwm,
     _calculate_elevation__refres,
     _calculate_elevation__refwb,
+    _calculate_elevation__ror,
     _concat_lakes,
     _create_ids,
     _dedup_lake_id,
@@ -126,6 +131,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 cfg,
                 gdf_adhoc=inputs["adhoc"].copy(),
                 gdf_usbr=inputs["usbr"].copy(),
+                gdf_lhdi=inputs["low_head_dams"].copy(),
                 gdf_ref_res=inputs["ref_res"].copy(),
                 gdf_wb_polys=inputs["ref_wb"].copy(),
             )
@@ -147,13 +153,72 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_ref_wb = gpd.GeoDataFrame(columns=["dam_id"])
 
         # ------------------------------------------------------
+        # Low Head Dams
+        # ------------------------------------------------------
+        if cfg.lakes.low_head_dams.run:
+            logger.info("Running low head dams found only in reference waterbodies")
+            gdf_lhdi = inputs["low_head_dams"]
+            gdf_lhdi_poly = gdf_lhdi[gdf_lhdi["lake_id"].str.contains("nid")].copy()
+            gdf_lhdi_pts = gdf_lhdi[gdf_lhdi["lake_id"].str.contains("nid")].copy()
+            gdf_lhdi_pts = _associate_lake_flowpaths(
+                cfg,
+                "low_head_dams",
+                gdf=gdf_lhdi_pts,
+                graph=vfp_graph,
+                graph_id_to_idx=vfp_graph_id_to_idx,
+                gdf_vfp=inputs["virtual_flowpaths"],
+            )
+            gdf_lhdi_poly = _calculate_elevation__lhd(
+                cfg, gdf_lhdi_pts=gdf_lhdi_pts, gdf_lhdi_orig=gdf_lhdi_poly
+            )
+            gdf_lhdi_poly["WeirC"] = 0.4
+            gdf_lhdi_poly["WeirL"] = 10.0
+            gdf_lhdi_poly["OrifceC"] = 0.1
+            gdf_lhdi_poly["OrifceA"] = 1.0
+            gdf_lhdi_poly["ifd"] = 0.899
+            gdf_list.append(gdf_lhdi_poly)
+            lake_polys["low_head_dams"] = inputs["low_head_dams"].copy()
+        else:
+            gdf_lhdi_poly = gpd.GeoDataFrame(columns=["dam_id"])
+
+        # ------------------------------------------------------
+        # Run of River Dams
+        # ------------------------------------------------------
+        if cfg.lakes.run_of_river.run:
+            logger.info("Running run of river dams")
+            gdf_ror = inputs["run_of_river"]
+            gdf_ror_poly = gdf_ror[gdf_ror["lake_id"].isnull()].copy()
+            gdf_ror_pts = gdf_ror[gdf_ror["lake_id"].isnull()].copy()
+            gdf_ror_pts = _associate_lake_flowpaths(
+                cfg,
+                "run_of_river",
+                gdf=gdf_ror_pts,
+                graph=vfp_graph,
+                graph_id_to_idx=vfp_graph_id_to_idx,
+                gdf_vfp=inputs["virtual_flowpaths"].copy(),
+            )
+
+            gdf_ror_poly = _calculate_elevation__ror(cfg, gdf_ror_pts=gdf_ror_pts, gdf_ror_poly=gdf_ror_poly)
+            gdf_list.append(gdf_ror_poly)
+            gdf_lhdi_poly["WeirC"] = 0.4
+            gdf_ror_poly["WeirL"] = 10.0
+            gdf_ror_poly["OrifceC"] = 0.1
+            gdf_ror_poly["OrifceA"] = 1.0
+            gdf_ror_poly["ifd"] = 0.899
+            lake_polys["run_of_river"] = gdf_ror_poly
+        else:
+            gdf_ror_poly = gpd.GeoDataFrame(columns=["dam_id"])
+        # ------------------------------------------------------
         # Reference Reservoirs
         # Filter and exclude reservoirs already used by nwm lakes and waterbodies
         # ------------------------------------------------------
         if cfg.lakes.ref_res.run:
             logger.info("Running reference reservoirs")
             gdf_ref_res = _filter_ref_res(
-                cfg, gdf_ref_res=inputs["ref_res"].copy(), gdf_nwm=gdf_nwm_lakes, gdf_ref_wb=gdf_ref_wb
+                cfg,
+                gdf_ref_res=inputs["ref_res"].copy(),
+                gdf_nwm=gdf_nwm_lakes,
+                gdf_ref_wb=gdf_ref_wb,
             )
             gdf_ref_res = _calculate_elevation__refres(
                 cfg, gdf_ref_res=gdf_ref_res, gdf_wb_poly=inputs["ref_wb"].copy()
@@ -211,6 +276,11 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # create NWM lakes polygons layer
         if lake_polys:
             gdf_polygons = _aggregate_lake_polygons(cfg, lake_polys=lake_polys, lake_points=gdf_all_lks)
-            gdf_polygons.to_file(cfg.output_file_path, layer="lakes_polygons", driver="GPKG", overwrite=True)
+            gdf_polygons.to_file(
+                cfg.output_file_path,
+                layer="lakes_polygons",
+                driver="GPKG",
+                overwrite=True,
+            )
 
         gdf_all_lks.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)
