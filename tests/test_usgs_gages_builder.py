@@ -23,6 +23,7 @@ from hydrofabric_builds.streamflow_gauges.usgs_gages_builder import (
     merge_usace,
     merge_usbr,
     merge_usgs_shapefile_into_gages,
+    merge_run_of_river,
     read_kmz_points,
     strip_html,
 )
@@ -135,6 +136,11 @@ def usbr() -> Path:
 def usace_gages() -> Path:
     """Path to USACE gages."""
     return here() / "tests/data/gages/usace_crosswalk_test.gpkg"
+
+@pytest.fixture
+def run_of_river_gages() -> Path:
+    """Path to USACE gages."""
+    return here() / "tests/data/gages/run_of_river_dams_test.gpkg"
 
 
 @pytest.fixture
@@ -368,3 +374,18 @@ class TestMergeUsace:
         usace_length = len(gpd.read_file(usace_gages))
         assert "USACE" in result["status"].values
         assert len(result) == total_gages + usace_length
+
+class TestRunOfRiver:
+    def test_appends_run_of_river(self, tmp_path: Path, gages: gpd.GeoDataFrame, run_of_river_gages: Path) -> None:
+        rfc_csv = tmp_path / "rfc.csv"
+        rfc_csv.write_text(
+            "nws shef id,longitude,latitude,forecast status\n"
+            "WELW1, 47.95,-119.86666666667,Forecasts are issued routinely year-round.\n"
+            "CNWM2,39.657777777778,-76.174444444444,Forecasts are issued as needed during times of high water but are not routinely available.\n"
+            "RISW1,47.3325,-120.08,Forecasts are issued as needed during times of high water but are not routinely available.\n"
+        )
+        result = merge_run_of_river(gages, run_of_river_gages, rfc_path=rfc_csv)
+        total_gages = len(gages)
+        run_of_river_gages_length = len(gpd.read_file(run_of_river_gages))
+        assert "RFC_run_of_river" in result["status"].values
+        assert len(result) == total_gages + run_of_river_gages_length
