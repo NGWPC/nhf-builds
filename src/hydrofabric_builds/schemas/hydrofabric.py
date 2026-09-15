@@ -754,7 +754,7 @@ class GagesInputs(BaseModel):
         description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
     )
     run_of_river: GageInput = Field(
-        default_factory=lambda: GageInput(path=Path("rfc/run_of_river_dams.gpkg"), id_col_name="nwips_id")
+        default_factory=lambda: GageInput(path=Path("rfc/run_of_river_dams.gpkg"), id_col_name="nwps_id")
     )
     usbr: GageInput = Field(
         default_factory=lambda: GageInput(

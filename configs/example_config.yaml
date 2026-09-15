@@ -328,6 +328,9 @@ gages:
       usace:
         path: other/usace_crosswalk.gpkg
         id_col_name: location
+      run_of_river:
+        path: rfc/run_of_river_dams.gpkg
+        id_col_name: nwps_id
       canada_great_lakes: True
     target:
       crs: EPSG:5070
