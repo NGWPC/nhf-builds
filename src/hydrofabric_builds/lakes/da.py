@@ -9,6 +9,7 @@ from hydrofabric_builds.schemas.hydrofabric import GreatLakesMapping, ResDAMappi
 
 logger = logging.getLogger(__name__)
 
+# instanitate the reservoir DA mapping to use throughout code
 DA_MAPPING = ResDAMapping()
 
 
@@ -45,6 +46,8 @@ def _read_res_index(
     active_rfc is a spreadsheet from OWP. This can be used to eliminate gages that are no
     longer active by filtering with `active_gage_id`
 
+    Each gage_id and lake_id is in the reservoir index
+
     usgs_fix_list: Some USGS IDs are missing a leading 0. Optionally pass a list of gage IDs
     to prepend '0'
     """
@@ -57,6 +60,7 @@ def _read_res_index(
         (usace_gage_id_field, usace_lake_id_field, DA_MAPPING.usace_persistence),
     ]
 
+    # For each gage, lake, and mapping read reservoir index, apply DA scheme, and set appropriate column names
     for gage_field, lake_field, da_mapping in res_index_fields:
         if lake_field in ds.variables:
             crosswalk = pd.DataFrame(
@@ -75,6 +79,7 @@ def _read_res_index(
             crosswalk.rename(columns={gage_field: output_gage_field, lake_field: lake_id_field}, inplace=True)
             df_list.append(crosswalk)
 
+    # concat all crosswalks
     df_out = pd.concat(df_list, ignore_index=True)
 
     # usgs_fix_list is a list of gages that need 0 prefix
@@ -144,6 +149,7 @@ def _add_great_lakes(
     lake_id_field: str = "lake_id",
     res_da_field: str = "da_type",
 ) -> pd.DataFrame:
+    """Add Great Lakes using the Great Lakes model for lake_id and site_no"""
     dict_lakes = mapping.model_dump()
 
     lake_ids, site_nos = [], []
@@ -164,7 +170,9 @@ def _generate_additional_crosswalk(
     fp: gpd.GeoDataFrame, gages: gpd.GeoDataFrame, lakes: gpd.GeoDataFrame
 ) -> pd.DataFrame:
     """Stub to generate more crosswalk"""
-    # TODO
+    # TODO: This will not be completed during NGWPC contract
+    # Goal: Intersect gages with lakes
+    # If USGS gage, set to USGS DA
     pass
 
 
