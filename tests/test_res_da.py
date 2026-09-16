@@ -15,6 +15,7 @@ from hydrofabric_builds.lakes.da import (
     _merge,
     _read_adhoc,
     _read_res_index,
+    _read_run_of_river
 )
 
 
@@ -319,6 +320,11 @@ def test_read_res_index__usgs_fix_list(res_index_path: Path) -> None:
 
 def test_read_run_of_river(ror_path: Path) -> None:
     """read the run of river file and set run of river flag to True"""
+    df = gpd.GeoDataFrame(ror_path)
+    df = _read_run_of_river(df)
+    assert {"site_no", "lake_id", "da_type", 'run_of_river'} == set(df.columns.values)
+    assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
+    assert len(df.loc[df["site_no"].isin(["0137462010", "0208250410", "021556525"])]) == 3
 
 
 def test_all_level_pool() -> None:
