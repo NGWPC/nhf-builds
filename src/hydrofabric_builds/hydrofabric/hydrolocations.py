@@ -37,6 +37,7 @@ def hydrolocations_pipeline(hf_path: Path) -> None:
         try:
             gdf = gpd.read_file(hf_path, layer=k)
             hy_ids = gdf.index + end_hy
+            # drop hy_id if it is already there and replace with new values
             if "hy_id" in gdf.columns:
                 gdf.drop(columns=["hy_id"], inplace=True)
             gdf.insert(2, "hy_id", hy_ids)

@@ -135,6 +135,7 @@ def _read_usbr(
     lake_id_field: str = "lake_id",
 ) -> pd.DataFrame:
     """Read the crosswalked USACE table"""
+    # select non-null lake ID
     df = gdf.loc[~gdf[lake_id_field].isnull(), [lake_id_field, id_field]].copy()
     df[res_da_field] = DA_MAPPING.usbr_persistence
     df.rename(columns={id_field: gage_id_field}, inplace=True)
@@ -166,6 +167,24 @@ def _add_great_lakes(
     )
 
 
+def _read_run_of_river(
+    gdf: gpd.GeoDataFrame,
+    id_field: str = "nwps_id",
+    gage_id_field: str = "site_no",
+    res_da_field: str = "da_type",
+    lake_id_field: str = "lake_id",
+) -> pd.DataFrame:
+    """Read the crosswalked run of river table and set to RFC forecast"""
+    # select non-null lake ID, though all should be populated
+    df = gdf.loc[~gdf[lake_id_field].isnull(), [lake_id_field, id_field]].copy()
+    df[res_da_field] = DA_MAPPING.rfc_forecast
+    df.rename(columns={id_field: gage_id_field}, inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    # flag run of river dams as true
+    df["run_of_river"] = True
+    return df
+
+
 def _generate_additional_crosswalk(
     fp: gpd.GeoDataFrame, gages: gpd.GeoDataFrame, lakes: gpd.GeoDataFrame
 ) -> pd.DataFrame:
@@ -180,11 +199,12 @@ def _merge(
     df_lakes: gpd.GeoDataFrame,
     df_list: list[pd.DataFrame],
     res_da_field: str = "da_type",
-    gid_field: str = "nhf_lake_id",
+    nhf_lake_id_field: str = "nhf_lake_id",
     lake_id_field: str = "lake_id",
+    gage_id_field: str = "site_no",
 ) -> pd.DataFrame:
-    """Merge all dataframe sources and de-duplicate lake_id"""
-    df_lakes = df_lakes[[gid_field, lake_id_field]].copy()
+    """Merge all dataframe sources and de-duplicate lake_id and gage id"""
+    df_lakes = df_lakes[[nhf_lake_id_field, lake_id_field]].copy()
 
     if pd.api.types.is_numeric_dtype(df_lakes[lake_id_field].dtype):
         df_lakes[lake_id_field] = df_lakes[lake_id_field].astype(int).astype(str)
@@ -192,6 +212,9 @@ def _merge(
     for df in df_list:
         if pd.api.types.is_numeric_dtype(df[lake_id_field].dtype):
             df[lake_id_field] = df[lake_id_field].astype(int).astype(str)
+        # run of river have been flaged previously. We need this column set to false in order to concatenate
+        if "run_of_river" not in df.columns:
+            df["run_of_river"] = False
 
     df_all = pd.concat(df_list)
 
@@ -199,31 +222,46 @@ def _merge(
     df_all = df_all.drop_duplicates(subset=[lake_id_field, res_da_field], keep=False)
 
     # de-dupe 2: choose the duplicate with greater res_da field (non-level pool) and prefer RFC over all
+    # select duplicates (dupe) and non dupelicats (df_all)
     dupe = df_all.loc[df_all.duplicated(subset=lake_id_field, keep=False)].copy().reset_index(drop=True)
     df_all = df_all.loc[~df_all.duplicated(subset=lake_id_field, keep=False)].copy().reset_index(drop=True)
 
+    # set priority column based on res DA type in dupes
     dupe["priority"] = 0
     dupe["priority"] = np.where(dupe[res_da_field] > 1, 1, dupe["priority"])  # anything non-LP
     dupe["priority"] = np.where(dupe[res_da_field] == 4, 2, dupe["priority"])  # RFC
     dupe["priority"] = np.where(dupe[res_da_field] == 6, 3, dupe["priority"])  # Great Lakes
+    # select index of max priority
     idx = dupe.groupby(lake_id_field)["priority"].idxmax()
     dupe = dupe.loc[idx].copy().drop(columns=["priority"])
 
     # if there are still duplicates, take the first as they have same res DA value
+    # NOTE: taking first of duplicates does not prescribe any rationale
+    # the only duplicated gages should be from run of river RFC and RFC
+    # first drop duplicated lakes
     dupe = dupe.drop_duplicates(subset=lake_id_field, keep="first")
+    # then drop duplicated gages
+    dupe = dupe.drop_duplicates(subset=gage_id_field, keep="first")
 
+    # concat df_all (non-dupe) with filtered dupes
     df_all = pd.concat([df_all, dupe], ignore_index=True)
     df_all = df_all.reset_index(drop=True)
 
     # merge back to lakes
     df_lakes = df_lakes.merge(df_all, how="left", on=lake_id_field)
     df_lakes.reset_index(drop=True, inplace=True)
+    # set DA to level pool if res DA field is null
     df_lakes.loc[df_lakes[res_da_field].isnull(), res_da_field] = DA_MAPPING.level_pool
     df_lakes[res_da_field] = df_lakes[res_da_field].astype(int)
 
+    # check for any duplicated lakes and duplicated gages
     assert ~df_lakes.duplicated(subset=lake_id_field).any(), f"Duplicate {lake_id_field} detected"
-    assert ~df_lakes.duplicated(subset=gid_field).any(), f"Duplicate {gid_field} detected"
+    assert ~df_lakes.duplicated(subset=nhf_lake_id_field).any(), f"Duplicate {nhf_lake_id_field} detected"
+    assert ~df_lakes.duplicated(subset=gage_id_field).any(), f"Duplicate {gage_id_field} detected"
 
+    # set any non-joined lakes to false run of river and force to bool type
+    df_lakes["run_of_river"] = np.where(df_lakes["run_of_river"].isnull(), False, df_lakes["run_of_river"])
+    df_lakes["run_of_river"] = df_lakes["run_of_river"].astype(bool)
     return df_lakes
 
 

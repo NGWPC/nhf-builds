@@ -1441,6 +1441,21 @@ class AdhocResDAInput(BaseModel):
     null_value: int = Field(default=-99999, description="Missing data value")
 
 
+class RunOfRiverDAInput(BaseModel):
+    """Large RFC Run of River dam input. These will be DA scheme as RFC with run of river flag"""
+
+    path: Path = Field(
+        default=Path("input/run_of_river_dams.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    run: bool = Field(
+        default=False,
+        description="Flag to use reservoir DA reservoir input. Must be set to false if file is not present.",
+    )
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    id_field: str = Field(default="nwps_id", description="Field containing shared reservoir/gage ID.")
+
+
 class USACEResDAInput(BaseModel):
     """USACE : lake_id crosswalk for reservoir DA."""
 
@@ -1508,6 +1523,11 @@ class ResDAConfig(BaseModel):
         default=ActiveRFC(),
         description="Table of active NWS gages used to filter NWM reservoir index.",
     )
+    run_of_river: RunOfRiverDAInput = Field(
+        default=RunOfRiverDAInput(),
+        description="Crosswalk of large RFC run of river reservoirs to lake_id.",
+    )
+
     usace: USACEResDAInput = Field(
         default=USACEResDAInput(),
         description="Crosswalked table of USACE reservoir/gages to lake_id.",
@@ -1527,6 +1547,7 @@ class ResDAConfig(BaseModel):
         self.adhoc.path = self.input_dir / self.adhoc.path
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
         self.active_rfc.path = self.input_dir / self.active_rfc.path
+        self.run_of_river.path = self.input_dir / self.run_of_river.path
         self.usace.path = self.input_dir / self.usace.path
         self.usbr.path = self.input_dir / self.usbr.path
         return self

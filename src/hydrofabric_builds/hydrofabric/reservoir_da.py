@@ -14,6 +14,7 @@ from hydrofabric_builds.lakes.da import (
     _merge,
     _read_adhoc,
     _read_res_index,
+    _read_run_of_river,
     _read_usace,
     _read_usbr,
 )
@@ -75,7 +76,7 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
             res_da_field=cfg.res_da.da_type_field,
         )
 
-    # iteraviely built list of dataframes with reservoir data
+    # iteratively built list of dataframes with reservoir data
     df_list = []
 
     # get NWM v3 reservoir index crosswalk and append to working list
@@ -145,7 +146,23 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
         )
         del gdf
 
-    # NOTE: Unfinished feature, but leaving as nugget for future development:
+    # Add run of river RFC 'reservoirs' if requested and append to working list
+    # Adds a run_of_river columns and sets to True
+    if cfg.res_da.run_of_river.run:
+        logger.info("Retrieving run of river dams from run of river crosswalk table")
+        gdf = gpd.read_file(cfg.res_da.run_of_river.path)
+        df_list.append(
+            _read_run_of_river(
+                gdf,
+                id_field=cfg.res_da.run_of_river.id_field,
+                gage_id_field=cfg.res_da.gage_id_field,
+                lake_id_field=cfg.res_da.lake_id_field,
+                res_da_field=cfg.res_da.da_type_field,
+            )
+        )
+        del gdf
+
+    # TODO: Unfinished feature, but leaving as nugget for future development:
     # Create crosswalk between more gages and reservoirs and append to working list
     if cfg.res_da.generate_additional_crosswalk:
         logger.info("Generating reservoir:gage crosswalks from data")
@@ -156,9 +173,15 @@ def res_da_pipeline(cfg: HFConfig) -> pd.DataFrame:
             del fp
 
     # Merge working list of dataframes and handle duplicates
+    # Will add run_of_river column to other dataframes and set to false
     logger.info("Merging reservoir DA tables")
     df_res_da = _merge(
-        lakes, df_list, res_da_field=cfg.res_da.da_type_field, lake_id_field=cfg.res_da.lake_id_field
+        lakes,
+        df_list,
+        res_da_field=cfg.res_da.da_type_field,
+        lake_id_field=cfg.res_da.lake_id_field,
+        gage_id_field=cfg.res_da.gage_id_field,
+        nhf_lake_id_field="nhf_lake_id",
     )
     # Check gages exist and report out if not
     _check_gages_exist(gdf_gages=gages, df_res_da=df_res_da, gage_id_field=cfg.res_da.gage_id_field)
