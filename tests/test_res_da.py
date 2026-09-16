@@ -44,6 +44,7 @@ def test_merge__mixed() -> None:
             Point(-1655121, 1406319),
             Point(624229, 2753739),
             Point(910763, 2443910),
+            Point(-1778525,2997014)
         ],
         data={
             "nhf_lake_id": [
@@ -55,6 +56,9 @@ def test_merge__mixed() -> None:
                 1261703406200352,
                 1278784300184414,
                 1277324208337912,
+                1277324208337999 # not real
+                 
+                
             ],
             "lake_id": [
                 "120053476",
@@ -65,6 +69,7 @@ def test_merge__mixed() -> None:
                 "9997014",
                 "4800002",
                 "4800004",
+                "23062422"
             ],
         },
     )
@@ -97,6 +102,18 @@ def test_merge__mixed() -> None:
             {"lake_id": "0", "site_no": "null", "da_type": 4},  # not in nhf lakes, should not be kept
         ]
     )
+
+    df_ror = pd.DataFrame.from_records(
+        [
+            {
+                "lake_id": "23062422",
+                "site_no": "WELW1",
+                "da_type": 4,
+                "run_of_river": True
+            },  # 1 run of river
+        ]
+    )
+
 
     expected = pd.DataFrame.from_records(
         [
@@ -156,10 +173,17 @@ def test_merge__mixed() -> None:
                 "da_type": 6,
                 "run_of_river": False,
             },  # Lake MI/Huron
+            {
+                "nhf_lake_id": 1277324208337999,
+                "lake_id": "23062422",
+                "site_no": "WELW1",
+                "da_type": 4,
+                "run_of_river": True
+            },  # 1 run of river
         ]
     )
 
-    output = _merge(gdf_lakes, df_list=[df_res_index, df_great_lakes, df_adhoc])
+    output = _merge(gdf_lakes, df_list=[df_res_index, df_great_lakes, df_adhoc, df_ror])
 
     assert_frame_equal(output, expected)
 
