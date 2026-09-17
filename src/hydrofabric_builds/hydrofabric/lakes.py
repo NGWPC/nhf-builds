@@ -75,7 +75,14 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         gdf.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)
 
     # if no lake types were selected to run, write blank layer
-    elif (cfg.lakes.nwm.run or cfg.lakes.adhoc.run or cfg.lakes.ref_wb.run or cfg.lakes.ref_res.run) is False:
+    elif (
+        cfg.lakes.nwm.run
+        or cfg.lakes.adhoc.run
+        or cfg.lakes.ref_wb.run
+        or cfg.lakes.ref_res.run
+        or cfg.lakes.run_of_river.run
+        or cfg.lakes.low_head_dams.run
+    ) is False:
         gdf = gpd.GeoDataFrame(columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs)
         gdf.to_file(cfg.output_file_path, layer="lakes", driver="GPKG", overwrite=True)
         logger.info("No lake types were selected to run. Wrote blank layer to lakes.")
@@ -148,6 +155,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 cfg, gdf_refwb_pts=gdf_ref_wb, gdf_refwb_poly=inputs["ref_wb"].copy()
             )
             gdf_list.append(gdf_ref_wb)
+            gdf_ref_wb.to_file("ref_wb.gpkg")
             lake_polys["ref_wb"] = inputs["ref_wb"].copy()
 
         else:
@@ -180,6 +188,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_lhdi_pts = _assign_hydraulic_defaults(gdf_lhdi_pts)
             gdf_lhdi_pts["source"] = "low_head_dam"
             gdf_list.append(gdf_lhdi_pts)
+            gdf_lhdi_pts.to_file("lhdi.gpkg")
             lake_polys["low_head_dams"] = gdf_lhdi_poly.copy()
         else:
             gdf_lhdi_poly = gpd.GeoDataFrame(columns=["dam_id"])
@@ -208,6 +217,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
             gdf_ror_pts = _calculate_elevation__ror(cfg, gdf_ror_pts=gdf_ror_pts, gdf_ror_orig=gdf_ror_poly)
             gdf_ror_pts = _assign_hydraulic_defaults(gdf_ror_pts)
             gdf_ror_pts["source"] = "run_of_river"
+            gdf_ror_pts.to_file("ror.gpkg")
             gdf_list.append(gdf_ror_pts)
             lake_polys["run_of_river"] = gdf_ror_poly.copy()
         else:

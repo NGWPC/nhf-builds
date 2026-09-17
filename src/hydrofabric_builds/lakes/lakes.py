@@ -390,8 +390,9 @@ def _calculate_elevation__lhd(
             )
             gdf_lhdi_poly[cfg.lakes.output_comid_field].astype(str)
             gdf_lhdi_poly = gdf_lhdi_poly.to_crs(cfg.crs)
+            gdf_lhdi_poly["LkArea"] = gdf_lhdi_poly.area / 1_000_000.0
             gdf_lhdi_pts = gdf_lhdi_pts.merge(
-                gdf_lhdi_poly[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
+                gdf_lhdi_poly[[cfg.lakes.output_comid_field, "ref_elev", "LkArea"]].copy(),
                 on=cfg.lakes.output_comid_field,
                 how="left",
             )
@@ -425,8 +426,9 @@ def _calculate_elevation__ror(
             )
             gdf_ror_orig[cfg.lakes.output_comid_field].astype(str)
             gdf_ror_orig = gdf_ror_orig.to_crs(cfg.crs)
+            gdf_ror_orig["LkArea"] = gdf_ror_orig.area / 1_000_000.0
             gdf_ror_pts = gdf_ror_pts.merge(
-                gdf_ror_orig[[cfg.lakes.output_comid_field, "ref_elev"]].copy(),
+                gdf_ror_orig[[cfg.lakes.output_comid_field, "ref_elev", "LkArea"]].copy(),
                 on=cfg.lakes.output_comid_field,
                 how="left",
             )
@@ -500,7 +502,7 @@ def _prep_ref_wb(
         "geometry",
         "source",
     ]
-    gdf_adhoc["source"] = "Adhoc"
+    gdf_adhoc["source"] = "adhoc"
     gdf_usbr["source"] = "USBR"
     gdf_lhdi["source"] = "low_head_dam"
     processed_gdf = []
