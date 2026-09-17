@@ -145,7 +145,6 @@ def _associate_lake_flowpaths(
     """
     # Get the cfg for the requested lake type
     cfg = getattr(main_cfg.lakes, lake_type)
-
     # if a gdf is passed in, use it, if not read from config
     if gdf is None:
         try:
@@ -519,7 +518,7 @@ def _prep_ref_wb(
     ):
         # select where reference waterbody is required
         if not gdf.empty:
-            gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()
+            gdf = gdf.loc[(gdf[keep_field] == True) | (gdf[keep_field] == "1"), :].copy()  # noqa: E712
             # cast ID to string if ref wb to string
             if pd.api.types.is_object_dtype(gdf_ref_res[ref_wb_id]) and not pd.api.types.is_object_dtype(
                 gdf[output_lake_id]
@@ -536,8 +535,9 @@ def _prep_ref_wb(
 
             # get geometry from ref wb polygons (area in m², convert to km²)
             gdf_wb_polys["LkArea"] = gdf_wb_polys.geometry.area / 1_000_000.0
+            gdf.drop(columns=["geometry"], inplace=True)
             gdf = gdf.merge(
-                gdf_wb_polys[[cfg.lakes.ref_wb.id_field, "LkArea"]],
+                gdf_wb_polys[[cfg.lakes.ref_wb.id_field, "LkArea", "geometry"]],
                 left_on=cfg.lakes.ref_wb.output_id_field,
                 right_on=cfg.lakes.ref_wb.id_field,
                 how="inner",
@@ -552,6 +552,7 @@ def _prep_ref_wb(
 
     output = pd.concat(processed_gdf).reset_index(drop=True)
     output = output.drop_duplicates(subset=[output_lake_id])
+    output = gpd.GeoDataFrame(output, crs=cfg.crs)
     return output
 
 
@@ -976,8 +977,8 @@ def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFra
 
     # read run of river dams
     if cfg.lakes.run_of_river.path.exists():
-        gdf_ror = gpd.read_file(cfg.lakes.run_of_river.path)
-        gdf_ror.rename(columns={cfg.lakes.run_of_river.ref_wb_field: lake_id_field}, inplace=True)
+        gdf_ror = gpd.read_file(cfg.lakes.run_of_river.path, layer=cfg.lakes.run_of_river.layer_polygon)
+        # gdf_ror.rename(columns={cfg.lakes.run_of_river.ref_wb_field: lake_id_field}, inplace=True)
         gdf_ror = gdf_ror[["geometry"], lake_id_field]
         lake_polys.append(gdf_ror)
 

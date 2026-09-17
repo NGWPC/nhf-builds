@@ -427,7 +427,7 @@ lakes:
     path: input/usbr_lake_crosswalk.gpkg
     id_field: locId
     lake_id_field: lake_id
-  low_head_Dams:
+  low_head_dams:
     run: True
     path: input/low_head_dams.gpkg
     layer_polygon: low_head_dams_polygon
