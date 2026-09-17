@@ -978,8 +978,7 @@ def _get_lake_geom(cfg: HFConfig, gdf_lakes: gpd.GeoDataFrame) -> gpd.GeoDataFra
     # read run of river dams
     if cfg.lakes.run_of_river.path.exists():
         gdf_ror = gpd.read_file(cfg.lakes.run_of_river.path, layer=cfg.lakes.run_of_river.layer_polygon)
-        # gdf_ror.rename(columns={cfg.lakes.run_of_river.ref_wb_field: lake_id_field}, inplace=True)
-        gdf_ror = gdf_ror[["geometry"], lake_id_field]
+        gdf_ror = gdf_ror[["geometry", lake_id_field]]
         lake_polys.append(gdf_ror)
 
     if not lake_polys:
