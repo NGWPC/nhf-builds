@@ -256,16 +256,16 @@ def associate_flowpaths_polygon_graph(
     # find polygons with no intersections, buffer them, and overlay again
     # concat to previous intersection
     no_int = gdf_poly.loc[~gdf_poly[poly_id].isin(int_vfp[poly_id])].copy()
-    no_int["geometry"] = no_int["geometry"].buffer(buffer_size_m)
-    tmp_int_vfp = no_int.overlay(gdf_vfp, keep_geom_type=False)
-    int_vfp = pd.concat([int_vfp, tmp_int_vfp])
-
-    # set geometries of buffered vfps in main polygon layer to be used below
-    gdf_poly["geometry"] = np.where(
-        gdf_poly[poly_id].isin(tmp_int_vfp[poly_id]),
-        gdf_poly["geometry"].buffer(buffer_size_m),
-        gdf_poly["geometry"],
-    )
+    if not no_int.empty:
+        no_int["geometry"] = no_int["geometry"].buffer(buffer_size_m)
+        tmp_int_vfp = no_int.overlay(gdf_vfp, keep_geom_type=False)
+        int_vfp = pd.concat([int_vfp, tmp_int_vfp])
+        # set geometries of buffered vfps in main polygon layer to be used below
+        gdf_poly["geometry"] = np.where(
+            gdf_poly[poly_id].isin(tmp_int_vfp[poly_id]),
+            gdf_poly["geometry"].buffer(buffer_size_m),
+            gdf_poly["geometry"],
+        )
 
     poly_fp_pairs = {}
     missing_keys = []
