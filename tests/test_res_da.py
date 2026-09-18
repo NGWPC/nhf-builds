@@ -15,6 +15,7 @@ from hydrofabric_builds.lakes.da import (
     _merge,
     _read_adhoc,
     _read_res_index,
+    _read_run_of_river
 )
 
 
@@ -27,9 +28,9 @@ def res_index_path() -> Path:
 def test_merge__mixed() -> None:
     """A mixed case of merging adhoc and reservoir index including:
     - non-duplicated rfc (4)
-    - non-duplicaed usgs (2)
+    - non-duplicated usgs (2)
     - non-duplicated usace (3)
-    - non-duplicaed adhoc rfc (4)
+    - non-duplicated adhoc rfc (4)
     - duplicated adhoc rfc / index usgs -> chooses adhoc
     - lake in adhoc that is not in nhf lakes -> dropped
     - lake not in res index or adhoc -> gets level pool (1)
@@ -44,6 +45,7 @@ def test_merge__mixed() -> None:
             Point(-1655121, 1406319),
             Point(624229, 2753739),
             Point(910763, 2443910),
+            Point(-1778525,2997014)
         ],
         data={
             "nhf_lake_id": [
@@ -55,6 +57,9 @@ def test_merge__mixed() -> None:
                 1261703406200352,
                 1278784300184414,
                 1277324208337912,
+                1277324208337999 # not real
+                 
+                
             ],
             "lake_id": [
                 "120053476",
@@ -65,6 +70,7 @@ def test_merge__mixed() -> None:
                 "9997014",
                 "4800002",
                 "4800004",
+                "23062422"
             ],
         },
     )
@@ -98,6 +104,18 @@ def test_merge__mixed() -> None:
         ]
     )
 
+    df_ror = pd.DataFrame.from_records(
+        [
+            {
+                "lake_id": "23062422",
+                "site_no": "WELW1",
+                "da_type": 4,
+                "run_of_river": True
+            },  # 1 run of river
+        ]
+    )
+
+
     expected = pd.DataFrame.from_records(
         [
             {
@@ -105,53 +123,68 @@ def test_merge__mixed() -> None:
                 "lake_id": "120053476",
                 "site_no": "STPC1",
                 "da_type": 4,
+                "run_of_river": False,
             },  # RFC from adhoc
             {
                 "nhf_lake_id": 1254385525906421,
                 "lake_id": "8932968",
                 "site_no": "ILAC1",
                 "da_type": 4,
+                "run_of_river": False,
             },  # RFC - not duplicated
             {
                 "nhf_lake_id": 1271431333013718,
                 "lake_id": "1127701",
                 "site_no": "07344210",
                 "da_type": 2,
+                "run_of_river": False,
             },  # USGS - not duplicated
             {
                 "nhf_lake_id": 127859655967084,
                 "lake_id": "4817675",
                 "site_no": "MN00585",
                 "da_type": 3,
+                "run_of_river": False,
             },  # USACE - not duplicated)
             {
                 "nhf_lake_id": 1278078392476481,
                 "lake_id": "4943477",
                 "site_no": "fake-rfc",
                 "da_type": 4,
+                "run_of_river": False,
             },  # adhoc
             {
                 "nhf_lake_id": 1261703406200352,
                 "lake_id": "9997014",
                 "site_no": np.nan,
                 "da_type": 1,
+                "run_of_river": False,
             },  # not joined, gets level pool
             {
                 "nhf_lake_id": 1278784300184414,
                 "lake_id": "4800002",
                 "site_no": "04127885",
                 "da_type": 6,
+                "run_of_river": False,
             },  # Lake Superior
             {
                 "nhf_lake_id": 1277324208337912,
                 "lake_id": "4800004",
                 "site_no": "04159130",
                 "da_type": 6,
+                "run_of_river": False,
             },  # Lake MI/Huron
+            {
+                "nhf_lake_id": 1277324208337999,
+                "lake_id": "23062422",
+                "site_no": "WELW1",
+                "da_type": 4,
+                "run_of_river": True
+            },  # 1 run of river
         ]
     )
 
-    output = _merge(gdf_lakes, df_list=[df_res_index, df_great_lakes, df_adhoc])
+    output = _merge(gdf_lakes, df_list=[df_res_index, df_great_lakes, df_adhoc, df_ror])
 
     assert_frame_equal(output, expected)
 
@@ -196,6 +229,7 @@ def test_merge__adhoc_dupe() -> None:
                 "lake_id": "120053476",
                 "site_no": "STPC1",
                 "da_type": 4,
+                "run_of_river": False,
             },  # RFC from adhoc
         ]
     )
@@ -241,6 +275,7 @@ def test_merge__index_dupe() -> None:
                 "lake_id": "120053476",
                 "site_no": "usace-fake",
                 "da_type": 3,
+                "run_of_river": False,
             },  # higher code
         ]
     )
@@ -279,6 +314,15 @@ def test_read_res_index__usgs_fix_list(res_index_path: Path) -> None:
     ds = xr.open_dataset(res_index_path)
     df = _read_res_index(ds, usgs_fix_list=["137462010", "208250410", "21556525"])
     assert {"site_no", "lake_id", "da_type"} == set(df.columns.values)
+    assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
+    assert len(df.loc[df["site_no"].isin(["0137462010", "0208250410", "021556525"])]) == 3
+
+
+def test_read_run_of_river(ror_path: Path) -> None:
+    """read the run of river file and set run of river flag to True"""
+    df = gpd.GeoDataFrame(ror_path)
+    df = _read_run_of_river(df)
+    assert {"site_no", "lake_id", "da_type", 'run_of_river'} == set(df.columns.values)
     assert set(df["da_type"].unique().tolist()) == {2, 3, 4}
     assert len(df.loc[df["site_no"].isin(["0137462010", "0208250410", "021556525"])]) == 3
 

@@ -331,6 +331,10 @@ lakes:
     attrib_src_key: "lake_id"
   adhoc:
     run: False
+  low_head_dams:
+    run: False # None in HI
+  run_of_river:
+    run: False # None in HI
   ref_res:
     run: False # No reference reservoirs in HI
   ref_wb:
