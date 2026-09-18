@@ -9,7 +9,10 @@ import pyarrow as pa
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pyprojroot import here
 
-from hydrofabric_builds.helpers.stats import weighted_circular_mean, weighted_geometric_mean
+from hydrofabric_builds.helpers.stats import (
+    weighted_circular_mean,
+    weighted_geometric_mean,
+)
 
 
 class Classifications(BaseModel):
@@ -271,7 +274,8 @@ class BuildHydrofabricConfig(BaseModel):
     )
 
     divide_aggregation_threshold: float = Field(
-        default=3.0, description="Threshold for divides to aggreagate into an upstream catchment [km^2]"
+        default=3.0,
+        description="Threshold for divides to aggreagate into an upstream catchment [km^2]",
     )
 
     headwater_virtual_length_threshold: float = Field(
@@ -328,7 +332,12 @@ def get_operation(op: str) -> Any:
         {
             "weighted_circular_mean": weighted_circular_mean,  # type: ignore[dict-item]
             "weighted_geometric_mean": weighted_geometric_mean,  # type: ignore[dict-item]
-            "quartile_dist": ["quantile(q=0.25)", "quantile(q=0.5)", "quantile(q=0.75)", "quantile(q=1.0)"],  # type: ignore[dict-item]
+            "quartile_dist": [
+                "quantile(q=0.25)",
+                "quantile(q=0.5)",
+                "quantile(q=0.75)",
+                "quantile(q=1.0)",
+            ],  # type: ignore[dict-item]
             "quantile_dist": [
                 "quantile(q=0.1)",
                 "quantile(q=0.2)",
@@ -351,7 +360,8 @@ class DivideAttributeConfig(BaseModel):
     """Pydantic model for divide attributes attribute configuration"""
 
     data_dir: Path = Field(
-        description="Top level directory for data layers", default=here() / "data/divide_attributes"
+        description="Top level directory for data layers",
+        default=here() / "data/divide_attributes",
     )
     agg_type: AggTypeEnum = Field(description="Zonal stats aggregation type")
     field_name: str = Field(description="Output field name for divide attribute")
@@ -380,14 +390,17 @@ class DivideAttributesModelConfig(BaseModel):
     hf_path: Path = Field(None, description="Path to input and output hydrofabric")
     crs: str = Field(description="Domain CRS", default="EPSG:5070")
     processes: int = Field(
-        description="Number of processes to use for multiprocessing", default=os.cpu_count()
+        description="Number of processes to use for multiprocessing",
+        default=os.cpu_count(),
     )
     data_dir: Path = Field(
-        description="Directory of all input data", default=here() / "data/divide_attributes"
+        description="Directory of all input data",
+        default=here() / "data/divide_attributes",
     )
     divide_id: str = Field(description="Field name for unique divide id", default="div_id")
     attributes: list[DivideAttributeConfig] = Field(
-        None, description="List of attributes to be computed. Specify in DivideAttributeConfig data model."
+        None,
+        description="List of attributes to be computed. Specify in DivideAttributeConfig data model.",
     )
     divides_path_list: list[Path] | None = Field(
         description="List of divides paths to use for parallel run. ex. list of VPU subsets.",
@@ -440,7 +453,9 @@ class FlowpathAttributesModelConfig(BaseModel):
         default=True,
     )
     dem_path: Path = Field(
-        default=here() / Path("data/usgs_250m_dem_5070.tif"), title="DEM Path", description="Path to DEM"
+        default=here() / Path("data/usgs_250m_dem_5070.tif"),
+        title="DEM Path",
+        description="Path to DEM",
     )
     tw_path: Path = Field(
         default=None,
@@ -485,12 +500,34 @@ class StreamOrder:
     @classmethod
     def chsslp(cls) -> dict:
         """Order-based Channel Side-Slope values for Strahler orders 1-10"""
-        return {1: 0.03, 2: 0.03, 3: 0.03, 4: 0.04, 5: 0.04, 6: 0.04, 7: 0.04, 8: 0.04, 9: 0.05, 10: 0.10}
+        return {
+            1: 0.03,
+            2: 0.03,
+            3: 0.03,
+            4: 0.04,
+            5: 0.04,
+            6: 0.04,
+            7: 0.04,
+            8: 0.04,
+            9: 0.05,
+            10: 0.10,
+        }
 
     @classmethod
     def bw(cls) -> dict:
         """Order-based Bottom-width values for Strahler orders 1-10"""
-        return {1: 1.6, 2: 2.4, 3: 3.5, 4: 5.3, 5: 7.4, 6: 11.0, 7: 14.0, 8: 16.0, 9: 26.0, 10: 110.0}
+        return {
+            1: 1.6,
+            2: 2.4,
+            3: 3.5,
+            4: 5.3,
+            5: 7.4,
+            6: 11.0,
+            7: 14.0,
+            8: 16.0,
+            9: 26.0,
+            10: 110.0,
+        }
 
 
 class FlowpathAttributesConfig(BaseModel):
@@ -513,7 +550,10 @@ class FlowpathAttributesConfig(BaseModel):
         title="Drainage Area (km2)", description="Drainage area (sqkm) from flowpaths"
     )
     y: float | None = Field(
-        None, title="Estimated Depth", description="Estimated depth associated with TopWdth (m)", alias="Y"
+        None,
+        title="Estimated Depth",
+        description="Estimated depth associated with TopWdth (m)",
+        alias="Y",
     )
     r: float | None = Field(None, title="Dingman's r", description="Dingmans's r", alias="r")
     n: float = Field(
@@ -548,10 +588,16 @@ class FlowpathAttributesConfig(BaseModel):
         alias="ChSlp",
     )
     mean_elevation: float | None = Field(
-        None, title="Elevation", description="Mean elevation (m) between nodes from 3DEP", alias="alt"
+        None,
+        title="Elevation",
+        description="Mean elevation (m) between nodes from 3DEP",
+        alias="alt",
     )
     slope: float | None = Field(
-        None, title="Slope", description="Slope (meters/meters) computed from 3DEP", alias="So"
+        None,
+        title="Slope",
+        description="Slope (meters/meters) computed from 3DEP",
+        alias="So",
     )
     musx: float = Field(
         title="Muskingum Weighting Coeffiecent",
@@ -572,10 +618,16 @@ class FlowpathAttributesConfig(BaseModel):
         alias="Y_ml",
     )
     r_ml: float | None = Field(
-        None, title="Dingman's r ML", description="Dingmans's r calculated from RiverML", alias="r_ml"
+        None,
+        title="Dingman's r ML",
+        description="Dingmans's r calculated from RiverML",
+        alias="r_ml",
     )
     topwdth_ml: float | None = Field(
-        None, title="Top Width ML", description="Top Width (m) calculated from RiverML", alias="TopWdth_ml"
+        None,
+        title="Top Width ML",
+        description="Top Width (m) calculated from RiverML",
+        alias="TopWdth_ml",
     )
     topwdthcc_ml: float | None = Field(
         None,
@@ -653,7 +705,9 @@ class GagesInputs(BaseModel):
     )
     CIROH_UA: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path("CIROH_UA/gage_area.csv"), id_col_name="gage", area_col_name="area_sqkm"
+            path=Path("CIROH_UA/gage_area.csv"),
+            id_col_name="gage",
+            area_col_name="area_sqkm",
         )
     )
     nwm_calib_gages: GageInput = Field(
@@ -683,11 +737,15 @@ class GagesInputs(BaseModel):
         )
     )
     nwm_rfc: NWMRFCInput = Field(
-        default=NWMRFCInput(), description="An NWM v3 reservoid index file with RFC gages to retain"
+        default=NWMRFCInput(),
+        description="An NWM v3 reservoid index file with RFC gages to retain",
     )
     adhoc_lakes: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path("rfc/adhoc_lakes.gpkg"), id_col_name="locationId", x_col_name="Lon", y_col_name="Lat"
+            path=Path("rfc/adhoc_lakes.gpkg"),
+            id_col_name="locationId",
+            x_col_name="Lon",
+            y_col_name="Lat",
         ),
         description="Adhoc lakes from reference waterbodies",
     )
@@ -697,7 +755,10 @@ class GagesInputs(BaseModel):
     )
     usbr: GageInput = Field(
         default_factory=lambda: GageInput(
-            path=Path("other/usbr.gpkg"), id_col_name="locId", x_col_name="Lon", y_col_name="Lat"
+            path=Path("other/usbr.gpkg"),
+            id_col_name="locId",
+            x_col_name="Lon",
+            y_col_name="Lat",
         ),
         description="USBR lakes",
     )
@@ -839,14 +900,16 @@ class ReferenceReservoirsInput(BaseModel):
     wb_area_col: str = Field(default="wb_areasqkm", description="Area (km2) column")
     ref_wb_id_col: str = Field(default="ref_fab_wb", description="Reference waterbody ID column")
     min_wb_area_sqkm: float = Field(
-        default=0.2, description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None."
+        default=0.2,
+        description="Minimum waterbody area (km2) to keep for RFC-DA. Use 0 to remove None.",
     )
     max_distance_m: float = Field(
         default=1000.0,
         description="max distance of reference reservoir points from column 'distance_to_fp_m'",
     )
     ref_res_keep: list[str] = Field(
-        default=[], description="List of reference reservoir dam_id's to keep in RFCDA layer"
+        default=[],
+        description="List of reference reservoir dam_id's to keep in RFCDA layer",
     )
 
 
@@ -867,10 +930,12 @@ class NWMLakeInput(BaseModel):
         description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
     )
     run: bool = Field(
-        default=True, description="Flag to run NWM lakes input. Must be set to false if file is not present."
+        default=True,
+        description="Flag to run NWM lakes input. Must be set to false if file is not present.",
     )
     improve_placement_ref_res: bool = Field(
-        default=True, description="Flag to use reference reservoirs to improve placement of lakes."
+        default=True,
+        description="Flag to use reference reservoirs to improve placement of lakes.",
     )
     improve_placement_path: Path = Field(
         default=Path("output/fp_improved placement.gpkg"),
@@ -886,7 +951,8 @@ class NWMLakeInput(BaseModel):
         description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
     )
     search_radius_m: float = Field(
-        default=1000.0, description="Distance from flowpath to search when associating flowpaths with points."
+        default=1000.0,
+        description="Distance from flowpath to search when associating flowpaths with points.",
     )
     max_refres_search_distance_m: float = Field(
         default=500.0,
@@ -905,7 +971,8 @@ class NWMLakeInput(BaseModel):
         default=None, description="Source file layer for importing attributes"
     )
     attrib_src_key: str = Field(
-        default="lake_id", description="Source file key to match when importing attributes"
+        default="lake_id",
+        description="Source file key to match when importing attributes",
     )
     fields: list[str] = Field(
         default=[
@@ -952,11 +1019,13 @@ class RefWaterbodyInput(BaseModel):
         description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
     )
     search_radius_m: float = Field(
-        default=1000.0, description="Distance from flowpath to search when associating flowpaths."
+        default=1000.0,
+        description="Distance from flowpath to search when associating flowpaths.",
     )
     id_field: str = Field(default="comid", description="ID field for reference waterbodies")
     output_id_field: str = Field(
-        default="lake_id", description="ID field to change name to for reference waterbodies"
+        default="lake_id",
+        description="ID field to change name to for reference waterbodies",
     )
     intersection_length_min_m: float = Field(
         default=3.0,
@@ -983,7 +1052,8 @@ class AdhocLakeInput(BaseModel):
     )
     layer: str = "adhoc_lakes"
     run: bool = Field(
-        default=True, description="Flag to run Adhoc Lake input. Must be set to false if file is not present."
+        default=True,
+        description="Flag to run Adhoc Lake input. Must be set to false if file is not present.",
     )
     ref_wb_field: str = Field(
         default="ref_waterbodies_only",
@@ -1000,11 +1070,112 @@ class USBRLakeInput(BaseModel):
     )
     layer: str = "usbr_lake_crosswalk"
     run: bool = Field(
-        default=True, description="Flag to run USBR Lake input. Must be set to false if file is not present."
+        default=True,
+        description="Flag to run USBR Lake input. Must be set to false if file is not present.",
     )
     ref_wb_field: str = Field(
         default="ref_wb_lake",
         description="Field in the USBR table that flags if a lake is only in the reference waterbodies dataset (not in NWM lakes)",
+    )
+
+
+class RunOfRiverInput(BaseModel):
+    """Lakes: Run-of-river lakes are mapped to COMID/lake_id. Add run-of-river lakes from reference reservoirs when not included in nwm lakes."""
+
+    path: Path = Field(
+        default=Path("input/run_of_river_dams.gpkg"),
+        description="Source path.  LakesConfig will inject preceding input path.",
+    )
+    layer_polygon: str = "run_of_river_dams"
+    layer_points: str = "run_of_river_dams_points"
+    run: bool = Field(
+        default=True,
+        description="Flag to run Run-of-River Lake input. Must be set to false if file is not present.",
+    )
+    search_radius_m: float = Field(
+        default=1000.0,
+        description="Distance from flowpath to search when associating flowpaths.",
+    )
+    ref_nwps_field: str = Field(
+        default="nwps_id",
+        description="Field in the run of river table identifying the associated NWPS RFC gage",
+    )
+    ref_nidid_field: str = Field(
+        default="nidid",
+        description="Field in the run of river table identifying the associated NID ID",
+    )
+    associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
+    flowpath_association_method: str = Field(
+        default="polygon_outlet",
+        description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
+    )
+    id_field: str = Field(default="lake_id", description="ID field for low head dams")
+    output_id_field: str = Field(default="lake_id", description="Output ID field")
+    fp_associated_path: Path = Field(
+        default=Path("output/ror_associated.gpkg"),
+        description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
+    )
+    intersection_length_min_m: float = Field(
+        default=3.0,
+        description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
+    )
+    attrib_src_path: Path | None = Field(
+        default=None,
+        description="Source file for joining attributes from another file. It will be skipped if null.",
+    )
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
+    )
+    attrib_src_key: str = Field(
+        default=None, description="Source file key to match when importing attributes"
+    )
+
+
+class LowHeadDamsInput(BaseModel):
+    """Lakes: Low head dams are mapped to lake_id.  Add low head dams from reference reservoirs when not included in nwm lakes."""
+
+    path: Path = Field(
+        default=Path("input/low_head_dams.gpkg"),
+        description="Source path.  LakesConfig will inject preceding input path.",
+    )
+    layer_poly: str = "low_head_dams_polygon"
+    layer_point: str = "low_head_dams_point"
+    run: bool = Field(
+        default=True,
+        description="Flag to run low head dams Lake input.  Must be set to false if file is not present",
+    )
+    fp_associated_path: Path = Field(
+        default=Path("output/lhd_associated.gpkg"),
+        description="A temporary layer to read lakes from where flowpaths have been associated and attributes joined. Skips flowpath association.",
+    )
+    ref_wb_field: str = Field(
+        default="in_ref_wb",
+        description="Field in low head dams table identifying if polygon is in reference waterbodies",
+    )
+    associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
+    flowpath_association_method: str = Field(
+        default="polygon_outlet",
+        description="Type of flowpath association. Options are `polygon_outlet` or `nearest_point`",
+    )
+    search_radius_m: float = Field(
+        default=1000.0,
+        description="Distance from flowpath to search when associating flowpaths.",
+    )
+    id_field: str = Field(default="lake_id", description="ID field for low head dams")
+    output_id_field: str = Field(default="lake_id", description="Output ID field")
+    intersection_length_min_m: float = Field(
+        default=3.0,
+        description="Minimum prefered intersection length when associating polygons with flowpaths. If the flowpath intersection is extremely short, it can sometimes be almost entirely on a long downstream flowpath.",
+    )
+    attrib_src_path: Path | None = Field(
+        default=None,
+        description="Source file for joining attributes from another file. It will be skipped if null.",
+    )
+    attrib_src_layer: str | None = Field(
+        default=None, description="Source file layer for importing attributes"
+    )
+    attrib_src_key: str = Field(
+        default=None, description="Source file key to match when importing attributes"
     )
 
 
@@ -1084,6 +1255,14 @@ class LakesConfig(BaseModel):
         default=USBRLakeInput(),
         description="All USBR Lakes Input configs. USBR lakes have been mapped to COMID when possible. If USBR lakes are missing in NWM lakes but available in reference waterbodies, theey will be added.",
     )
+    run_of_river: RunOfRiverInput = Field(
+        default=RunOfRiverInput(),
+        description="All run of river dams input configs.  RoR dams have been mapped to lake_id when possible.",
+    )
+    low_head_dams: LowHeadDamsInput = Field(
+        default=LowHeadDamsInput(),
+        description="All low head dams input configs.  Low head dams have been mapped to lake_id when possible.",
+    )
     ref_wb: RefWaterbodyInput = Field(
         default=RefWaterbodyInput(),
         description="All Reference Waterbody Input configs. Reference Waterbodies is a polygon dataset with COMID. Reference waterbodies will be used for Adhoc Lakes that are only found in Reference Waterbodies. The entire Reference Waterbodies file is not run.",
@@ -1093,7 +1272,8 @@ class LakesConfig(BaseModel):
         description="All Reference Reservoirs Input configs. Reference Reservoirs is a point dataset of dams including hydraulic parameters from the National Inventory of Dams (NID).",
     )
     dem: LakesDEMInputs = Field(
-        default=LakesDEMInputs(), description="DEM configs to use when getting elevations for lakes."
+        default=LakesDEMInputs(),
+        description="DEM configs to use when getting elevations for lakes.",
     )
     calculate_elevation: bool = Field(
         default=True,
@@ -1116,7 +1296,8 @@ class LakesConfig(BaseModel):
         description="Name of flowpath ID field for output after flowpaths are identified",
     )
     output_comid_field: str = Field(
-        default="lake_id", description="The common name of 'comid' field that is present in various datasets"
+        default="lake_id",
+        description="The common name of 'comid' field that is present in various datasets",
     )
     great_lakes: GreatLakesMapping = Field(default=GreatLakesMapping(), description="Great Lakes parameters")
     validate_duplicates: bool = Field(
@@ -1148,6 +1329,8 @@ class LakesConfig(BaseModel):
             "reservoir_index_GDL_AK",
             "reservoir_index_Medium_Range",
             "reservoir_index_Short_Range",
+            "run_of_river",
+            "source",
         ],
         description="Final fields. IDs and geometry will be kept by default.",
     )
@@ -1167,6 +1350,10 @@ class LakesConfig(BaseModel):
         self.dem.path = self.input_dir / self.dem.path
         self.adhoc.path = self.input_dir / self.adhoc.path
         self.usbr.path = self.input_dir / self.usbr.path
+        self.low_head_dams.path = self.input_dir / self.low_head_dams.path
+        self.run_of_river.path = self.input_dir / self.run_of_river.path
+        self.low_head_dams.fp_associated_path = self.input_dir / self.low_head_dams.fp_associated_path
+        self.run_of_river.fp_associated_path = self.input_dir / self.run_of_river.fp_associated_path
 
         # optional paths
         self.nwm.attrib_src_path = (
@@ -1209,7 +1396,8 @@ class ResCrossWalkInput(BaseModel):
         description="File with reservoir crosswalks for USGS, USACE, RFC",
     )
     fields: ResCrosswalkFields = Field(
-        default=ResCrosswalkFields(), description="All field mappings for reservoir index file"
+        default=ResCrosswalkFields(),
+        description="All field mappings for reservoir index file",
     )
 
 
@@ -1297,7 +1485,8 @@ class ResDAConfig(BaseModel):
         description="All Adhoc Lakes Input configs. Adhoc lakes have been mapped to COMID/lake_id, site_no (gage), and dam_id (reference reservoirs) when possible.",
     )
     lake_id_field: str = Field(
-        default="lake_id", description="The common name of 'comid' field that is present in various datasets"
+        default="lake_id",
+        description="The common name of 'comid' field that is present in various datasets",
     )
     gage_id_field: str = Field(default="site_no", description="Name for output gage ID field")
     da_type_field: str = Field(default="da_type", description="Name for output reservoir DA type field")
@@ -1305,7 +1494,8 @@ class ResDAConfig(BaseModel):
         default=ResCrossWalkInput(), description="Data for the gage-lake crosswalk"
     )
     great_lakes: bool = Field(
-        default=False, description="Flag to add the Great Lakes mappings to the dataframe"
+        default=False,
+        description="Flag to add the Great Lakes mappings to the dataframe",
     )
 
     generate_additional_crosswalk: bool = Field(
@@ -1313,13 +1503,16 @@ class ResDAConfig(BaseModel):
         description="Flag to generate lake:gage crosswalks for lakes without RFC or gage information.",
     )
     active_rfc: ActiveRFC = Field(
-        default=ActiveRFC(), description="Table of active NWS gages used to filter NWM reservoir index."
+        default=ActiveRFC(),
+        description="Table of active NWS gages used to filter NWM reservoir index.",
     )
     usace: USACEResDAInput = Field(
-        default=USACEResDAInput(), description="Crosswalked table of USACE reservoir/gages to lake_id."
+        default=USACEResDAInput(),
+        description="Crosswalked table of USACE reservoir/gages to lake_id.",
     )
     usbr: USBRResDAInput = Field(
-        default=USBRResDAInput(), description="Crosswalked table of USBR reservoir/gages to lake_id."
+        default=USBRResDAInput(),
+        description="Crosswalked table of USBR reservoir/gages to lake_id.",
     )
     usgs_fix_list: list[str] | None = Field(
         default=None,

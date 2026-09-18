@@ -334,6 +334,10 @@ lakes:
     run: False # No reference reservoirs in PRVI
   ref_wb:
     run: False # No reference waterbodies in PRVI
+  low_head_dams:
+    run: False # None in PR/VI
+  run_of_river:
+    run: False # None in PR/VI
   nid:
     path: input/NID2019_U.csv
   dem:

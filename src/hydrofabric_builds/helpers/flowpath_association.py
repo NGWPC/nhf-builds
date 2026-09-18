@@ -6,6 +6,7 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import rustworkx as rx
+from shapely import LineString, Point
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,8 @@ def associate_flowpaths_nearest_point(
 
         # select flowpath geometry and ID from flowpath table for each candidate list
         candidates = gdf_flowpaths.loc[
-            gdf_flowpaths[flowpath_id].isin(sub[flowpath_id].values), [flowpath_id, "geometry"]
+            gdf_flowpaths[flowpath_id].isin(sub[flowpath_id].values),
+            [flowpath_id, "geometry"],
         ].copy()
 
         # if no flowpaths in buffer, skip
@@ -246,7 +248,6 @@ def associate_flowpaths_polygon_graph(
 
     # intersect polygons and linestrings resulting in linestring intersections
     int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
-
     poly_fp_pairs = {}
     missing_keys = []
 
@@ -257,6 +258,14 @@ def associate_flowpaths_polygon_graph(
         # if the intersection length > minimum intersection length, keep flowpaths
         candidates = int_vfp.loc[int_vfp[poly_id] == poly, [vfp_id, "geometry"]]
         single_poly = gdf_poly.loc[gdf_poly[poly_id] == poly, [poly_id, "geometry"]]
+        # rare case where the intersection is a point instead of a linestring
+        # change to linestring so that the geometries are all uniform for overlay
+        if "Point" in candidates["geometry"].geom_type.unique():
+            candidates["geometry"] = candidates["geometry"].apply(
+                lambda geom: LineString([geom, Point(geom.x + 0.0001, geom.y + 0.0001)])
+                if isinstance(geom, Point)
+                else geom
+            )
         int = single_poly.overlay(candidates, how="intersection", keep_geom_type=False)
         int = int.loc[int["geometry"].length > intersection_length_min_m]
 

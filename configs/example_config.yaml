@@ -427,6 +427,17 @@ lakes:
     path: input/usbr_lake_crosswalk.gpkg
     id_field: locId
     lake_id_field: lake_id
+  low_head_dams:
+    run: True
+    path: input/low_head_dams.gpkg
+    layer_polygon: low_head_dams_polygon
+    layer_point: low_head_dams_point
+    ref_wb_field: in_ref_wb
+  run_of_river:
+    run: True
+    path: input/run_of_river_dams.gpkg
+    layer_polygon: run_of_river_dams
+    layer_points: run_of_river_dams_points
   ref_res:
     run: True
     path: input/reference-reservoirs-v1.gpkg
