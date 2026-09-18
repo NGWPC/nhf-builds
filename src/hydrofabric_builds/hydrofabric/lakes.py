@@ -155,7 +155,6 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 cfg, gdf_refwb_pts=gdf_ref_wb, gdf_refwb_poly=inputs["ref_wb"].copy()
             )
             gdf_list.append(gdf_ref_wb)
-            gdf_ref_wb.to_file("ref_wb.gpkg")
             lake_polys["ref_wb"] = inputs["ref_wb"].copy()
 
         else:
@@ -183,12 +182,13 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 gdf_vfp=inputs["virtual_flowpaths"],
             )
             gdf_lhdi_pts = _calculate_elevation__lhd(
-                cfg, gdf_lhdi_pts=gdf_lhdi_pts, gdf_lhdi_orig=gdf_lhdi_poly
+                cfg,
+                gdf_lhdi_pts=gdf_lhdi_pts,
+                gdf_lhdi_orig=gdf_lhdi_poly,
             )
             gdf_lhdi_pts = _assign_hydraulic_defaults(gdf_lhdi_pts)
             gdf_lhdi_pts["source"] = "low_head_dam"
             gdf_list.append(gdf_lhdi_pts)
-            gdf_lhdi_pts.to_file("lhdi.gpkg")
             lake_polys["low_head_dams"] = gdf_lhdi_poly.copy()
         else:
             gdf_lhdi_poly = gpd.GeoDataFrame(columns=["dam_id"])
@@ -214,10 +214,14 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 gdf_vfp=inputs["virtual_flowpaths"].copy(),
             )
 
-            gdf_ror_pts = _calculate_elevation__ror(cfg, gdf_ror_pts=gdf_ror_pts, gdf_ror_orig=gdf_ror_poly)
+            gdf_ror_pts = _calculate_elevation__ror(
+                cfg,
+                gdf_ror_pts=gdf_ror_pts,
+                gdf_ror_orig=gdf_ror_poly,
+                surface_area_field=cfg.lakes.run_of_river.nid_surface_area_field,
+            )
             gdf_ror_pts = _assign_hydraulic_defaults(gdf_ror_pts)
             gdf_ror_pts["source"] = "run_of_river"
-            gdf_ror_pts.to_file("ror.gpkg")
             gdf_list.append(gdf_ror_pts)
             lake_polys["run_of_river"] = gdf_ror_poly.copy()
         else:

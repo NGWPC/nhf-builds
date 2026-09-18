@@ -1020,7 +1020,7 @@ class RefWaterbodyInput(BaseModel):
     )
     search_radius_m: float = Field(
         default=1000.0,
-        description="Distance from flowpath to search when associating flowpaths.",
+        description="Distance from flowpath to search when associating flowpaths for point association",
     )
     id_field: str = Field(default="comid", description="ID field for reference waterbodies")
     output_id_field: str = Field(
@@ -1094,7 +1094,7 @@ class RunOfRiverInput(BaseModel):
     )
     search_radius_m: float = Field(
         default=1000.0,
-        description="Distance from flowpath to search when associating flowpaths.",
+        description="Distance from flowpath to search when associating flowpaths for point association",
     )
     ref_nwps_field: str = Field(
         default="nwps_id",
@@ -1103,6 +1103,10 @@ class RunOfRiverInput(BaseModel):
     ref_nidid_field: str = Field(
         default="nidid",
         description="Field in the run of river table identifying the associated NID ID",
+    )
+    nid_surface_area_field: str = Field(
+        default="surface_area",
+        description="Surface area in acres from NID. Will be converted to sqkm in code.",
     )
     associate_flowpaths: bool = Field(default=True, description="Flag to run flowpath association")
     flowpath_association_method: str = Field(
@@ -1159,7 +1163,7 @@ class LowHeadDamsInput(BaseModel):
     )
     search_radius_m: float = Field(
         default=1000.0,
-        description="Distance from flowpath to search when associating flowpaths.",
+        description="Distance from flowpath to search when associating flowpaths for point association.",
     )
     id_field: str = Field(default="lake_id", description="ID field for low head dams")
     output_id_field: str = Field(default="lake_id", description="Output ID field")
@@ -1307,6 +1311,10 @@ class LakesConfig(BaseModel):
     save_duplicate_gpkgs: bool = Field(
         default=False,
         description="Flag to save the resulting duplicate lake points/polygons as geopackages. Defaults to false",
+    )
+    flowpath_association_buffer_m: float = Field(
+        default=500.0,
+        description="Global buffer size for buffering lake polygons to associate with virtual flowpaths. Will be used anywhere polygon association is used (e.g. NWM lakes, lowhead dams, reference waterbodies)",
     )
     fields: list[str] = Field(
         default=[

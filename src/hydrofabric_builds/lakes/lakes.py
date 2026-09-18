@@ -183,6 +183,7 @@ def _associate_lake_flowpaths(
                 vfp_id="virtual_fp_id",
                 poly_id=poly_id,
                 intersection_length_min_m=cfg.intersection_length_min_m,
+                buffer_size_m=main_cfg.lakes.flowpath_association_buffer_m,
             )
 
         # invalid method
@@ -410,7 +411,10 @@ def _calculate_elevation__lhd(
 
 
 def _calculate_elevation__ror(
-    cfg: HFConfig, gdf_ror_pts: gpd.GeoDataFrame, gdf_ror_orig: gpd.GeoDataFrame
+    cfg: HFConfig,
+    gdf_ror_pts: gpd.GeoDataFrame,
+    gdf_ror_orig: gpd.GeoDataFrame,
+    surface_area_field: str = "surface_area",
 ) -> gpd.GeoDataFrame:
     """Calculate elevations for run of river dams.
 
@@ -426,7 +430,7 @@ def _calculate_elevation__ror(
             )
             gdf_ror_orig[cfg.lakes.output_comid_field].astype(str)
             gdf_ror_orig = gdf_ror_orig.to_crs(cfg.crs)
-            gdf_ror_orig["LkArea"] = gdf_ror_orig.area / 1_000_000.0
+            gdf_ror_orig["LkArea"] = gdf_ror_orig[surface_area_field] * 0.00404686
             gdf_ror_pts = gdf_ror_pts.merge(
                 gdf_ror_orig[[cfg.lakes.output_comid_field, "ref_elev", "LkArea"]].copy(),
                 on=cfg.lakes.output_comid_field,

@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rustworkx as rx
 from shapely import LineString, Point
@@ -214,6 +215,7 @@ def associate_flowpaths_polygon_graph(
     poly_id: str,
     vfp_id: str = "virtual_fp_id",
     intersection_length_min_m: int = 3,
+    buffer_size_m: int | float = 500,
 ) -> gpd.GeoDataFrame:
     """Associate polygon data with the intersecting flowpath with the largest subgraph (ancestors)
 
@@ -235,11 +237,13 @@ def associate_flowpaths_polygon_graph(
         If a path intersects the polygon by less than this value, it will be removed. This is to handle
         frequent cases where flowpaths only overlap by <1 meter. If the small intersection is used
         the lake will route water too far downstream, by default 3 meters
+    buffer_size_m : int, optional
+        If polygons do not intersect with a flowpath, buffer them by this value, by default 500 meters
 
     Returns
     -------
     gpd.GeoDataFrame
-        _description_
+        flowpath associated geodataframe
     """
     # Cast all IDs to string
     if pd.api.types.is_numeric_dtype(gdf_poly[poly_id]):
@@ -248,6 +252,21 @@ def associate_flowpaths_polygon_graph(
 
     # intersect polygons and linestrings resulting in linestring intersections
     int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
+
+    # find polygons with no intersections, buffer them, and overlay again
+    # concat to previous intersection
+    no_int = gdf_poly.loc[~gdf_poly[poly_id].isin(int_vfp[poly_id])].copy()
+    no_int["geometry"] = no_int["geometry"].buffer(buffer_size_m)
+    tmp_int_vfp = no_int.overlay(gdf_vfp, keep_geom_type=False)
+    int_vfp = pd.concat([int_vfp, tmp_int_vfp])
+
+    # set geometries of buffered vfps in main polygon layer to be used below
+    gdf_poly["geometry"] = np.where(
+        gdf_poly[poly_id].isin(tmp_int_vfp[poly_id]),
+        gdf_poly["geometry"].buffer(buffer_size_m),
+        gdf_poly["geometry"],
+    )
+
     poly_fp_pairs = {}
     missing_keys = []
 
