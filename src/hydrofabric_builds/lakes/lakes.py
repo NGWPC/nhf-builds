@@ -332,6 +332,9 @@ def _calculate_elevation__nwm(
                 gdf_nwm_pts["LkArea"],
             )
 
+            # Populate empty ref_elev elevations with dam_elev if missing
+            gdf_nwm_pts["ref_elev"] = gdf_nwm_pts["ref_elev"].fillna(gdf_nwm_pts["dam_elev"])
+
         # if all points
         else:
             gdf_nwm_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_nwm_pts)
@@ -397,6 +400,9 @@ def _calculate_elevation__lhd(
                 how="left",
             )
             gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
+
+            # Populate empty polygon elevations with point elevations if missing
+            gdf_lhdi_pts["ref_elev"] = gdf_lhdi_pts["ref_elev"].fillna(gdf_lhdi_pts["dam_elev"])
         # Only Points
         else:
             gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
@@ -433,6 +439,9 @@ def _calculate_elevation__ror(
                 how="left",
             )
             gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
+
+            # Populate empty ref_elev elevations with dam_elev if missing
+            gdf_ror_pts["ref_elev"] = gdf_ror_pts["ref_elev"].fillna(gdf_ror_pts["dam_elev"])
         # If only passed points
         else:
             gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
@@ -467,6 +476,9 @@ def _calculate_elevation__refres(
 
         # point
         gdf_ref_res["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ref_res)
+
+        # Populate empty ref_elev elevations with dam_elev if missing
+        gdf_ref_res["ref_elev"] = gdf_ref_res["ref_elev"].fillna(gdf_ref_res["dam_elev"])
 
     else:
         gdf_ref_res["dam_elev"] = np.nan
