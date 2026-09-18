@@ -674,6 +674,7 @@ class GageInput(BaseModel):
 
     dir: Path | None = None
     path: Path | None = None
+    layer: str | None = None
     gage_source_crs: str = "EPSG:4326"
     id_col_name: str = "site_no"
     x_col_name: str | None = None
@@ -752,6 +753,11 @@ class GagesInputs(BaseModel):
     canada_great_lakes: bool = Field(
         default=False,
         description="Flag to pull Lake Erie and Lake Ontario Canadian gages from GreatLakesMapping class defined in Lakes",
+    )
+    run_of_river: GageInput = Field(
+        default_factory=lambda: GageInput(
+            path=Path("rfc/run_of_river_dams.gpkg"), id_col_name="nwps_id", layer="run_of_river_dams"
+        )
     )
     usbr: GageInput = Field(
         default_factory=lambda: GageInput(
@@ -1389,11 +1395,7 @@ class ResCrosswalkFields(BaseModel):
     usace_gage_id_field: str = Field(
         "usace_gage_id", description="USACE gage ID field in reservoir index file"
     )
-    usace_lake_id_field: str = Field(
-        "usace_lake_id", description="USACE lake ID field in reservoir index file"
-    )
     rfc_gage_id_field: str = Field("rfc_gage_id", description="RFC gage ID in reservoir index")
-    rfc_lake_id_field: str = Field("rfc_lake_id", description="RFC lake ID in reservoir index")
 
 
 class ResCrossWalkInput(BaseModel):
@@ -1445,6 +1447,25 @@ class AdhocResDAInput(BaseModel):
     rfc_field: str = Field(default="locationId", description="Field containing RFC gage ID")
     lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
     null_value: int = Field(default=-99999, description="Missing data value")
+
+
+class RunOfRiverDAInput(BaseModel):
+    """Large RFC Run of River dam input. These will be DA scheme as RFC with run of river flag"""
+
+    path: Path = Field(
+        default=Path("input/run_of_river_dams.gpkg"),
+        description="Source path. ResDAConfig will inject preceding input path.",
+    )
+    layer: str = Field(
+        default="run_of_river_dams_points",
+        description="Layer to use for run of river.",
+    )
+    run: bool = Field(
+        default=False,
+        description="Flag to use reservoir DA reservoir input. Must be set to false if file is not present.",
+    )
+    lake_id_field: str = Field(default="lake_id", description="Field containing common lake COMID")
+    id_field: str = Field(default="nwps_id", description="Field containing shared reservoir/gage ID.")
 
 
 class USACEResDAInput(BaseModel):
@@ -1514,6 +1535,11 @@ class ResDAConfig(BaseModel):
         default=ActiveRFC(),
         description="Table of active NWS gages used to filter NWM reservoir index.",
     )
+    run_of_river: RunOfRiverDAInput = Field(
+        default=RunOfRiverDAInput(),
+        description="Crosswalk of large RFC run of river reservoirs to lake_id.",
+    )
+
     usace: USACEResDAInput = Field(
         default=USACEResDAInput(),
         description="Crosswalked table of USACE reservoir/gages to lake_id.",
@@ -1533,6 +1559,7 @@ class ResDAConfig(BaseModel):
         self.adhoc.path = self.input_dir / self.adhoc.path
         self.res_crosswalk.path = self.input_dir / self.res_crosswalk.path
         self.active_rfc.path = self.input_dir / self.active_rfc.path
+        self.run_of_river.path = self.input_dir / self.run_of_river.path
         self.usace.path = self.input_dir / self.usace.path
         self.usbr.path = self.input_dir / self.usbr.path
         return self
