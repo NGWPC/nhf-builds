@@ -333,6 +333,9 @@ def _calculate_elevation__nwm(
                 gdf_nwm_pts["LkArea"],
             )
 
+            # Populate empty ref_elev elevations with dam_elev if missing
+            gdf_nwm_pts["ref_elev"] = gdf_nwm_pts["ref_elev"].fillna(gdf_nwm_pts["dam_elev"])
+
         # if all points
         else:
             gdf_nwm_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_nwm_pts)
@@ -398,6 +401,8 @@ def _calculate_elevation__lhd(
                 how="left",
             )
             gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
+            # Populate empty polygon elevations with point elevations if missing
+            gdf_lhdi_pts["ref_elev"] = gdf_lhdi_pts["ref_elev"].fillna(gdf_lhdi_pts["dam_elev"])
         # Only Points
         else:
             gdf_lhdi_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_lhdi_pts)
@@ -437,6 +442,8 @@ def _calculate_elevation__ror(
                 how="left",
             )
             gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
+            # Populate empty ref_elev elevations with dam_elev if missing
+            gdf_ror_pts["ref_elev"] = gdf_ror_pts["ref_elev"].fillna(gdf_ror_pts["dam_elev"])
         # If only passed points
         else:
             gdf_ror_pts["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ror_pts)
@@ -468,9 +475,10 @@ def _calculate_elevation__refres(
             on=cfg.lakes.output_comid_field,
             how="left",
         )
-
         # point
         gdf_ref_res["dam_elev"] = point_elevation(cfg.lakes.dem.path, gdf_ref_res)
+        # Populate empty ref_elev elevations with dam_elev if missing
+        gdf_ref_res["ref_elev"] = gdf_ref_res["ref_elev"].fillna(gdf_ref_res["dam_elev"])
 
     else:
         gdf_ref_res["dam_elev"] = np.nan
@@ -803,6 +811,12 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
+
+    # NID attributes are present in both tables
+    # coaelsce the new column with original name
+    for col in keep_cols:
+        if (f"{col}_x" in res_df.columns) and (f"{col}_y" in res_df.columns):
+            res_df[col] = res_df[[f"{col}_x", f"{col}_y"]].bfill(axis=1).iloc[:, 0]
 
     # Continue to handle nulls as they keep popping back in
     res_df = res_df.replace(["<NA>", "None", "nan"], None)
