@@ -679,6 +679,12 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
 
+    # NID attributes are present in both tables
+    # coaelsce the new column with original name
+    for col in keep_cols:
+        if (f"{col}_x" in res_df.columns) and (f"{col}_y" in res_df.columns):
+            res_df[col] = res_df[[f"{col}_x", f"{col}_y"]].bfill(axis=1).iloc[:, 0]
+
     # Continue to handle nulls as they keep popping back in
     res_df = res_df.replace(["<NA>", "None", "nan"], None)
 
