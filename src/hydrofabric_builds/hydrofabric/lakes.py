@@ -1,6 +1,7 @@
 import logging
 
 import geopandas as gpd
+import numpy as np
 
 from hydrofabric_builds.config import HFConfig
 from hydrofabric_builds.helpers.flowpath_association import make_vfp_graph
@@ -263,6 +264,20 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # ------------------------------------------------------
         logger.info("Joining lakes to NID")
         gdf_all_lks = _join_nid(cfg, gdf_all_lks, inputs["nid"].copy())
+        # ------------------------------------------------------
+        # Add NRCS flag to source column
+        # ------------------------------------------------------
+        nid_df = inputs["nid"].copy()
+        nrcs_df = nid_df[nid_df["DAM_DESIGNER"].str.contains("NRCS", case=False, na=False)]
+        gdf_all_lks.loc[gdf_all_lks["nidid"].isin(nrcs_df["NIDID"]), "source"] += "_NRCS"
+        # ------------------------------------------------------
+        # Add low head dam and run of river dam flags
+        # ------------------------------------------------------
+        gdf_all_lks["run_of_river"] = np.where(
+            (gdf_all_lks["source"] == "run_of_river") | (gdf_all_lks["source"] == "low_head_dam"),
+            True,
+            False,
+        )
         # ------------------------------------------------------
         # Hydraulics
         # ------------------------------------------------------
