@@ -4,8 +4,10 @@ import logging
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rustworkx as rx
+from shapely import LineString, Point
 
 logger = logging.getLogger(__name__)
 
@@ -49,20 +51,14 @@ def associate_flowpaths_nearest_point(
     # change to reference flowpath CRS if not matching
     if gdf_points.crs != gdf_flowpaths.crs:
         gdf_points = gdf_points.to_crs(gdf_flowpaths.crs)
-        assert gdf_points.crs == gdf_flowpaths.crs, (
-            "CRS does not match for flowpaths and points"
-        )
+        assert gdf_points.crs == gdf_flowpaths.crs, "CRS does not match for flowpaths and points"
 
     # buffer points with search radius
     gdf_points_buffer = gdf_points.copy()
-    gdf_points_buffer["geometry"] = gdf_points["geometry"].buffer(
-        float(search_radius_m)
-    )
+    gdf_points_buffer["geometry"] = gdf_points["geometry"].buffer(float(search_radius_m))
 
     # intersect points buffer with flowpaths
-    joined = gpd.sjoin(
-        gdf_points_buffer, gdf_flowpaths, predicate="intersects", how="left"
-    )
+    joined = gpd.sjoin(gdf_points_buffer, gdf_flowpaths, predicate="intersects", how="left")
 
     # prepare matches - based on gages nearest fp
     out = {}
@@ -86,9 +82,7 @@ def associate_flowpaths_nearest_point(
 
         # select first minimum distance
         # TODO: take lower hydrosequence if tie?
-        best_fp = candidates.loc[
-            candidates["dist"] == min(candidates["dist"]), flowpath_id
-        ].values[0]
+        best_fp = candidates.loc[candidates["dist"] == min(candidates["dist"]), flowpath_id].values[0]
         out[pt_row] = str(best_fp)
 
     # assign dict of points and flowpaths to point gdf
@@ -97,9 +91,7 @@ def associate_flowpaths_nearest_point(
 
     # NOTE: forcing was needed in AK
     if pd.api.types.is_object_dtype(gdf_points[flowpath_id_out_field]):
-        gdf_points["virtual_fp_id"] = pd.to_numeric(gdf_points["virtual_fp_id"]).astype(
-            pd.Int64Dtype()
-        )
+        gdf_points["virtual_fp_id"] = pd.to_numeric(gdf_points["virtual_fp_id"]).astype(pd.Int64Dtype())
 
     return gdf_points
 
@@ -138,9 +130,7 @@ def join_attributes(
             "flowpath_association: `attrib_src_path` was provided but `attrib_src_fields` was `None`, attribute source fields must be specified in order to merge"
         )
     else:
-        attrib_src_fields_valid: list[str] = (
-            attrib_src_fields if attrib_src_fields else list[str]()
-        )
+        attrib_src_fields_valid: list[str] = attrib_src_fields if attrib_src_fields else list[str]()
         gdf_attrib_src = (
             gpd.read_file(attrib_src_path, layer=attrib_src_layer)
             if attrib_src_layer
@@ -173,9 +163,7 @@ def join_attributes(
     return gdf_merged
 
 
-def make_vfp_graph(
-    vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame
-) -> tuple[rx.PyDiGraph, dict[str, int]]:
+def make_vfp_graph(vfp: gpd.GeoDataFrame, vn: gpd.GeoDataFrame) -> tuple[rx.PyDiGraph, dict[str, int]]:
     """Build graph from virtual flowpaths and virtual nexus
 
     Parameters
@@ -198,9 +186,7 @@ def make_vfp_graph(
             left_on="dn_virtual_nex_id",
             right_on="virtual_nex_id",
         )
-        .rename(columns={"dn_virtual_fp_id": "to_vfp_id"})[
-            ["virtual_fp_id", "to_vfp_id"]
-        ]
+        .rename(columns={"dn_virtual_fp_id": "to_vfp_id"})[["virtual_fp_id", "to_vfp_id"]]
     )
 
     edges["virtual_fp_id"] = edges["virtual_fp_id"].astype(pd.Int64Dtype()).astype(str)
@@ -229,6 +215,7 @@ def associate_flowpaths_polygon_graph(
     poly_id: str,
     vfp_id: str = "virtual_fp_id",
     intersection_length_min_m: int = 3,
+    buffer_size_m: int | float = 500,
 ) -> gpd.GeoDataFrame:
     """Associate polygon data with the intersecting flowpath with the largest subgraph (ancestors)
 
@@ -250,11 +237,13 @@ def associate_flowpaths_polygon_graph(
         If a path intersects the polygon by less than this value, it will be removed. This is to handle
         frequent cases where flowpaths only overlap by <1 meter. If the small intersection is used
         the lake will route water too far downstream, by default 3 meters
+    buffer_size_m : int, optional
+        If polygons do not intersect with a flowpath, buffer them by this value, by default 500 meters
 
     Returns
     -------
     gpd.GeoDataFrame
-        _description_
+        flowpath associated geodataframe
     """
     # Cast all IDs to string
     if pd.api.types.is_numeric_dtype(gdf_poly[poly_id]):
@@ -263,6 +252,21 @@ def associate_flowpaths_polygon_graph(
 
     # intersect polygons and linestrings resulting in linestring intersections
     int_vfp = gdf_poly.overlay(gdf_vfp, keep_geom_type=False)
+
+    # find polygons with no intersections, buffer them, and overlay again
+    # concat to previous intersection
+    no_int = gdf_poly.loc[~gdf_poly[poly_id].isin(int_vfp[poly_id])].copy()
+    no_int["geometry"] = no_int["geometry"].buffer(buffer_size_m)
+    tmp_int_vfp = no_int.overlay(gdf_vfp, keep_geom_type=False)
+    int_vfp = pd.concat([int_vfp, tmp_int_vfp])
+
+    # set geometries of buffered vfps in main polygon layer to be used below
+    gdf_poly["geometry"] = np.where(
+        gdf_poly[poly_id].isin(tmp_int_vfp[poly_id]),
+        gdf_poly["geometry"].buffer(buffer_size_m),
+        gdf_poly["geometry"],
+    )
+
     poly_fp_pairs = {}
     missing_keys = []
 
@@ -273,6 +277,14 @@ def associate_flowpaths_polygon_graph(
         # if the intersection length > minimum intersection length, keep flowpaths
         candidates = int_vfp.loc[int_vfp[poly_id] == poly, [vfp_id, "geometry"]]
         single_poly = gdf_poly.loc[gdf_poly[poly_id] == poly, [poly_id, "geometry"]]
+        # rare case where the intersection is a point instead of a linestring
+        # change to linestring so that the geometries are all uniform for overlay
+        if "Point" in candidates["geometry"].geom_type.unique():
+            candidates["geometry"] = candidates["geometry"].apply(
+                lambda geom: LineString([geom, Point(geom.x + 0.0001, geom.y + 0.0001)])
+                if isinstance(geom, Point)
+                else geom
+            )
         int = single_poly.overlay(candidates, how="intersection", keep_geom_type=False)
         int = int.loc[int["geometry"].length > intersection_length_min_m]
 
@@ -304,9 +316,7 @@ def associate_flowpaths_polygon_graph(
         )
 
     # join flowpaths back to polygons
-    df_pairs = pd.DataFrame(
-        data={poly_id: poly_fp_pairs.keys(), vfp_id: poly_fp_pairs.values()}
-    )
+    df_pairs = pd.DataFrame(data={poly_id: poly_fp_pairs.keys(), vfp_id: poly_fp_pairs.values()})
     gdf_poly = gdf_poly.merge(df_pairs, on=poly_id, how="left")
     gdf_poly["geometry"] = gdf_poly["geometry"].centroid
     gdf_poly[vfp_id] = pd.to_numeric(gdf_poly[vfp_id]).astype(pd.Int64Dtype())

@@ -398,6 +398,10 @@ lakes:
     run: False
   ref_res:
     run: False # No reference reservoirs in AK
+  low_head_dams:
+    run: False # None in AK
+  run_of_river:
+    run: False # None in AK
   ref_wb:
     run: False # No reference waterbodies in AK
   nid:
