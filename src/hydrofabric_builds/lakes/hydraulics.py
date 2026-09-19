@@ -193,10 +193,13 @@ def _populate_hydraulics(
         _num(df.get("max_storage")) * 1233.48184,
     )
     storage_m3 = storage_m3.astype("float32")
-    mean_depth = np.where(
-        (~np.isnan(storage_m3)) & (~np.isnan(LkArea)) & (LkArea > 0),
-        storage_m3 / (LkArea * 1e6),
-        np.nan,
+    # LkArea is km2. A non-positive area is the only input here that yields inf or a
+    # negative depth; NaN on either side already propagates on its own.
+    mean_depth = np.divide(
+        storage_m3,
+        LkArea * 1e6,
+        out=np.full(np.shape(storage_m3), np.nan, dtype="float64"),
+        where=LkArea > 0,
     )
 
     # ---- Weir length (m): spillway_width > dam_length > default ----

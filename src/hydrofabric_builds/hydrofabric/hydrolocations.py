@@ -23,7 +23,7 @@ def hydrolocations_pipeline(hf_path: Path) -> None:
     """
     # Initialize an empty gdf for each layer to assert correct typing
     # Add new layer names here
-    gdf_dict = {"waterbodies": gpd.GeoDataFrame(), "gages": gpd.GeoDataFrame(), "lakes": gpd.GeoDataFrame()}
+    gdf_dict = {"gages": gpd.GeoDataFrame(), "lakes": gpd.GeoDataFrame()}
 
     # This patterns handles null layers and assigns an incremental hy_id
     # cycle through opening layers and checking if present
