@@ -440,3 +440,14 @@ def test_mean_depth_is_meters() -> None:
     expected_depth = 1000.0 * 1233.48184 / (0.5 * 1e6)
     assert pytest.approx(row["WeirE"], rel=1e-6) == 100.0 + expected_depth
     assert row["WeirE"] < 110.0
+
+
+def test_mean_depth_skips_a_negative_area() -> None:
+    """A negative area is the one input that still reaches the divide.
+
+    Zeros become NaN upstream and NaN propagates on its own, so the `where` earns its
+    place only here. Unguarded, the depth is negative and WeirE lands below the base.
+    """
+    df = _base_row(dam_elev=100.0, ref_area_sqkm=-0.5, nid_storage=1000.0)
+    row = _populate_hydraulics(df).iloc[0]
+    assert np.isnan(row["WeirE"]), f"expected no depth from a negative area, got {row['WeirE']}"
