@@ -13,7 +13,6 @@ from hydrofabric_builds.lakes.hydraulics import _populate_hydraulics
 from hydrofabric_builds.lakes.lakes import (
     _aggregate_lake_polygons,
     _assert_nwm_lakes,
-    _assign_hydraulic_defaults,
     _associate_lake_flowpaths,
     _calculate_elevation__lhd,
     _calculate_elevation__nwm,
@@ -187,7 +186,6 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 gdf_lhdi_pts=gdf_lhdi_pts,
                 gdf_lhdi_orig=gdf_lhdi_poly,
             )
-            gdf_lhdi_pts = _assign_hydraulic_defaults(gdf_lhdi_pts)
             gdf_lhdi_pts["source"] = "low_head_dam"
             gdf_list.append(gdf_lhdi_pts)
             lake_polys["low_head_dams"] = gdf_lhdi_poly.copy()
@@ -221,7 +219,6 @@ def lakes_pipeline(cfg: HFConfig) -> None:
                 gdf_ror_orig=gdf_ror_poly,
                 surface_area_field=cfg.lakes.run_of_river.nid_surface_area_field,
             )
-            gdf_ror_pts = _assign_hydraulic_defaults(gdf_ror_pts)
             gdf_ror_pts["source"] = "run_of_river"
             gdf_list.append(gdf_ror_pts)
             lake_polys["run_of_river"] = gdf_ror_poly.copy()

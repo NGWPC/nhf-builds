@@ -17,7 +17,6 @@ from hydrofabric_builds.lakes.helpers import point_elevation, polygon_elevation
 from hydrofabric_builds.pipeline.processing import _encode_unique
 from hydrofabric_builds.schemas.hydrofabric import (
     GreatLakesMapping,
-    NWMDefaultHydraulics,
 )
 
 logger = logging.getLogger(__name__)
@@ -1152,25 +1151,3 @@ def _aggregate_lake_polygons(
     if len(all_polys[lake_id_field].unique()) != len(all_polys):
         logger.warning("Lake polygons are not unique")
     return all_polys
-
-
-def _assign_hydraulic_defaults(gdf_poly: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Assign hydraulic defaults to run of river dams and low head dams.
-
-    Using the default parameters in Hydrofabrics NWMDefaultHydraulics class to assign values
-
-    Parameters
-    ----------
-    gdf_poly: gpd.GeoDataFrame
-        Polygon gdf from either low head dams or run of river dams
-    hydra_value: Enumeration of hydraulic parameter defaults
-
-    Returns
-    -------
-    gdf_poly: gpd.GeoDataFrame
-        Polygon gdf populated with hydraulic parameters
-
-    """
-    for hydra_value in NWMDefaultHydraulics:
-        gdf_poly[hydra_value.name] = hydra_value.value
-    return gdf_poly
