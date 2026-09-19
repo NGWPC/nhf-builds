@@ -543,3 +543,67 @@ def test_associate_flowpaths_polygon_graph(
     )
 
     assert_geodataframe_equal(gdf, gdf_expected)
+
+
+def test_join_nid__heights_converted_to_meters(main_cfg: HFConfig) -> None:
+    """NID publishes lengths in feet and hydraulics.py reads them as meters.
+
+    An unconverted height puts every derived elevation 3.281 times too far above the
+    dam base.
+    """
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+            "nid_height": [230.0],
+            "structural_height": [230.0],
+            "hydraulic_height": [205.0],
+            "dam_length": [1000.0],
+            "spillway_width": [500.0],
+        }
+    )
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1717881.0, 1363177.0)],
+        data={"lake_id": [1], "attrib_src": [None], "dam_id": ["ls-1"], "nid": ["A1"]},
+    )
+
+    row = _join_nid(main_cfg, res_df, nid_df).iloc[0]
+
+    assert row["nid_height"] == pytest.approx(230.0 * 0.3048)
+    assert row["structural_height"] == pytest.approx(230.0 * 0.3048)
+    assert row["hydraulic_height"] == pytest.approx(205.0 * 0.3048)
+    assert row["dam_length"] == pytest.approx(1000.0 * 0.3048)
+    assert row["spillway_width"] == pytest.approx(500.0 * 0.3048)
+
+
+def test_join_nid__a_row_carrying_its_own_meters_is_not_converted(main_cfg: HFConfig) -> None:
+    """The run-of-river source supplies meters. The coalesce prefers the row's own
+    value, so the NID conversion must not also scale it."""
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+            "nid_height": [230.0],
+        }
+    )
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[Point(-1717881.0, 1363177.0)],
+        data={
+            "lake_id": [1],
+            "attrib_src": [None],
+            "dam_id": ["ls-1"],
+            "nid": ["A1"],
+            # meters, as run_of_river_dams.gpkg stores them
+            "nid_height": [70.104],
+        },
+    )
+
+    row = _join_nid(main_cfg, res_df, nid_df).iloc[0]
+
+    assert row["nid_height"] == pytest.approx(70.104)

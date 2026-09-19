@@ -567,6 +567,18 @@ def _dedup_lake_id(
     return result
 
 
+# NID reports every length in feet; the rest of the pipeline works in meters.
+FT_TO_M = 0.3048
+NID_LENGTH_FIELDS_FT = (
+    "structural_height",
+    "dam_height",
+    "hydraulic_height",
+    "nid_height",
+    "dam_length",
+    "spillway_width",
+)
+
+
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
     """Join National Inventory Dams (NID) data to lakes.
 
@@ -627,9 +639,24 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     for col in ("spillway_type", "dam_type"):
         if col in nid_df.columns:
             nid_df[col] = nid_df[col].astype("string")
-    for col in ("structural_height", "dam_height", "nid_height", "surface_area", "hydraulic_height"):
+    for col in (
+        "structural_height",
+        "dam_height",
+        "nid_height",
+        "surface_area",
+        "hydraulic_height",
+        "dam_length",
+        "spillway_width",
+    ):
         if col in nid_df.columns:
             nid_df[col] = pd.to_numeric(nid_df[col], errors="coerce")
+
+    # Convert before the merge. The coalesce below prefers a row's own value, and the
+    # run-of-river source already supplies meters, so a later conversion would leave one
+    # column holding two units.
+    for col in NID_LENGTH_FIELDS_FT:
+        if col in nid_df.columns:
+            nid_df[col] = nid_df[col] * FT_TO_M
     if "surface_area" not in nid_df.columns:
         nid_df["surface_area"] = np.nan
 
