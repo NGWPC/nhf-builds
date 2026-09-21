@@ -173,8 +173,6 @@ def _read_run_of_river(
     df[res_da_field] = DA_MAPPING.rfc_forecast
     df.rename(columns={id_field: gage_id_field}, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    # flag run of river dams as true
-    df["run_of_river"] = True
     return df
 
 
@@ -205,9 +203,6 @@ def _merge(
     for df in df_list:
         if pd.api.types.is_numeric_dtype(df[lake_id_field].dtype):
             df[lake_id_field] = df[lake_id_field].astype(int).astype(str)
-        # run of river have been flaged previously. We need this column set to false in order to concatenate
-        if "run_of_river" not in df.columns:
-            df["run_of_river"] = False
 
     df_all = pd.concat(df_list)
 
@@ -253,10 +248,6 @@ def _merge(
     assert ~(df_lakes.loc[~df_lakes["site_no"].isnull()]).duplicated(subset=gage_id_field).any(), (
         f"Duplicate {gage_id_field} detected"
     )
-
-    # set any non-joined lakes to false run of river and force to bool type
-    df_lakes["run_of_river"] = np.where(df_lakes["run_of_river"].isnull(), False, df_lakes["run_of_river"])
-    df_lakes["run_of_river"] = df_lakes["run_of_river"].astype(bool)
     return df_lakes
 
 
