@@ -749,10 +749,14 @@ def _dedup_lake_id(
     df = pd.DataFrame(gdf.drop(columns=["geometry"]))
 
     # Dedupe NWM lakes first.  For duplicate lake_id, will take the lowest _hydroseq val
-    df_nwm = df[df["source"] == "NWM"]
-    df_nwm = df_nwm.sort_values(by="_hydroseq")
-    df_nwm = df_nwm.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
-    df = pd.concat([df[df["source"] != "NWM"], df_nwm], ignore_index=True)
+    # _hydroseq is availale only if _fold_ref_res_to_nwm_lakes is called
+    if "_hydroseq" in df.columns:
+        df_nwm = df[df["source"] == "NWM"]
+        df_nwm = df_nwm.sort_values(by="_hydroseq")
+        df_nwm = df_nwm.drop_duplicates(
+            subset=[cfg.lakes.output_comid_field], keep="first"
+        )
+        df = pd.concat([df[df["source"] != "NWM"], df_nwm], ignore_index=True)
 
     # Set lake priorty, sort dataframe by priority, and drop duplicates using first found value
     lake_priority = ["run_of_river", "adhoc", "low_head_dam", "USBR", "NWM", "ref_res"]
