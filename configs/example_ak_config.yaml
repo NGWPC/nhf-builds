@@ -424,6 +424,8 @@ res_da:
   active_rfc:
     path: input/nwps_all_gauges_report.csv
     id_field: nws shef id
+  run_of_river:
+    run: False
   usace:
     run: False
   usbr:

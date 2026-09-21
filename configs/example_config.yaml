@@ -328,6 +328,10 @@ gages:
       usace:
         path: other/usace_crosswalk.gpkg
         id_col_name: location
+      run_of_river:
+        path: rfc/run_of_river_dams.gpkg
+        id_col_name: nwps_id
+        layer: run_of_river_dams
       canada_great_lakes: True
     target:
       crs: EPSG:5070
@@ -434,11 +438,15 @@ lakes:
     layer_polygon: low_head_dams_polygon
     layer_point: low_head_dams_point
     ref_wb_field: in_ref_wb
+    id_field: lake_id
   run_of_river:
     run: True
     path: input/run_of_river_dams.gpkg
     layer_polygon: run_of_river_dams
     layer_points: run_of_river_dams_points
+    associate_flowpaths: True
+    nid_surface_area_field: surface_area
+    id_field: lake_id
   ref_res:
     run: True
     path: input/reference-reservoirs-v1.gpkg
@@ -517,4 +525,10 @@ res_da:
     path: input/usbr_lake_crosswalk.gpkg
     id_field: locId
     lake_id_field: lake_id
+  run_of_river:
+    run: True
+    path: input/run_of_river_dams.gpkg
+    layer: run_of_river_dams_points
+    lake_id_field: lake_id
+    id_field: nwps_id
   usgs_fix_list: ['137462010', '208250410', '21556525']
