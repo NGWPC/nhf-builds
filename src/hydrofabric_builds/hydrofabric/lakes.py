@@ -265,8 +265,10 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         # Add NRCS flag to source column
         # ------------------------------------------------------
         nid_df = inputs["nid"].copy()
-        nrcs_df = nid_df[nid_df["DAM_DESIGNER"].str.contains("NRCS", case=False, na=False)]
-        gdf_all_lks.loc[gdf_all_lks["nidid"].isin(nrcs_df["NIDID"]), "source"] += "_NRCS"
+        if not nid_df.empty:
+            nrcs_df = nid_df[nid_df["DAM_DESIGNER"].str.contains("NRCS", case=False, na=False)]
+            if "nidid" in gdf_all_lks.columns:
+                gdf_all_lks.loc[gdf_all_lks["nidid"].isin(nrcs_df["NIDID"]), "source"] += "_NRCS"
         # ------------------------------------------------------
         # Add low head dam and run of river dam flags
         # ------------------------------------------------------
