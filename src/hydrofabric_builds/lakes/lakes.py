@@ -755,7 +755,7 @@ def _dedup_lake_id(
     df = pd.concat([df[df["source"] != "NWM"], df_nwm], ignore_index=True)
 
     # Set lake priorty, sort dataframe by priority, and drop duplicates using first found value
-    lake_priority = ["run_of_river", "Adhoc", "low_head_dam", "USBR", "NWM", "ref_res"]
+    lake_priority = ["run_of_river", "adhoc", "low_head_dam", "USBR", "NWM", "ref_res"]
     order_lakes = {val: i for i, val in enumerate(lake_priority)}
     df = df.sort_values(by="source", key=lambda x: x.map(order_lakes))
     df = df.drop_duplicates(subset=[cfg.lakes.output_comid_field], keep="first")
