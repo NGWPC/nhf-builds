@@ -747,7 +747,7 @@ def _dedup_lake_id(
     # that set geometry values to None in certain versions.
     geom = gdf.geometry
     df = pd.DataFrame(gdf.drop(columns=["geometry"]))
-
+    df["orig_index"] = df.index
     # Dedupe NWM lakes first.  For duplicate lake_id, will take the lowest _hydroseq val
     # _hydroseq is availale only if _fold_ref_res_to_nwm_lakes is called
     if "_hydroseq" in df.columns:
@@ -756,7 +756,7 @@ def _dedup_lake_id(
         df_nwm = df_nwm.drop_duplicates(
             subset=[cfg.lakes.output_comid_field], keep="first"
         )
-        df = pd.concat([df[df["source"] != "NWM"], df_nwm], ignore_index=True)
+        df = pd.concat([df[df["source"] != "NWM"], df_nwm], ignore_index=False)
 
     # Set lake priorty, sort dataframe by priority, and drop duplicates using first found value
     lake_priority = ["run_of_river", "adhoc", "low_head_dam", "USBR", "NWM", "ref_res"]
@@ -766,11 +766,9 @@ def _dedup_lake_id(
 
     # Re-attach geometry by aligning on original index labels
     # (df.index retains original labels after drop_duplicates)
-    result = gpd.GeoDataFrame(
-        df.reset_index(drop=True),
-        geometry=geom[df.index].reset_index(drop=True),
-        crs=cfg.crs,
-    )
+    result = gpd.GeoDataFrame(df, geometry=geom[df["orig_index"]], crs=cfg.crs)
+    result.reset_index(drop=True, inplace=True)
+    result.drop(columns=["orig_index"], inplace=True)
     logger.info(f"Removed {len(gdf) - len(result)} duplicated lakes")
     return result
 
