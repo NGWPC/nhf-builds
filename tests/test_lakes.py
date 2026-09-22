@@ -757,12 +757,11 @@ def test__run_run_of_river(
         assert_geodataframe_equal(gdf, expected_lakes)
 
     finally:
-        # temp_nhf.unlink(missing_ok=True)
-        # tmp_ror_attr.unlink(missing_ok=True)
-        # tmp_ror.unlink(missing_ok=True)
+        temp_nhf.unlink(missing_ok=True)
+        tmp_ror.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
-        # (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
+        (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
 
 
 def test__run_low_head_dam(
@@ -873,9 +872,8 @@ def test__run_low_head_dam(
         assert_geodataframe_equal(gdf, expected_lakes)
 
     finally:
-        # temp_nhf.unlink(missing_ok=True)
-        # tmp_ror_attr.unlink(missing_ok=True)
-        # tmp_ror.unlink(missing_ok=True)
+        temp_nhf.unlink(missing_ok=True)
+        tmp_lhd.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
-        # (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
+        (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
