@@ -13,7 +13,10 @@ from rasterio.transform import from_bounds
 from shapely import Point, box
 
 from hydrofabric_builds.config import HFConfig, TaskSelection
-from hydrofabric_builds.helpers.flowpath_association import associate_flowpaths_polygon_graph, make_vfp_graph
+from hydrofabric_builds.helpers.flowpath_association import (
+    associate_flowpaths_polygon_graph,
+    make_vfp_graph,
+)
 from hydrofabric_builds.hydrofabric.lakes import lakes_pipeline
 from hydrofabric_builds.lakes.lakes import _dedup_lake_id, _join_nid
 from hydrofabric_builds.schemas.hydrofabric import BuildHydrofabricConfig
@@ -56,7 +59,9 @@ def dummy_dem(lakes_root: Path) -> Path:
 
 
 @pytest.fixture
-def graph_vfp(lakes_root: Path, main_lakes_nhf: str) -> tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame]:
+def graph_vfp(
+    lakes_root: Path, main_lakes_nhf: str
+) -> tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame]:
     """Return the lakes graph, ID mapping, and virtual flowpaths GDF for graph testing"""
     vfp = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_flowpaths")
     vn = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_nexus")
@@ -89,6 +94,8 @@ def nid(lakes_root: Path) -> Path:
             "max_storage": [150, 150],
             "hazard": ["H", "L"],
             "purposes": ["IS", "IS"],
+            "DAM_DESIGNER": ["designer1", "designer2_NRCS"],
+            "NIDID": ["nid1", "nid2"],
         }
     )
     df.to_csv(nid, index=False)
@@ -127,7 +134,7 @@ def test__use_cached(main_cfg: HFConfig, lakes_root: Path) -> None:
         expected_lakes = gpd.GeoDataFrame(
             geometry=[Point(-1717880.0, 1363176.0)], data={"lake_id": [1]}, crs=5070
         )
-        expected_lakes.to_file(tmp_lakes, driver="GPKG")
+        expected_lakes.to_file(tmp_lakes, layer="lakes", driver="GPKG")
 
         cfg = main_cfg.model_copy()
         cfg.output_name = Path(tmp_nhf.name)
@@ -141,7 +148,7 @@ def test__use_cached(main_cfg: HFConfig, lakes_root: Path) -> None:
         assert_geodataframe_equal(gdf, expected_lakes)
 
     finally:
-        tmp_lakes.unlink(missing_ok=True)
+        # tmp_lakes.unlink(missing_ok=True)
         tmp_nhf.unlink(missing_ok=True)
 
 
@@ -158,8 +165,12 @@ def test__no_layers(main_cfg: HFConfig, lakes_root: Path) -> None:
         cfg.lakes.ref_res.run = False
         cfg.lakes.nwm.run = False
         cfg.lakes.ref_wb.run = False
+        cfg.lakes.run_of_river.run = False
+        cfg.lakes.low_head_dams.run = False
 
-        expected_lakes = gpd.GeoDataFrame(columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs)
+        expected_lakes = gpd.GeoDataFrame(
+            columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs
+        )
         expected_lakes.to_file(tmp_nhf, layer="lakes", driver="GPKG")
 
         lakes_pipeline(cfg)
@@ -171,8 +182,12 @@ def test__no_layers(main_cfg: HFConfig, lakes_root: Path) -> None:
         tmp_nhf.unlink(missing_ok=True)
 
 
-def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path) -> None:
-    """No files are requested to run and a blank layer is written"""
+def test__run_nwm(
+    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+) -> None:
+    """Only NWM lakes are run.
+    Preserving output temp layers for use in run of river and low head dams
+    """
     try:
         tmp_nhf = lakes_root / "nhf_tmp.gpkg"
         shutil.copy(main_cfg.output_file_path, tmp_nhf)
@@ -212,6 +227,8 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
                 "reservoir_index_GDL_AK": [np.nan],
                 "reservoir_index_Medium_Range": [np.nan],
                 "reservoir_index_Short_Range": [np.nan],
+                "run_of_river": [False],
+                "source": ["NWM"],
             },
         )
 
@@ -224,6 +241,8 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
         cfg.lakes.adhoc.run = False
         cfg.lakes.ref_res.run = False
         cfg.lakes.ref_wb.run = False
+        cfg.lakes.run_of_river.run = False
+        cfg.lakes.low_head_dams.run = False
 
         lakes_pipeline(cfg)
 
@@ -257,6 +276,8 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
                 "reservoir_index_GDL_AK": [np.nan],
                 "reservoir_index_Medium_Range": [np.nan],
                 "reservoir_index_Short_Range": [np.nan],
+                "run_of_river": [False],
+                "source": ["NWM"],
             },
         )
 
@@ -266,8 +287,8 @@ def test__run_nwm(main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Pa
 
     finally:
         tmp_nhf.unlink(missing_ok=True)
-        tmp_nwm_attr.unlink(missing_ok=True)
-        tmp_nwm.unlink(missing_ok=True)
+        # tmp_nwm_attr.unlink(missing_ok=True)
+        # tmp_nwm.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
         (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
@@ -293,7 +314,12 @@ def test_dedup_lake_id__no_dupes(main_cfg: HFConfig) -> None:
 def test_join_nid__nearest(main_cfg: HFConfig) -> None:
     """When there are lakes with smae NID, keep the nearest"""
     nid_df = pd.DataFrame(
-        data={"nidid": ["A1"], "dam_name": ["dam_1"], "latitude": [33.79988], "longitude": [-114.80959]}
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+        }
     )
     res_df = gpd.GeoDataFrame(
         crs=5070,
@@ -323,7 +349,17 @@ def test_join_nid__nearest(main_cfg: HFConfig) -> None:
     gdf = _join_nid(main_cfg, res_df, nid_df)
 
     # test relevant columns
-    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "latitude", "longitude", "geometry"]].copy()
+    gdf = gdf[
+        [
+            "lake_id",
+            "attrib_src",
+            "dam_id",
+            "nidid",
+            "latitude",
+            "longitude",
+            "geometry",
+        ]
+    ].copy()
 
     assert_geodataframe_equal(gdf, expected)
 
@@ -336,7 +372,7 @@ def test_dedup_lake_id__hydroseq(main_cfg: HFConfig) -> None:
         data={
             "lake_id": ["7", "7"],
             "_hydroseq": [500, 900],
-            "attrib_src": ["nwm_lakes.gpkg", "nwm_lakes.gpkg"],
+            "source": ["NWM", "NWM"],
             "dam_id": ["ls-7", "ls-8"],
             "nid": ["A5", "A6"],
         },
@@ -347,78 +383,102 @@ def test_dedup_lake_id__hydroseq(main_cfg: HFConfig) -> None:
         data={
             "lake_id": ["7"],
             "_hydroseq": [500],
-            "attrib_src": ["nwm_lakes.gpkg"],
+            "source": ["NWM"],
             "dam_id": ["ls-7"],
             "nid": ["A5"],
         },
     )
     result = _dedup_lake_id(main_cfg, gdf)
-    result = result[["lake_id", "_hydroseq", "attrib_src", "dam_id", "nid", "geometry"]].copy()
+    result = result[
+        ["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]
+    ].copy()
     assert_geodataframe_equal(result, expected, check_like=True)
 
 
 def test_dedup_lake_id__mixed_sources(main_cfg: HFConfig) -> None:
-    """Mixed duplicate sources: NWM priority wins over non-NWM; hydroseq tiebreak among same priority."""
+    """Duplicates are determined by source priority and hydroseq.
+    ["run_of_river", "adhoc", "low_head_dam", "USBR", "NWM", "ref_res"]
+    """
     gdf = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
-            Point(-1718569.5, 1363475.7),  # lake 1, NWM
-            Point(-1718569.5, 1363475.7),  # lake 1, non-NWM - should be dropped
-            Point(-1717881.0, 1363177.0),  # lake 3, non-NWM
-            Point(-1717880.0, 1363176.0),  # lake 5, non-NWM
+            Point(-1718569.5, 1363475.7),  # lake 1, NWM remove
+            Point(-1718569.5, 1363475.7),  # lake 1, run of river keep
+            Point(-1717881.0, 1363177.0),  # lake 3, Adhoc kept
+            Point(-1717881.0, 1363177.0),  # lake 3, NWM remove
+            Point(-1717880.0, 1363176.0),  # lake 5, low_head_dam kept
             Point(-1717880.0, 1363176.5),  # lake 6, NWM, hydroseq=200
-            Point(-1717880.0, 1363176.5),  # lake 6, non-NWM - should be dropped
+            Point(-1717880.0, 1363176.5),  # lake 6, USBR kept
             Point(-1712832, 1357087),  # lake 7, NWM, hydroseq=50
-            Point(-1712330, 1358180),  # lake 7, NWM, hydroseq=100 - should be dropped
+            Point(-1712330, 1358180),  # lake 7, ref_res remove
         ],
         data={
-            "lake_id": [1, 1, 3, 5, 6, 6, 7, 7],
-            "_hydroseq": [50, 50, 100, 150, 200, 200, 50, 100],
-            "attrib_src": [
-                "nwm_lakes.gpkg",
-                None,
-                None,
-                None,
-                "nwm_lakes.gpkg",
-                None,
-                "nwm_lakes.gpkg",
-                "nwm_lakes.gpkg",
+            "lake_id": [1, 1, 3, 3, 5, 6, 6, 7, 7],
+            "_hydroseq": [50, 50, 100, 150, 200, 200, 50, 100, 50],
+            "source": [
+                "NWM",
+                "run_of_river",
+                "adhoc",
+                "NWM",
+                "low_head_dam",
+                "NWM",
+                "USBR",
+                "NWM",
+                "ref_res",
             ],
-            "dam_id": ["ls-1", "ls-1", "ls-2", "ls-4", None, "ls-6", "ls-7", "ls-8"],
-            "nid": ["A1", "A1", "A2", "A3", None, "A4", "A5", "A6"],
+            "dam_id": [
+                "ls-1",
+                "ls-1",
+                "ls-2",
+                "ls-4",
+                None,
+                "ls-6",
+                "ls-7",
+                "ls-8",
+                "ls-9",
+            ],
+            "nid": ["A1", "A1", "A2", "A3", None, "A4", "A5", "A6", "A7"],
         },
     )
     expected = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
-            Point(-1718569.5, 1363475.7),  # lake 1, NWM, priority=0, hydroseq=50
-            Point(-1712832, 1357087),  # lake 7, NWM, priority=0, hydroseq=50
-            Point(-1717880.0, 1363176.5),  # lake 6, NWM, priority=0, hydroseq=200
-            Point(-1717881.0, 1363177.0),  # lake 3, non-NWM, priority=1, hydroseq=100
-            Point(-1717880.0, 1363176.0),  # lake 5, non-NWM, priority=1, hydroseq=150
+            Point(-1718569.5, 1363475.7),  # lake 1, run of river keep
+            Point(-1717881.0, 1363177.0),  # lake 3, Adhoc kept
+            Point(-1717880.0, 1363176.0),  # lake 5, low_head_dam kept
+            Point(-1717880.0, 1363176.5),  # lake 6, USBR kept
+            Point(-1712832, 1357087),  # lake 7, NWM, hydroseq=50
         ],
         data={
-            "lake_id": [1, 7, 6, 3, 5],
-            "attrib_src": [
-                "nwm_lakes.gpkg",
-                "nwm_lakes.gpkg",
-                "nwm_lakes.gpkg",
-                None,
-                None,
+            "lake_id": [1, 3, 5, 6, 7],
+            "_hydroseq": [50, 100, 200, 50, 100],
+            "source": [
+                "run_of_river",
+                "adhoc",
+                "low_head_dam",
+                "USBR",
+                "NWM",
             ],
-            "dam_id": ["ls-1", "ls-7", None, "ls-2", "ls-4"],
-            "nid": ["A1", "A5", None, "A2", "A3"],
+            "dam_id": ["ls-1", "ls-2", None, "ls-7", "ls-8"],
+            "nid": ["A1", "A2", None, "A5", "A6"],
         },
     )
     result = _dedup_lake_id(main_cfg, gdf)
-    result = result[["lake_id", "attrib_src", "dam_id", "nid", "geometry"]].copy()
-    assert_geodataframe_equal(result, expected, check_like=True)
+    result = result[
+        ["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]
+    ].copy()
+    assert_geodataframe_equal(result, expected, check_like=False)
 
 
 def test_join_nid__nwm_exclude(main_cfg: HFConfig) -> None:
     """Non-NWM rows sharing dam_id or nid with an NWM lake are excluded."""
     nid_df = pd.DataFrame(
-        data={"nidid": ["A1"], "dam_name": ["dam_1"], "latitude": [33.79988], "longitude": [-114.80959]}
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+        }
     )
     # NWM lake (lake_id=1) has dam_id="ls-1", nid="A1"
     # Non-NWM lake (lake_id=2) has same dam_id/nid but different lake_id
@@ -452,39 +512,15 @@ def test_join_nid__nwm_exclude(main_cfg: HFConfig) -> None:
     assert_geodataframe_equal(gdf, expected, check_like=True)
 
 
-def test_dedup_lake_id__nwm_priority(main_cfg: HFConfig) -> None:
-    """Same lake_id: NWM lake (attrib_src set) is kept over non-NWM."""
-    gdf = gpd.GeoDataFrame(
-        crs=5070,
-        geometry=[Point(-1717881.0, 1363177.0), Point(-1717882.109, 1363178.697)],
-        data={
-            "lake_id": [1, 1],
-            "_hydroseq": [100, 200],
-            "attrib_src": [None, "nwm_lakes.gpkg"],
-            "dam_id": ["ls-1", None],
-            "nid": ["A1", None],
-        },
-    )
-    expected = gpd.GeoDataFrame(
-        crs=5070,
-        geometry=[Point(-1717882.109, 1363178.697)],
-        data={
-            "lake_id": [1],
-            "_hydroseq": [200],
-            "attrib_src": ["nwm_lakes.gpkg"],
-            "dam_id": [None],
-            "nid": [None],
-        },
-    )
-    result = _dedup_lake_id(main_cfg, gdf)
-    result = result[["lake_id", "_hydroseq", "attrib_src", "dam_id", "nid", "geometry"]].copy()
-    assert_geodataframe_equal(result, expected, check_like=True)
-
-
 def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
     """NWM lakes skip NID merge and are preserved as-is."""
     nid_df = pd.DataFrame(
-        data={"nidid": ["A1"], "dam_name": ["dam_1"], "latitude": [33.79988], "longitude": [-114.80959]}
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+        }
     )
     # One NWM lake and one non-NWM lake with different lake_ids (dedup_lake_id already ran)
     res_df = gpd.GeoDataFrame(
@@ -531,7 +567,9 @@ def test_associate_flowpaths_polygon_graph(
     gdf_expected = gdf_nwm_lk.copy()
     gdf_expected["geometry"] = gdf_expected.centroid
     gdf_expected["virtual_fp_id"] = pd.Series([1261203455606765], dtype=pd.Int64Dtype())
-    gdf_expected["lake_id"] = gdf_expected["lake_id"].astype(pd.Int64Dtype()).astype(str)
+    gdf_expected["lake_id"] = (
+        gdf_expected["lake_id"].astype(pd.Int64Dtype()).astype(str)
+    )
 
     gdf = associate_flowpaths_polygon_graph(
         gdf_poly=gdf_nwm_lk,
@@ -579,7 +617,9 @@ def test_join_nid__heights_converted_to_meters(main_cfg: HFConfig) -> None:
     assert row["spillway_width"] == pytest.approx(500.0 * 0.3048)
 
 
-def test_join_nid__a_row_carrying_its_own_meters_is_not_converted(main_cfg: HFConfig) -> None:
+def test_join_nid__a_row_carrying_its_own_meters_is_not_converted(
+    main_cfg: HFConfig,
+) -> None:
     """The run-of-river source supplies meters. The coalesce prefers the row's own
     value, so the NID conversion must not also scale it."""
     nid_df = pd.DataFrame(
@@ -607,3 +647,235 @@ def test_join_nid__a_row_carrying_its_own_meters_is_not_converted(main_cfg: HFCo
     row = _join_nid(main_cfg, res_df, nid_df).iloc[0]
 
     assert row["nid_height"] == pytest.approx(70.104)
+
+
+def test__run_run_of_river(
+    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+) -> None:
+    """Test running run of river only"""
+    try:
+        temp_nhf = lakes_root / "nhf_ror_temp.gpkg"
+        shutil.copy(main_cfg.output_file_path, temp_nhf)
+
+        cfg = main_cfg.model_copy()
+        cfg.output_name = Path(temp_nhf.name)
+        cfg.output_file_path = temp_nhf
+        cfg.lakes.dem.path = dummy_dem
+        cfg.lakes.nid.path = nid
+        cfg.lakes.run_of_river.fp_associated_path = lakes_root / "tmp_fp.gpkg"
+
+        tmp_ror = lakes_root / "tmp_ror_lakes.gpkg"
+
+        data = {
+            "nwps_id": ["WELW1", "RISW1"],
+            "nidid": ["WA00098", "WA00084"],
+            "lake_id": ["23062422", "ror-WA00084"],
+            "dam_name": ["Wells", "Rock Island"],
+            "dam_type": ["Gravity", "Gravity"],
+            "spillway_type": ["Controlled", "Controlled"],
+            "spillway_width": [154.2288, 154.2288],
+            "dam_length": [1310.64, 947.3184],
+            "dam_height": [48.768, 21.640800000000002],
+            "structural_height": [48.768, 18.5928],
+            "hydraulic_height": [43.891200000000005, 16.764],
+            "nid_height": [48.768, 21.640800000000002],
+            "surface_area": [9700.0, 3120.0],
+            "wb_areasqkm": [220927.0, 231546.0],
+            "nid_storage": [500000.0, 131000.0],
+            "normal_storage": [331000.0, 113700.0],
+            "max_storage": [500000.0, 131000.0],
+            "hazard": ["High", "High"],
+            "purpose": ["Hydroelectric", "Hydroelectric"],
+        }
+        geom = [
+            box(-1718569.5, 1363475.7, -1717437.7, 1363977.3),
+            box(-1718580.5, 1363480.7, -1717480.7, 1363980.3),
+        ]
+        gdf_ror_lk = gpd.GeoDataFrame(crs=5070, geometry=geom, data=data)
+        gdf_ror_lk.to_file(tmp_ror, layer="run_of_river_dams")
+
+        geom1 = [geom[0].centroid, geom[1].centroid]
+        gdf_ror_pt = gpd.GeoDataFrame(crs=5070, geometry=geom1, data=data)
+        gdf_ror_pt.to_file(tmp_ror, layer="run_of_river_dams_points")
+        cfg.lakes.run_of_river.path = tmp_ror
+
+        cfg.lakes.run_of_river.layer_polygon = "run_of_river_dams"
+        cfg.lakes.run_of_river.layer_points = "run_of_river_dams_points"
+
+        cfg.lakes.nwm.path = lakes_root / "tmp_nwm_lakes.gpkg"
+        cfg.lakes.nwm.fp_associated_path = lakes_root / "tmp_fp.gpkg"
+        cfg.lakes.nwm.attrib_src_path = lakes_root / "tmp_nwm_attr.gpkg"
+        cfg.lakes.nwm.attrib_src_layer = "lakes_attr"
+        cfg.lakes.nwm.attrib_src_key = "lake_id"
+
+        cfg.lakes.nwm.run = False
+        cfg.lakes.adhoc.run = False
+        cfg.lakes.ref_res.run = False
+        cfg.lakes.ref_wb.run = False
+        cfg.lakes.run_of_river.run = True
+        cfg.lakes.low_head_dams.run = False
+
+        cfg.lakes.run_of_river.flowpath_association_method = "polygon_outlet"
+
+        lakes_pipeline(cfg)
+
+        expected_lakes = gpd.GeoDataFrame(
+            geometry=[geom[1].centroid],
+            crs=5070,
+            data={
+                "nhf_lake_id": [1261204677720650],
+                "ref_fp_id": [9999572],
+                "fp_id": [np.nan],
+                "virtual_fp_id": [1261203455606765],
+                "dn_nex_id": [np.nan],
+                "dn_virtual_nex_id": [1261203489061613.0],
+                "div_id": [1261204749791466.0],
+                "dam_id": [None],
+                "nidid": [None],
+                "lake_id": ["ror-WA00084"],
+                "res_id": [None],
+                "LkArea": [np.float32(12.626204)],
+                "LkMxE": [np.float32(10.0)],
+                "WeirC": [np.float32(0.4)],
+                "WeirL": [np.float32(10.0)],
+                "WeirE": [np.float32(10.0)],
+                "OrificeC": [np.float32(0.1)],
+                "OrificeA": [np.float32(1.0)],
+                "OrificeE": [np.float32(10.0)],
+                "Dam_Length": [np.float32(10.0)],
+                "ifd": [np.float32(0.899)],
+                "reservoir_index_AnA": [None],
+                "reservoir_index_Extended_AnA": [None],
+                "reservoir_index_GDL_AK": [None],
+                "reservoir_index_Medium_Range": [None],
+                "reservoir_index_Short_Range": [None],
+                "run_of_river": [True],
+                "source": ["run_of_river"],
+            },
+        )
+        gdf = gpd.read_file(temp_nhf, layer="lakes")
+        assert_geodataframe_equal(gdf, expected_lakes)
+
+    finally:
+        # temp_nhf.unlink(missing_ok=True)
+        # tmp_ror_attr.unlink(missing_ok=True)
+        # tmp_ror.unlink(missing_ok=True)
+        dummy_dem.unlink(missing_ok=True)
+        nid.unlink(missing_ok=True)
+        # (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
+
+
+def test__run_low_head_dam(
+    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+) -> None:
+    """Test running low head dams only"""
+    try:
+        temp_nhf = lakes_root / "nhf_lhd_temp.gpkg"
+        shutil.copy(main_cfg.output_file_path, temp_nhf)
+
+        cfg = main_cfg.model_copy()
+        cfg.output_name = Path(temp_nhf.name)
+        cfg.output_file_path = temp_nhf
+        cfg.lakes.dem.path = dummy_dem
+        cfg.lakes.nid.path = nid
+        cfg.lakes.run_of_river.fp_associated_path = lakes_root / "tmp_fp.gpkg"
+
+        tmp_lhd = lakes_root / "tmp_lhd_lakes.gpkg"
+
+        data = {
+            "nwps_id": ["WELW1", "RISW1"],
+            "nidid": ["WA00098", "WA00084"],
+            "lake_id": ["23062422", "nid-WA00084"],
+            "dam_name": ["Wells", "Rock Island"],
+            "dam_type": ["Gravity", "Gravity"],
+            "spillway_type": ["Controlled", "Controlled"],
+            "spillway_width": [154.2288, 154.2288],
+            "dam_length": [1310.64, 947.3184],
+            "dam_height": [48.768, 21.640800000000002],
+            "structural_height": [48.768, 18.5928],
+            "hydraulic_height": [43.891200000000005, 16.764],
+            "nid_height": [48.768, 21.640800000000002],
+            "surface_area": [9700.0, 3120.0],
+            "wb_areasqkm": [220927.0, 231546.0],
+            "nid_storage": [500000.0, 131000.0],
+            "normal_storage": [331000.0, 113700.0],
+            "max_storage": [500000.0, 131000.0],
+            "hazard": ["High", "High"],
+            "purpose": ["Hydroelectric", "Hydroelectric"],
+        }
+        geom = [
+            box(-1718569.5, 1363475.7, -1717437.7, 1363977.3),
+            box(-1718580.5, 1363480.7, -1717480.7, 1363980.3),
+        ]
+        gdf_lhd_lk = gpd.GeoDataFrame(crs=5070, geometry=geom, data=data)
+        gdf_lhd_lk.to_file(tmp_lhd, layer="low_head_dam")
+
+        geom1 = [geom[0].centroid, geom[1].centroid]
+        gdf_lhd_pt = gpd.GeoDataFrame(crs=5070, geometry=geom1, data=data)
+        gdf_lhd_pt.to_file(tmp_lhd, layer="low_head_dam_points")
+        cfg.lakes.low_head_dams.path = tmp_lhd
+
+        cfg.lakes.low_head_dams.layer_poly = "low_head_dam"
+        cfg.lakes.low_head_dams.layer_point = "low_head_dam_points"
+
+        cfg.lakes.nwm.path = lakes_root / "tmp_nwm_lakes.gpkg"
+        cfg.lakes.nwm.fp_associated_path = lakes_root / "tmp_fp.gpkg"
+        cfg.lakes.nwm.attrib_src_path = lakes_root / "tmp_nwm_attr.gpkg"
+        cfg.lakes.nwm.attrib_src_layer = "lakes_attr"
+        cfg.lakes.nwm.attrib_src_key = "lake_id"
+
+        cfg.lakes.nwm.run = False
+        cfg.lakes.adhoc.run = False
+        cfg.lakes.ref_res.run = False
+        cfg.lakes.ref_wb.run = False
+        cfg.lakes.run_of_river.run = False
+        cfg.lakes.low_head_dams.run = True
+
+        cfg.lakes.run_of_river.flowpath_association_method = "polygon_outlet"
+
+        lakes_pipeline(cfg)
+
+        expected_lakes = gpd.GeoDataFrame(
+            geometry=[geom[1].centroid],
+            crs=5070,
+            data={
+                "nhf_lake_id": [1261204677720650],
+                "ref_fp_id": [9999572],
+                "fp_id": [np.nan],
+                "virtual_fp_id": [1261203455606765],
+                "dn_nex_id": [np.nan],
+                "dn_virtual_nex_id": [1261203489061613.0],
+                "div_id": [1261204749791466.0],
+                "dam_id": [None],
+                "nidid": [None],
+                "lake_id": ["nid-WA00084"],
+                "res_id": [None],
+                "LkArea": [np.float32(0.54946)],
+                "LkMxE": [np.float32(10.0)],
+                "WeirC": [np.float32(0.4)],
+                "WeirL": [np.float32(10.0)],
+                "WeirE": [np.float32(10.0)],
+                "OrificeC": [np.float32(0.1)],
+                "OrificeA": [np.float32(1.0)],
+                "OrificeE": [np.float32(10.0)],
+                "Dam_Length": [np.float32(10.0)],
+                "ifd": [np.float32(0.899)],
+                "reservoir_index_AnA": [None],
+                "reservoir_index_Extended_AnA": [None],
+                "reservoir_index_GDL_AK": [None],
+                "reservoir_index_Medium_Range": [None],
+                "reservoir_index_Short_Range": [None],
+                "run_of_river": [True],
+                "source": ["low_head_dam"],
+            },
+        )
+        gdf = gpd.read_file(temp_nhf, layer="lakes")
+        assert_geodataframe_equal(gdf, expected_lakes)
+
+    finally:
+        # temp_nhf.unlink(missing_ok=True)
+        # tmp_ror_attr.unlink(missing_ok=True)
+        # tmp_ror.unlink(missing_ok=True)
+        dummy_dem.unlink(missing_ok=True)
+        nid.unlink(missing_ok=True)
+        # (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
