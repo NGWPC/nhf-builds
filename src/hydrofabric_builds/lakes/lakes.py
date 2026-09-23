@@ -829,6 +829,8 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     nwm_df = res_df.loc[res_df["attrib_src"].notna()].copy()
     res_df = res_df.loc[res_df["attrib_src"].isna()].copy()
 
+    nulls = {"None", "nan", "<NA>"}
+
     # Exclude non-NWM rows whose dam_id, nid, or lake_id reference a dam/feature already
     # represented by an NWM lake (same dam, different lake_id; or same lake_id, different dam).
     # The NWM lake's attributes from placement improvement take priority.
@@ -843,9 +845,9 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
         res_df = res_df.loc[
             ~(
-                res_df["nid"].isin(nwm_df["nid"])
-                | res_df["dam_id"].isin(nwm_df["dam_id"])
-                | res_df[lake_id_col].isin(nwm_df[lake_id_col])
+                res_df["nid"].isin(set(nwm_df["nid"]) - nulls)
+                | res_df["dam_id"].isin(set(nwm_df["dam_id"]) - nulls)
+                | res_df[lake_id_col].isin(set(nwm_df[lake_id_col]) - nulls)
             )
         ].copy()
 
@@ -854,7 +856,6 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
-
     # NID attributes are present in both tables
     # coaelsce the new column with original name
     for col in keep_cols:

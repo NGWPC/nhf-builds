@@ -892,3 +892,49 @@ def test__run_low_head_dam(
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
         (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
+
+
+def test_join_nid__handle_nulls(main_cfg: HFConfig) -> None:
+    """
+    If there are null NID and dam_id in non-NWM lakes, they should be kept.
+    Makes sure string nulls are handled appropriately
+    """
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+        }
+    )
+    # One NWM lake and one non-NWM lake with different lake_ids. Dam and NID are null for other dam
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1718569.5, 1363475.7),  # NWM lake
+            Point(-1717881.0, 1363177.0),  # non-NWM lake
+        ],
+        data={
+            "lake_id": [1, 2],
+            "attrib_src": ["nwm_lakes.gpkg", None],
+            "dam_id": ["ls-1", None],  # non-NWM has null dam and NID
+            "nid": ["A1", None],
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1717881.0, 1363177.0),  # non-NWM lake (res_df first)
+            Point(-1718569.5, 1363475.7),  # NWM lake preserved
+        ],
+        data={
+            "lake_id": ["2", "1"],
+            "attrib_src": [None, "nwm_lakes.gpkg"],
+            "dam_id": [None, "ls-1"],
+            "nidid": [None, None],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "geometry"]].copy()
+    assert_geodataframe_equal(gdf, expected, check_like=True)
