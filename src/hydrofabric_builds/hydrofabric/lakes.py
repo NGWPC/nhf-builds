@@ -167,11 +167,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         if cfg.lakes.low_head_dams.run:
             logger.info("Running low head dams found only in reference waterbodies")
             gdf_lhdi_poly = inputs["low_head_dams_polygon"]
-            gdf_lhdi_pts = inputs[
-                "low_head_dams_point"
-            ]  # TODO: this and line 165 can probably be deleted but need to check
             gdf_lhdi_poly = gdf_lhdi_poly[gdf_lhdi_poly["lake_id"].str.contains("nid")].copy()
-            gdf_lhdi_pts = gdf_lhdi_pts[gdf_lhdi_pts["lake_id"].str.contains("nid")].copy()  # TODO: check
             # input the polygon for polygon association - it will return centroid points
             gdf_lhdi_pts = _associate_lake_flowpaths(
                 cfg,
@@ -198,11 +194,7 @@ def lakes_pipeline(cfg: HFConfig) -> None:
         if cfg.lakes.run_of_river.run:
             logger.info("Running run of river dams")
             gdf_ror_poly = inputs["run_of_river"]
-            gdf_ror_pts = inputs[
-                "run_of_river_points"
-            ]  # TODO: this and line 165 can probably be deleted but need to check
             gdf_ror_poly = gdf_ror_poly[gdf_ror_poly["lake_id"].str.contains("ror")].copy()
-            gdf_ror_pts = gdf_ror_pts[gdf_ror_pts["lake_id"].str.contains("ror")].copy()  # TODO: check
             # input the polygon for polygon association - it will return centroid points
             gdf_ror_pts = _associate_lake_flowpaths(
                 cfg,
