@@ -938,3 +938,51 @@ def test_join_nid__handle_nulls(main_cfg: HFConfig) -> None:
     gdf = _join_nid(main_cfg, res_df, nid_df)
     gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "geometry"]].copy()
     assert_geodataframe_equal(gdf, expected, check_like=True)
+
+
+def test_join_nid__spillway_width(main_cfg: HFConfig) -> None:
+    """
+    Spillway width should be set to null if zero. It should be retained if it is present in the dataset (e.g. ROR, LHD)
+    """
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1"],
+            "dam_name": ["dam_1"],
+            "latitude": [33.79988],
+            "longitude": [-114.80959],
+            "spillway_width": [0],
+        }
+    )
+    # One NWM lake and one non-NWM lake with different lake_ids. Dam and NID are null for other dam
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1718569.5, 1363475.7),  # NWM lake
+            Point(-1717881.0, 1363177.0),  # non-NWM lake
+        ],
+        data={
+            "lake_id": [1, 2],
+            "attrib_src": ["nwm_lakes.gpkg", None],
+            "dam_id": ["ls-1", None],  # non-NWM has null dam and NID
+            "nid": ["A1", None],
+            "spillway_width": [None, 1],
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1717881.0, 1363177.0),  # non-NWM lake (res_df first)
+            Point(-1718569.5, 1363475.7),  # NWM lake preserved
+        ],
+        data={
+            "lake_id": ["2", "1"],
+            "attrib_src": [None, "nwm_lakes.gpkg"],
+            "dam_id": [None, "ls-1"],
+            "nidid": [None, None],
+            "spillway_width_m": [1, np.nan],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "spillway_width_m", "geometry"]].copy()
+    assert_geodataframe_equal(gdf, expected, check_like=True)

@@ -794,13 +794,6 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         if col in nid_df.columns:
             nid_df[col] = nid_df[col] * FT_TO_M
 
-    # add new columns to retain:
-    # dam_length": "dam_crest_length_m",  # length along the top of the dam, spillway included
-    # "spillway_width": "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
-    for src, dst in NID_TO_NHF.items():
-        if src in nid_df.columns:
-            nid_df[dst] = nid_df[src].copy()
-
     if "surface_area" not in nid_df.columns:
         nid_df["surface_area"] = np.nan
 
@@ -930,6 +923,16 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
     # Stitch NWM lakes back in
     output = pd.concat([res_df, nwm_df], ignore_index=True)
+
+    # retain new columns whether they were pre-existing or in nid df
+    # dam_length: "dam_crest_length_m",  # length along the top of the dam, spillway included
+    # spillway_width: "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
+    for src, dst in NID_TO_NHF.items():
+        if src in output.columns:
+            output.to_csv("tmp.csv")
+            output[src] = pd.to_numeric(output[src], errors="coerce")
+            output[dst] = output[src].copy()
+            output[dst] = np.where(output[dst] > 0, output[dst], np.nan)
 
     # Rename nid -> nidid for output schema consistency
     output = output.rename(columns={"nid": "nidid"})
