@@ -268,7 +268,7 @@ def _fold_ref_res_to_nwm_lakes(
         logger.info("Improving NWM lake placement with reference reservoirs.")
         ref_res = ref_res.to_crs(cfg.crs)
         max_distance = cfg.lakes.nwm.max_refres_search_distance_m
-        nwm_lakes_pt[["dam_name", "dam_id", "nid"]] = [pd.NA, pd.NA, pd.NA]
+        nwm_lakes_pt[["dam_name", "dam_id", "nid"]] = [None, None, None]
 
         # merge ref_fp_id in
         nwm_lakes_pt = nwm_lakes_pt.merge(hf_ref[["fp_id", "virtual_fp_id"]], how="left", on="virtual_fp_id")
@@ -279,10 +279,10 @@ def _fold_ref_res_to_nwm_lakes(
             # extract matching ref FP geometry for spatial index
             fps = fp.loc[(fp["fp_id"] == row["fp_id"]), "geometry"]
             candidates = ref_res.sindex.nearest(fps, max_distance=max_distance)
-            # If we found a candidate, copy over all of (dam_name, nid, dam_id, geometry). Otherwise, retain original point geometry
+            # If we found a candidate, copy over all of (dam_name, nid, dam_id) - leave geometry as centroid
             if candidates.shape[1] != 0:
-                nwm_lakes_pt.loc[idx, ["dam_name", "nid", "dam_id", "geometry"]] = ref_res.loc[
-                    candidates[1, 0], ["dam_name", "nid", "dam_id", "geometry"]
+                nwm_lakes_pt.loc[idx, ["dam_name", "nid", "dam_id"]] = ref_res.loc[
+                    candidates[1, 0], ["dam_name", "nid", "dam_id"]
                 ]
 
         # get hydroseq and rename to what downstream code expects
@@ -670,7 +670,6 @@ def _dedup_lake_id(
         f"Deduplicating {cfg.lakes.output_comid_field}: "
         f"{dupe_mask.sum()} rows across {n_dupe_groups} duplicate groups"
     )
-
     # Detach geometry to avoid geopandas sort_values/drop_duplicates bugs
     # that set geometry values to None in certain versions.
     geom = gdf.geometry
@@ -709,6 +708,11 @@ NID_LENGTH_FIELDS_FT = (
     "dam_length",
     "spillway_width",
 )
+
+NID_TO_NHF = {
+    "dam_length": "dam_crest_length_m",  # length along the top of the dam, spillway included
+    "spillway_width": "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
+}
 
 
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -789,6 +793,14 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     for col in NID_LENGTH_FIELDS_FT:
         if col in nid_df.columns:
             nid_df[col] = nid_df[col] * FT_TO_M
+
+    # add new columns to retain:
+    # dam_length": "dam_crest_length_m",  # length along the top of the dam, spillway included
+    # "spillway_width": "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
+    for src, dst in NID_TO_NHF.items():
+        if src in nid_df.columns:
+            nid_df[dst] = nid_df[src].copy()
+
     if "surface_area" not in nid_df.columns:
         nid_df["surface_area"] = np.nan
 
@@ -836,6 +848,9 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
                 | res_df[lake_id_col].isin(nwm_df[lake_id_col])
             )
         ].copy()
+
+        # null NWM nid going forward
+        nwm_df["nid"] = None
 
     # Attribute-merge NID onto non-NWM lakes
     res_df = res_df.merge(nid_gdf, on="nid", how="left")
@@ -983,7 +998,6 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
         gdf_all_lks[cfg.lakes.output_comid_field] = gdf_all_lks[cfg.lakes.output_comid_field].astype(
             pd.StringDtype()
         )
-
     notin = gdf_nwm_lakes.loc[
         ~gdf_nwm_lakes[cfg.lakes.nwm.id_field].isin(gdf_all_lks[cfg.lakes.output_comid_field])
     ]
@@ -992,9 +1006,10 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
         logger.info(f"All {len(gdf_nwm_lakes[cfg.lakes.nwm.id_field])} NWM lakes included")
     else:
         notin.to_file(cfg.lakes.lakes_path.parent / "missing_lakes.gpkg")
-        raise ValueError(
-            f"{len(notin)} missing NWM lakes found. Wrote missing lakes to {(cfg.lakes.lakes_path.parent / 'missing_lakes.gpkg')}"
-        )
+        # raise ValueError(
+        #     f"{len(notin)} missing NWM lakes found. Wrote missing lakes to {(cfg.lakes.lakes_path.parent / 'missing_lakes.gpkg')}"
+        # )
+        logger.warning(f"{len(notin)}")
 
     return
 

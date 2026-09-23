@@ -1338,6 +1338,8 @@ class LakesConfig(BaseModel):
             "OrificeE",
             "Dam_Length",
             "ifd",
+            "dam_crest_length_m",
+            "spillway_width_m",
             "reservoir_index_AnA",
             "reservoir_index_Extended_AnA",
             "reservoir_index_GDL_AK",
