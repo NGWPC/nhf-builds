@@ -59,9 +59,7 @@ def dummy_dem(lakes_root: Path) -> Path:
 
 
 @pytest.fixture
-def graph_vfp(
-    lakes_root: Path, main_lakes_nhf: str
-) -> tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame]:
+def graph_vfp(lakes_root: Path, main_lakes_nhf: str) -> tuple[rx.PyDiGraph, dict[str, int], gpd.GeoDataFrame]:
     """Return the lakes graph, ID mapping, and virtual flowpaths GDF for graph testing"""
     vfp = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_flowpaths")
     vn = gpd.read_file(lakes_root / main_lakes_nhf, layer="virtual_nexus")
@@ -101,6 +99,56 @@ def nid(lakes_root: Path) -> Path:
     df.to_csv(nid, index=False)
 
     return nid
+
+
+@pytest.fixture
+def tmp_nwm_attr(lakes_root: Path) -> Path:
+    """Return the path of NWM attributes"""
+    tmp_nwm_attr = lakes_root / "tmp_nwm_attr.gpkg"
+    gdf_nwm_attr = gpd.GeoDataFrame(
+        geometry=[Point(-1718569.5, 1363475.7)],
+        crs=5070,
+        data={
+            "lake_id": [1],
+            "res_id": [None],
+            "LkArea": [1.0],
+            "LkMxE": [2.0],
+            "WeirC": [0.4],
+            "WeirL": [10.0],
+            "OrificeC": [0.1],
+            "OrificeA": [1.0],
+            "OrificeE": [2.0],
+            "WeirE": [2.0],
+            "ifd": [0.8999999761581421],
+            "Dam_Length": [10.0],
+            "reservoir_index_AnA": [np.nan],
+            "reservoir_index_Extended_AnA": [np.nan],
+            "reservoir_index_GDL_AK": [np.nan],
+            "reservoir_index_Medium_Range": [np.nan],
+            "reservoir_index_Short_Range": [np.nan],
+            "run_of_river": [False],
+            "source": ["NWM"],
+        },
+    )
+
+    gdf_nwm_attr.to_file(tmp_nwm_attr, layer="lakes_attr")
+    return tmp_nwm_attr
+
+
+@pytest.fixture()
+def tmp_nwm_geom() -> list[box]:
+    """The geometry to be used in fixture tmp_nwm and test test__run_nwm"""
+    return [box(-1718569.5, 1363475.7, -1717437.7, 1363977.3)]
+
+
+@pytest.fixture
+def tmp_nwm(lakes_root: Path, tmp_nwm_geom: list[box]) -> Path:
+    """A temporary NWM file to go with NWM attributes"""
+    tmp_nwm = lakes_root / "tmp_nwm_lakes.gpkg"
+    geom = tmp_nwm_geom
+    gdf_nwm_lk = gpd.GeoDataFrame(crs=5070, geometry=geom, data={"newID": [1]})
+    gdf_nwm_lk.to_file(tmp_nwm, layer="lakes")
+    return tmp_nwm
 
 
 @pytest.fixture
@@ -148,7 +196,7 @@ def test__use_cached(main_cfg: HFConfig, lakes_root: Path) -> None:
         assert_geodataframe_equal(gdf, expected_lakes)
 
     finally:
-        # tmp_lakes.unlink(missing_ok=True)
+        tmp_lakes.unlink(missing_ok=True)
         tmp_nhf.unlink(missing_ok=True)
 
 
@@ -168,9 +216,7 @@ def test__no_layers(main_cfg: HFConfig, lakes_root: Path) -> None:
         cfg.lakes.run_of_river.run = False
         cfg.lakes.low_head_dams.run = False
 
-        expected_lakes = gpd.GeoDataFrame(
-            columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs
-        )
+        expected_lakes = gpd.GeoDataFrame(columns=cfg.lakes.fields + ["geometry"], crs=cfg.crs)
         expected_lakes.to_file(tmp_nhf, layer="lakes", driver="GPKG")
 
         lakes_pipeline(cfg)
@@ -183,11 +229,15 @@ def test__no_layers(main_cfg: HFConfig, lakes_root: Path) -> None:
 
 
 def test__run_nwm(
-    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+    main_cfg: HFConfig,
+    lakes_root: Path,
+    dummy_dem: Path,
+    nid: Path,
+    tmp_nwm_attr: Path,
+    tmp_nwm: Path,
+    tmp_nwm_geom: list[box],
 ) -> None:
-    """Only NWM lakes are run.
-    Preserving output temp layers for use in run of river and low head dams
-    """
+    """Only NWM lakes are run."""
     try:
         tmp_nhf = lakes_root / "nhf_tmp.gpkg"
         shutil.copy(main_cfg.output_file_path, tmp_nhf)
@@ -198,41 +248,8 @@ def test__run_nwm(
         cfg.lakes.dem.path = dummy_dem
         cfg.lakes.nid.path = nid
         cfg.lakes.nwm.fp_associated_path = lakes_root / "tmp_fp.gpkg"
-
-        tmp_nwm = lakes_root / "tmp_nwm_lakes.gpkg"
-        geom = [box(-1718569.5, 1363475.7, -1717437.7, 1363977.3)]
-        gdf_nwm_lk = gpd.GeoDataFrame(crs=5070, geometry=geom, data={"newID": [1]})
-        gdf_nwm_lk.to_file(tmp_nwm, layer="lakes")
         cfg.lakes.nwm.path = tmp_nwm
 
-        tmp_nwm_attr = lakes_root / "tmp_nwm_attr.gpkg"
-        gdf_nwm_attr = gpd.GeoDataFrame(
-            geometry=[Point(-1718569.5, 1363475.7)],
-            crs=5070,
-            data={
-                "lake_id": [1],
-                "res_id": [None],
-                "LkArea": [1.0],
-                "LkMxE": [2.0],
-                "WeirC": [0.4],
-                "WeirL": [10.0],
-                "OrificeC": [0.1],
-                "OrificeA": [1.0],
-                "OrificeE": [2.0],
-                "WeirE": [2.0],
-                "ifd": [0.8999999761581421],
-                "Dam_Length": [10.0],
-                "reservoir_index_AnA": [np.nan],
-                "reservoir_index_Extended_AnA": [np.nan],
-                "reservoir_index_GDL_AK": [np.nan],
-                "reservoir_index_Medium_Range": [np.nan],
-                "reservoir_index_Short_Range": [np.nan],
-                "run_of_river": [False],
-                "source": ["NWM"],
-            },
-        )
-
-        gdf_nwm_attr.to_file(tmp_nwm_attr, layer="lakes_attr")
         cfg.lakes.nwm.attrib_src_path = tmp_nwm_attr
         cfg.lakes.nwm.attrib_src_layer = "lakes_attr"
         cfg.lakes.nwm.attrib_src_key = "lake_id"
@@ -247,7 +264,7 @@ def test__run_nwm(
         lakes_pipeline(cfg)
 
         expected_lakes = gpd.GeoDataFrame(
-            geometry=[geom[0].centroid],
+            geometry=[tmp_nwm_geom[0].centroid],
             crs=5070,
             data={
                 "nhf_lake_id": [1261204677721496],
@@ -287,8 +304,8 @@ def test__run_nwm(
 
     finally:
         tmp_nhf.unlink(missing_ok=True)
-        # tmp_nwm_attr.unlink(missing_ok=True)
-        # tmp_nwm.unlink(missing_ok=True)
+        tmp_nwm_attr.unlink(missing_ok=True)
+        tmp_nwm.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
         (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
@@ -389,9 +406,7 @@ def test_dedup_lake_id__hydroseq(main_cfg: HFConfig) -> None:
         },
     )
     result = _dedup_lake_id(main_cfg, gdf)
-    result = result[
-        ["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]
-    ].copy()
+    result = result[["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]].copy()
     assert_geodataframe_equal(result, expected, check_like=True)
 
 
@@ -464,9 +479,7 @@ def test_dedup_lake_id__mixed_sources(main_cfg: HFConfig) -> None:
         },
     )
     result = _dedup_lake_id(main_cfg, gdf)
-    result = result[
-        ["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]
-    ].copy()
+    result = result[["lake_id", "_hydroseq", "source", "dam_id", "nid", "geometry"]].copy()
     assert_geodataframe_equal(result, expected, check_like=False)
 
 
@@ -567,9 +580,7 @@ def test_associate_flowpaths_polygon_graph(
     gdf_expected = gdf_nwm_lk.copy()
     gdf_expected["geometry"] = gdf_expected.centroid
     gdf_expected["virtual_fp_id"] = pd.Series([1261203455606765], dtype=pd.Int64Dtype())
-    gdf_expected["lake_id"] = (
-        gdf_expected["lake_id"].astype(pd.Int64Dtype()).astype(str)
-    )
+    gdf_expected["lake_id"] = gdf_expected["lake_id"].astype(pd.Int64Dtype()).astype(str)
 
     gdf = associate_flowpaths_polygon_graph(
         gdf_poly=gdf_nwm_lk,
@@ -650,7 +661,7 @@ def test_join_nid__a_row_carrying_its_own_meters_is_not_converted(
 
 
 def test__run_run_of_river(
-    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path, tmp_nwm_attr: Path, tmp_nwm: Path
 ) -> None:
     """Test running run of river only"""
     try:
@@ -702,9 +713,9 @@ def test__run_run_of_river(
         cfg.lakes.run_of_river.layer_polygon = "run_of_river_dams"
         cfg.lakes.run_of_river.layer_points = "run_of_river_dams_points"
 
-        cfg.lakes.nwm.path = lakes_root / "tmp_nwm_lakes.gpkg"
+        cfg.lakes.nwm.path = tmp_nwm
         cfg.lakes.nwm.fp_associated_path = lakes_root / "tmp_fp.gpkg"
-        cfg.lakes.nwm.attrib_src_path = lakes_root / "tmp_nwm_attr.gpkg"
+        cfg.lakes.nwm.attrib_src_path = tmp_nwm_attr
         cfg.lakes.nwm.attrib_src_layer = "lakes_attr"
         cfg.lakes.nwm.attrib_src_key = "lake_id"
 
@@ -758,6 +769,8 @@ def test__run_run_of_river(
 
     finally:
         temp_nhf.unlink(missing_ok=True)
+        tmp_nwm_attr.unlink(missing_ok=True)
+        tmp_nwm.unlink(missing_ok=True)
         tmp_ror.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
@@ -765,7 +778,7 @@ def test__run_run_of_river(
 
 
 def test__run_low_head_dam(
-    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path
+    main_cfg: HFConfig, lakes_root: Path, dummy_dem: Path, nid: Path, tmp_nwm_attr: Path, tmp_nwm: Path
 ) -> None:
     """Test running low head dams only"""
     try:
@@ -817,9 +830,9 @@ def test__run_low_head_dam(
         cfg.lakes.low_head_dams.layer_poly = "low_head_dam"
         cfg.lakes.low_head_dams.layer_point = "low_head_dam_points"
 
-        cfg.lakes.nwm.path = lakes_root / "tmp_nwm_lakes.gpkg"
+        cfg.lakes.nwm.path = tmp_nwm
         cfg.lakes.nwm.fp_associated_path = lakes_root / "tmp_fp.gpkg"
-        cfg.lakes.nwm.attrib_src_path = lakes_root / "tmp_nwm_attr.gpkg"
+        cfg.lakes.nwm.attrib_src_path = tmp_nwm_attr
         cfg.lakes.nwm.attrib_src_layer = "lakes_attr"
         cfg.lakes.nwm.attrib_src_key = "lake_id"
 
@@ -874,6 +887,8 @@ def test__run_low_head_dam(
     finally:
         temp_nhf.unlink(missing_ok=True)
         tmp_lhd.unlink(missing_ok=True)
+        tmp_nwm.unlink(missing_ok=True)
+        tmp_nwm_attr.unlink(missing_ok=True)
         dummy_dem.unlink(missing_ok=True)
         nid.unlink(missing_ok=True)
         (lakes_root / "tmp_fp.gpkg").unlink(missing_ok=True)
