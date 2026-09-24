@@ -21,6 +21,8 @@ from hydrofabric_builds.hydrofabric.lakes import lakes_pipeline
 from hydrofabric_builds.lakes.lakes import _dedup_lake_id, _join_nid
 from hydrofabric_builds.schemas.hydrofabric import BuildHydrofabricConfig
 
+FT_TO_M = 0.3048
+
 
 @pytest.fixture
 def lakes_root() -> Path:
@@ -288,6 +290,8 @@ def test__run_nwm(
                 "OrificeE": [np.float32(2.0)],
                 "Dam_Length": [np.float32(10.0)],
                 "ifd": [np.float32(0.8999999761581421)],
+                "dam_crest_length_m": [None],  # dams are not joined for NWM
+                "spillway_width_m": [None],  # dams are not joined for NWM
                 "reservoir_index_AnA": [np.nan],
                 "reservoir_index_Extended_AnA": [np.nan],
                 "reservoir_index_GDL_AK": [np.nan],
@@ -484,7 +488,7 @@ def test_dedup_lake_id__mixed_sources(main_cfg: HFConfig) -> None:
 
 
 def test_join_nid__nwm_exclude(main_cfg: HFConfig) -> None:
-    """Non-NWM rows sharing dam_id or nid with an NWM lake are excluded."""
+    """Non-NWM rows sharing dam_id with an NWM lake are excluded. NID not retained for NWM."""
     nid_df = pd.DataFrame(
         data={
             "nidid": ["A1"],
@@ -493,20 +497,20 @@ def test_join_nid__nwm_exclude(main_cfg: HFConfig) -> None:
             "longitude": [-114.80959],
         }
     )
-    # NWM lake (lake_id=1) has dam_id="ls-1", nid="A1"
+    # NWM lake (lake_id=1) has dam_id="ls-1" (nid would be "A1" but set to null)
     # Non-NWM lake (lake_id=2) has same dam_id/nid but different lake_id
     # The non-NWM row should be excluded
     res_df = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
             Point(-1718569.5, 1363475.7),  # NWM lake
-            Point(-1717881.0, 1363177.0),  # non-NWM lake, same dam/nid
+            Point(-1717881.0, 1363177.0),  # non-NWM lake, same dam
         ],
         data={
             "lake_id": [1, 2],
             "attrib_src": ["nwm_lakes.gpkg", None],
             "dam_id": ["ls-1", "ls-1"],
-            "nid": ["A1", "A1"],
+            "nid": [None, "A1"],
         },
     )
     expected = gpd.GeoDataFrame(
@@ -516,7 +520,7 @@ def test_join_nid__nwm_exclude(main_cfg: HFConfig) -> None:
             "lake_id": ["1"],
             "attrib_src": ["nwm_lakes.gpkg"],
             "dam_id": ["ls-1"],
-            "nidid": ["A1"],
+            "nidid": [None],
         },
     )
 
@@ -546,7 +550,7 @@ def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
             "lake_id": [1, 2],
             "attrib_src": ["nwm_lakes.gpkg", None],
             "dam_id": ["ls-1", "ls-2"],
-            "nid": ["A1", "A2"],
+            "nid": [None, "A2"],
         },
     )
     expected = gpd.GeoDataFrame(
@@ -559,7 +563,7 @@ def test_join_nid__nwm_skip(main_cfg: HFConfig) -> None:
             "lake_id": ["2", "1"],
             "attrib_src": [None, "nwm_lakes.gpkg"],
             "dam_id": ["ls-2", "ls-1"],
-            "nidid": ["A2", "A1"],  # non-NWM nid=A2 survives rename; NWM has nid=A1
+            "nidid": ["A2", None],  # non-NWM nid=A2 survives rename; NWM has null NID
         },
     )
 
@@ -755,6 +759,12 @@ def test__run_run_of_river(
                 "OrificeE": [np.float32(10.0)],
                 "Dam_Length": [np.float32(10.0)],
                 "ifd": [np.float32(0.899)],
+                "dam_crest_length_m": [
+                    None
+                ],  # these attributes are not retained if _join_nid is not called (ref res not run)
+                "spillway_width_m": [
+                    None
+                ],  # these attributes are not retained if _join_nid is not called (ref res not run)
                 "reservoir_index_AnA": [None],
                 "reservoir_index_Extended_AnA": [None],
                 "reservoir_index_GDL_AK": [None],
@@ -872,6 +882,12 @@ def test__run_low_head_dam(
                 "OrificeE": [np.float32(10.0)],
                 "Dam_Length": [np.float32(10.0)],
                 "ifd": [np.float32(0.899)],
+                "dam_crest_length_m": [
+                    None
+                ],  # these attributes are not retained if _join_nid is not called (ref res not run)
+                "spillway_width_m": [
+                    None
+                ],  # these attributes are not retained if _join_nid is not called (ref res not run)
                 "reservoir_index_AnA": [None],
                 "reservoir_index_Extended_AnA": [None],
                 "reservoir_index_GDL_AK": [None],
@@ -940,17 +956,36 @@ def test_join_nid__handle_nulls(main_cfg: HFConfig) -> None:
     assert_geodataframe_equal(gdf, expected, check_like=True)
 
 
-def test_join_nid__spillway_width(main_cfg: HFConfig) -> None:
+def test_join_nid__spillway_width_dam_length(main_cfg: HFConfig) -> None:
     """
-    Spillway width should be set to null if zero. It should be retained if it is present in the dataset (e.g. ROR, LHD)
+    Spillway width/dam width should be set to null if zero.
+    It should be retained unconverted if it is present in res_df (e.g. ROR, LHD)
+    It should be converted from ft_to_meters if it is joined from nid_df
     """
     nid_df = pd.DataFrame(
         data={
-            "nidid": ["A1"],
-            "dam_name": ["dam_1"],
-            "latitude": [33.79988],
-            "longitude": [-114.80959],
-            "spillway_width": [0],
+            "nidid": ["A1", "A2"],
+            "dam_name": ["dam_1", "dam_2"],
+            "latitude": [33.79988, 33.9],
+            "longitude": [-114.80959, -114.9],
+            "dam_type": ["Gravity", "Gravity"],
+            "spillway_type": ["Controlled", "Controlled"],
+            "spillway_width": [154.2288, 150.0],
+            "dam_length": [1310.64, 1310.0],
+            "dam_height": [48.768, 30.0],
+            "structural_height": [48.768, 30.0],
+            "hydraulic_height": [43.891200000000005, 39.0],
+            "nid_height": [48.768, 30.0],
+            "surface_area": [9700.0, 9700.0],
+            "wb_areasqkm": [
+                220927.0,
+                220927.0,
+            ],
+            "nid_storage": [500000.0, 500000.0],
+            "normal_storage": [331000.0, 331000.0],
+            "max_storage": [500000.0, 500000.0],
+            "hazard": ["High", "High"],
+            "purpose": ["Hydroelectric", "Hydroelectric"],
         }
     )
     # One NWM lake and one non-NWM lake with different lake_ids. Dam and NID are null for other dam
@@ -958,31 +993,110 @@ def test_join_nid__spillway_width(main_cfg: HFConfig) -> None:
         crs=5070,
         geometry=[
             Point(-1718569.5, 1363475.7),  # NWM lake
-            Point(-1717881.0, 1363177.0),  # non-NWM lake
+            Point(-1717881.0, 1363177.0),  # non-NWM lake with spillway/dam length (meters) (e.g. ROR/LHD)
+            Point(-1723820.15674909, 1375783.4392533072),  # non-NWM lake (ref res) that will be joined to NID
         ],
         data={
-            "lake_id": [1, 2],
-            "attrib_src": ["nwm_lakes.gpkg", None],
-            "dam_id": ["ls-1", None],  # non-NWM has null dam and NID
-            "nid": ["A1", None],
-            "spillway_width": [None, 1],
+            "lake_id": [1, 2, 3],
+            "attrib_src": ["nwm_lakes.gpkg", None, None],
+            "dam_id": ["ls-1", None, "ls-2"],  # non-NWM has null dam and NID
+            "nid": [None, None, "A2"],  # NWM lake has null NID
+            "spillway_width": [None, 1.0, None],  # non-NWM lakes has length pre-filled out in meters
+            "dam_length": [None, 1310.64, None],  # non-NWM lakes has length pre-filled out in meters
         },
     )
     expected = gpd.GeoDataFrame(
         crs=5070,
         geometry=[
             Point(-1717881.0, 1363177.0),  # non-NWM lake (res_df first)
+            Point(-1723820.15674909, 1375783.4392533072),  # non-NWM lake (ref res) that will be joined to NID
             Point(-1718569.5, 1363475.7),  # NWM lake preserved
         ],
         data={
-            "lake_id": ["2", "1"],
-            "attrib_src": [None, "nwm_lakes.gpkg"],
-            "dam_id": [None, "ls-1"],
-            "nidid": [None, None],
-            "spillway_width_m": [1, np.nan],
+            "lake_id": ["2", "3", "1"],
+            "attrib_src": [None, None, "nwm_lakes.gpkg"],
+            "dam_id": [None, "ls-2", "ls-1"],
+            "nidid": [None, "A2", None],
+            "spillway_width_m": [
+                1.0,
+                (150.0 * FT_TO_M),
+                np.nan,
+            ],  # first is retained as meters, secton is converted ft to m
+            "dam_crest_length_m": [
+                1310.64,
+                (1310.0 * FT_TO_M),
+                np.nan,
+            ],  # first is retained as meters, secton is converted ft to m
         },
     )
 
     gdf = _join_nid(main_cfg, res_df, nid_df)
-    gdf = gdf[["lake_id", "attrib_src", "dam_id", "nidid", "spillway_width_m", "geometry"]].copy()
-    assert_geodataframe_equal(gdf, expected, check_like=True)
+    gdf = gdf[
+        ["lake_id", "attrib_src", "dam_id", "nidid", "spillway_width_m", "dam_crest_length_m", "geometry"]
+    ].copy()
+    assert_geodataframe_equal(gdf, expected)
+
+
+def test_join_nid__spillway_width_zero_to_null(main_cfg: HFConfig) -> None:
+    """Spillway width/dam width should be set to null if zero."""
+    nid_df = pd.DataFrame(
+        data={
+            "nidid": ["A1", "A2"],
+            "dam_name": ["dam_1", "dam_2"],
+            "latitude": [33.79988, 33.9],
+            "longitude": [-114.80959, -114.9],
+            "dam_type": ["Gravity", "Gravity"],
+            "spillway_type": ["Controlled", "Controlled"],
+            "spillway_width": [0, 0],  # zero to nan
+            "dam_length": [0, 0],  # zero to nan
+            "dam_height": [48.768, 30.0],
+            "structural_height": [48.768, 30.0],
+            "hydraulic_height": [43.891200000000005, 39.0],
+            "nid_height": [48.768, 30.0],
+            "surface_area": [9700.0, 9700.0],
+            "wb_areasqkm": [
+                220927.0,
+                220927.0,
+            ],
+            "nid_storage": [500000.0, 500000.0],
+            "normal_storage": [331000.0, 331000.0],
+            "max_storage": [500000.0, 500000.0],
+            "hazard": ["High", "High"],
+            "purpose": ["Hydroelectric", "Hydroelectric"],
+        }
+    )
+    # One NWM lake and one non-NWM lake with different lake_ids. Dam and NID are null for other dam
+    res_df = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1723820.15674909, 1375783.4392533072),  # non-NWM lake (ref res) that will be joined to NID
+        ],
+        data={
+            "lake_id": [3],
+            "attrib_src": [None],
+            "dam_id": ["ls-2"],
+            "nid": ["A2"],
+            "spillway_width": [0.0],  # 0 will be converted to nan
+            "dam_length": [0.0],  # 0 will be converted to nan
+        },
+    )
+    expected = gpd.GeoDataFrame(
+        crs=5070,
+        geometry=[
+            Point(-1723820.15674909, 1375783.4392533072),  # non-NWM lake (ref res) that will be joined to NID
+        ],
+        data={
+            "lake_id": ["3"],
+            "attrib_src": [None],
+            "dam_id": ["ls-2"],
+            "nidid": ["A2"],
+            "spillway_width_m": [np.nan],
+            "dam_crest_length_m": [np.nan],
+        },
+    )
+
+    gdf = _join_nid(main_cfg, res_df, nid_df)
+    gdf = gdf[
+        ["lake_id", "attrib_src", "dam_id", "nidid", "spillway_width_m", "dam_crest_length_m", "geometry"]
+    ].copy()
+    assert_geodataframe_equal(gdf, expected)
