@@ -406,7 +406,7 @@ lakes:
   nwm:
     run: True
     associate_flowpaths: True # this will run the flowpath association
-    improve_placement_ref_res: True # this takes 20-30 minutes. Turn off for speed or if placement not important
+    improve_placement_ref_res: True # this folds reference reservoirs in to match them to NHF and exclude from ref reservoirs
     improve_placement_path: "output/nwm_lakes_improved_placement.gpkg"
     use_cached_improve_placement: False # change to true to skip if you have already built
     path: "input/nwm_lakes_sconus_input.gpkg"
@@ -432,6 +432,7 @@ lakes:
     path: input/usbr_lake_crosswalk.gpkg
     id_field: locId
     lake_id_field: lake_id
+    ref_wb_field: ref_wb_lake
   low_head_dams:
     run: True
     path: input/low_head_dams.gpkg
@@ -439,6 +440,7 @@ lakes:
     layer_point: low_head_dams_point
     ref_wb_field: in_ref_wb
     id_field: lake_id
+    associate_flowpaths: True
   run_of_river:
     run: True
     path: input/run_of_river_dams.gpkg
@@ -468,6 +470,7 @@ lakes:
     flowpath_association_method: "polygon_outlet"
     search_radius_m: 25000.0
     intersection_length_min_m: 3.0
+    associate_flowpaths: True
   nid:
     path: input/NID2019_U.csv
   dem:
