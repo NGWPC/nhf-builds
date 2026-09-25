@@ -3,7 +3,7 @@
 #---------------------------------------------------
 output_dir: data/
 crs: EPSG:5070
-#output_name: "nhf.gpkg" # If not specified, will default to version
+output_name: "nhf_1.3.1.gpkg"
 
 #---------------------------------------------------
 # build process
