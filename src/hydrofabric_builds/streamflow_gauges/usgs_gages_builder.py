@@ -898,6 +898,7 @@ def merge_run_of_river(
     gdf = gpd.read_file(run_of_rivers_path, layer=layer) if layer else gpd.read_file(run_of_rivers_path)
     df_rfc = pd.read_csv(rfc_path)
 
+    # merge RFC locations to RoR
     gdf = gdf.merge(df_rfc[[rfc_id_col, x_col, y_col]], left_on=run_of_rivers_id, right_on=rfc_id_col)
 
     # update status of RFC gages already present
@@ -906,6 +907,8 @@ def merge_run_of_river(
 
     # subset gages that were not included previously
     gdf = gdf.loc[~gdf[rfc_id_col].isin(gages["site_no"]), :].copy()
+
+    # create point geometry from RFC table
     gdf["geometry"] = gpd.points_from_xy(x=gdf[x_col], y=gdf[y_col], crs=rfc_crs)
     gdf = gdf[[run_of_rivers_id, "geometry"]].copy().rename(columns={run_of_rivers_id: "site_no"})
     gdf["status"] = "RFC_run_of_river"

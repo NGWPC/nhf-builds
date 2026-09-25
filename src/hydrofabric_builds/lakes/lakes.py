@@ -21,6 +21,23 @@ from hydrofabric_builds.schemas.hydrofabric import (
 
 logger = logging.getLogger(__name__)
 
+# NID Parameters to be used in _join_nid
+# NID reports every length in feet; the rest of the pipeline works in meters.
+FT_TO_M = 0.3048
+NID_LENGTH_FIELDS_FT = (
+    "structural_height",
+    "dam_height",
+    "hydraulic_height",
+    "nid_height",
+    "dam_length",
+    "spillway_width",
+)
+
+NID_TO_NHF = {
+    "dam_length": "dam_crest_length_m",  # length along the top of the dam, spillway included
+    "spillway_width": "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
+}
+
 
 def _override_great_lakes(
     gdf: gpd.GeoDataFrame,
@@ -227,19 +244,27 @@ def _fold_ref_res_to_nwm_lakes(
     hf_ref: gpd.GeoDataFrame,
     fp: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """Improve NWM lake placement by foldingin reference reservoirs
+    """Find NWM lakes that have a reference reservoir to exclude these reference reservoirs from selection
 
     Match reference reservoirs to NWM lakes based on buffering the outlet flowpath of lake polygon
     If reference reservoir is within max search distance (set in cfg.lakes.nwm.max_refres_search_distance_m),
-    the point geometry will be updated and reference reservoir dam_name, dam_id, and nid ID will be added
-    If there is no reference reservoir, original point geometry will be retained
+    the NWM lake receives the dam_id and nid_id
+    Point geometry is always retained due to problems with duplicate reference reservoirs found
 
     Algorithm:
     1. The flowpath geometry is spatially joined (nearest) to reference reservoirs with
     max search distance (meters)
     2. The closest (minimum distance) reference reservoir in the spatial join is selected.
-    3. The geometry and attributes for the NWM lake are replaced with the reference reservoir
+    3. The NID and dam_id attributes for the NWM lake are replaced with the reference reservoir
     4. fp_id is used to join `hydrosequence` which is used in downstream code
+
+    NOTE:
+    An improved algorithm would use the VFP graph to ensure reference reservoirs are near outlets
+    and avoid duplication of lakes sharing a reference reservoir
+    This function used to change the placement of NWM lakes to the reference reservoir, but these
+    duplicates caused problems creating the nhf_lake_id which uses point geometry to create ID
+    and should be unique
+    Hydrosequence is added here to support downstream work for de-duplication of NWM lakes
 
     Parameters
     ----------
@@ -698,23 +723,6 @@ def _dedup_lake_id(
     return result
 
 
-# NID reports every length in feet; the rest of the pipeline works in meters.
-FT_TO_M = 0.3048
-NID_LENGTH_FIELDS_FT = (
-    "structural_height",
-    "dam_height",
-    "hydraulic_height",
-    "nid_height",
-    "dam_length",
-    "spillway_width",
-)
-
-NID_TO_NHF = {
-    "dam_length": "dam_crest_length_m",  # length along the top of the dam, spillway included
-    "spillway_width": "spillway_width_m",  # width at max design pool; pipe diameter for pipe spillways
-}
-
-
 def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> gpd.GeoDataFrame:
     """Join National Inventory Dams (NID) data to lakes.
 
@@ -844,7 +852,8 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
             )
         ].copy()
 
-        # null NWM nid going forward
+        # null NWM nid going forward to avoid duplication problems
+        # NOTE: Future work could fix duplication issuesand retain NID
         nwm_df["nid"] = None
 
     # Attribute-merge NID onto non-NWM lakes
@@ -993,7 +1002,7 @@ def _create_ids(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
-    """Assert all NWM lakes are present in the final output"""
+    """Assert all NWM lakes are present in the final output. Write missing to output."""
     gdf_nwm_lakes = gpd.read_file(cfg.lakes.nwm.path, layer=cfg.lakes.nwm.layer)
 
     # check that the fields are the same name in NWM as output and cast if needed
@@ -1002,6 +1011,7 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
         gdf_all_lks[cfg.lakes.output_comid_field] = gdf_all_lks[cfg.lakes.output_comid_field].astype(
             pd.StringDtype()
         )
+    # check NWM IDs are in All lakes
     notin = gdf_nwm_lakes.loc[
         ~gdf_nwm_lakes[cfg.lakes.nwm.id_field].isin(gdf_all_lks[cfg.lakes.output_comid_field])
     ]
@@ -1010,10 +1020,9 @@ def _assert_nwm_lakes(cfg: HFConfig, gdf_all_lks: gpd.GeoDataFrame) -> None:
         logger.info(f"All {len(gdf_nwm_lakes[cfg.lakes.nwm.id_field])} NWM lakes included")
     else:
         notin.to_file(cfg.lakes.lakes_path.parent / "missing_lakes.gpkg")
-        # raise ValueError(
-        #     f"{len(notin)} missing NWM lakes found. Wrote missing lakes to {(cfg.lakes.lakes_path.parent / 'missing_lakes.gpkg')}"
-        # )
-        logger.warning(f"{len(notin)}")
+        logger.warning(
+            f"{len(notin)} missing NWM lakes found. Wrote missing lakes to {(cfg.lakes.lakes_path.parent / 'missing_lakes.gpkg')}"
+        )
 
     return
 

@@ -257,7 +257,7 @@ def gage_pipeline(cfg: HFConfig) -> gpd.GeoDataFrame:
         else:
             logger.info(f"gages: 'nid' file not found, skipping: {nid_path}")
 
-        if adhoc_path.exists():
+        if adhoc_path.exists():  # ohio RFC
             gages = merge_adhoc_lakes_gages(
                 gages,
                 adhoc_path=adhoc_path,
