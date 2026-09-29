@@ -290,7 +290,7 @@ def _fold_ref_res_to_nwm_lakes(
         return nwm_lakes_pt
 
     elif cfg.lakes.nwm.improve_placement_ref_res and not ref_res.empty:
-        logger.info("Matching NWM lakes with reference reservoirs to remove them from being duplicated.")
+        logger.info("Matching NWM lakes with reference reservoirs to remove them if duplicated.")
         ref_res = ref_res.to_crs(cfg.crs)
         max_distance = cfg.lakes.nwm.max_refres_search_distance_m
         nwm_lakes_pt[["dam_name", "dam_id", "nid"]] = [None, None, None]
@@ -519,14 +519,19 @@ def _prep_ref_wb(
     gdf_ref_res: gpd.GeoDataFrame,
     gdf_wb_polys: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """Filters adhoc lakes to lake ID only in reference waterbodies
+    """Filters lakes that may have a reference waterbody lake ID
+
+    Considered lake types: Adhoc RFC, USBR, Low-head Dam Inventory, Reference Reservoirs
 
     Merge reference reservoirs data into reference waterbodies (e.g. flowpath IDs, NID, area)
 
     Returns required reference waterbodies with attributes
     """
+    # ref_wb_id: the id column for COMID in reference waterbodies
     ref_wb_id = cfg.lakes.ref_res.ref_wb_id_col
+    # the name of lake_id in the output
     output_lake_id = cfg.lakes.output_comid_field
+    # columns to retain
     keep_columns = [
         output_lake_id,
         "ref_fab_fp",
@@ -538,9 +543,11 @@ def _prep_ref_wb(
         "geometry",
         "source",
     ]
+    # set source
     gdf_adhoc["source"] = "adhoc"
     gdf_usbr["source"] = "USBR"
     gdf_lhdi["source"] = "low_head_dam"
+    # process each source where keep_field is the field specifying what reservoirs should be kept
     processed_gdf = []
     for (
         gdf,
@@ -575,7 +582,10 @@ def _prep_ref_wb(
 
             # get geometry from ref wb polygons (area in m², convert to km²)
             gdf_wb_polys["LkArea"] = gdf_wb_polys.geometry.area / 1_000_000.0
+            # remove polygon point geometry from original gdf
             gdf.drop(columns=["geometry"], inplace=True)
+            # merge original gdf to get wb polygons, wb ID, and area
+            # after meging drop the ref wb version of original ID field
             gdf = gdf.merge(
                 gdf_wb_polys[[cfg.lakes.ref_wb.id_field, "LkArea", "geometry"]],
                 left_on=cfg.lakes.ref_wb.output_id_field,
@@ -583,13 +593,16 @@ def _prep_ref_wb(
                 how="inner",
             ).drop(columns=[cfg.lakes.ref_wb.id_field])
 
+            # keep only needed columns
             for col in keep_columns:
                 if col not in gdf.columns:
                     gdf[col] = None
 
             gdf = gdf[keep_columns].reset_index(drop=True).copy()
+            # append to procssed gdf list
             processed_gdf.append(gdf)
 
+    # concat dfs and drop duplicates of lake_id
     output = pd.concat(processed_gdf).reset_index(drop=True)
     output = output.drop_duplicates(subset=[output_lake_id])
     output = gpd.GeoDataFrame(output, crs=cfg.crs)
@@ -686,10 +699,12 @@ def _dedup_lake_id(
     5. NWM lakes
     6. Reference reservoirs
     """
+    # create mask of all duplicated lake_id, return if empty
     dupe_mask = gdf[cfg.lakes.output_comid_field].duplicated(keep=False)
     if not dupe_mask.any():
         return gdf
 
+    # find number of duplicate groups
     n_dupe_groups = gdf.loc[dupe_mask, cfg.lakes.output_comid_field].nunique()
     logger.info(
         f"Deduplicating {cfg.lakes.output_comid_field}: "
@@ -701,7 +716,7 @@ def _dedup_lake_id(
     df = pd.DataFrame(gdf.drop(columns=["geometry"]))
     df["orig_index"] = df.index
     # Dedupe NWM lakes first.  For duplicate lake_id, will take the lowest _hydroseq val
-    # _hydroseq is availale only if _fold_ref_res_to_nwm_lakes is called
+    # _hydroseq is available only if _fold_ref_res_to_nwm_lakes is called
     if "_hydroseq" in df.columns:
         df_nwm = df[df["source"] == "NWM"]
         df_nwm = df_nwm.sort_values(by="_hydroseq")
@@ -734,8 +749,8 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     reservoir records referencing the same dam), only the row whose lake
     geometry is closest to the NID point is retained.
 
-    NWM lakes (attrib_src is set) already have NID info from placement
-    improvement and are excluded from the NID merge logic, then stitched back.
+    NWM lakes (attrib_src is set) are excluded from the NID merge logic,
+    then stitched back.
     """
     # Columns to retain from NID for hydraulics computation
     keep_cols = [
@@ -780,6 +795,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     # Preprocess NID table
     nid_df.columns = [col.lower() for col in nid_df.columns]
 
+    # rename columns and coerce to numeric
     for col in ("spillway_type", "dam_type"):
         if col in nid_df.columns:
             nid_df[col] = nid_df[col].astype("string")
@@ -844,6 +860,8 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         res_df["dam_id"] = res_df["dam_id"].astype(str)
         nwm_df["dam_id"] = nwm_df["dam_id"].astype(str)
 
+        # by casting as string, we have to remove nullvalues
+        # NOTE: this could be improved by re-working datatypes to not cast as string
         res_df = res_df.loc[
             ~(
                 res_df["nid"].isin(set(nwm_df["nid"]) - nulls)
@@ -854,6 +872,8 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
 
         # null NWM nid going forward to avoid duplication problems
         # NOTE: Future work could fix duplication issuesand retain NID
+        # duplication bug was discovered late in development without time to fix
+        # since NWM retains NWM v3 attributes in hydraulics.py, it does not reduce data
         nwm_df["nid"] = None
 
     # Attribute-merge NID onto non-NWM lakes
@@ -864,7 +884,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
         if (f"{col}_x" in res_df.columns) and (f"{col}_y" in res_df.columns):
             res_df[col] = res_df[[f"{col}_x", f"{col}_y"]].bfill(axis=1).iloc[:, 0]
 
-    # Continue to handle nulls as they keep popping back in
+    # Continue to handle nulls as they keep popping back in due to string casting
     res_df = res_df.replace(["<NA>", "None", "nan"], None)
 
     # Dedup: same (dam_id, nid) across different lake_ids -> keep closest to NID point
@@ -872,6 +892,7 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     dam_dupe_mask = (
         res_df.duplicated(subset=dam_dupe_cols, keep=False) & res_df["dam_id"].notna() & res_df["nid"].notna()
     )
+    # if any dupe, separate dupes from non-dupes to process
     if dam_dupe_mask.any():
         logger.info(
             f"Resolving {dam_dupe_mask.sum()} duplicate dam_id/nid rows "
@@ -948,6 +969,24 @@ def _join_nid(cfg: HFConfig, res_df: gpd.GeoDataFrame, nid_df: pd.DataFrame) -> 
     output[cfg.lakes.output_comid_field] = output[cfg.lakes.output_comid_field].astype(str).copy()
 
     return gpd.GeoDataFrame(output, crs=cfg.crs)
+
+
+def _add_nrcs_to_source(nid_df: pd.DataFrame, gdf_all_lks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Use the DAM_DESIGNER column in NID df to append NRCS to source column"""
+    nrcs_df = nid_df[nid_df["DAM_DESIGNER"].str.contains("NRCS", case=False, na=False)]
+    if "nidid" in gdf_all_lks.columns:
+        gdf_all_lks.loc[gdf_all_lks["nidid"].isin(nrcs_df["NIDID"]), "source"] += "_NRCS"
+    return gdf_all_lks
+
+
+def _set_run_of_river_flag(gdf_all_lks: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Set run_of_river flag to True if source is run_of_river or low_head_dam"""
+    gdf_all_lks["run_of_river"] = np.where(
+        (gdf_all_lks["source"] == "run_of_river") | (gdf_all_lks["source"] == "low_head_dam"),
+        True,
+        False,
+    )
+    return gdf_all_lks
 
 
 def _filter_columns(gdf: gpd.GeoDataFrame, fields: list[str]) -> gpd.GeoDataFrame:
