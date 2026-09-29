@@ -207,7 +207,9 @@ def _merge(
     df_all = pd.concat(df_list)
 
     # de-dupe 1: drop true duplicates of lake_id and same res type
-    df_all = df_all.drop_duplicates(subset=[lake_id_field, res_da_field], keep=False)
+    # sort so that the same first is always taken
+    df_all = df_all.sort_values([lake_id_field, res_da_field, gage_id_field], na_position="first")
+    df_all = df_all.drop_duplicates(subset=[lake_id_field, res_da_field], keep="first")
 
     # de-dupe 2: choose the duplicate with greater res_da field (non-level pool) and prefer RFC over all
     # select duplicates (dupe) and non dupelicats (df_all)

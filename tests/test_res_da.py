@@ -269,7 +269,53 @@ def test_merge__index_dupe() -> None:
 
     assert_frame_equal(output, expected)
 
+def test_merge__true_dupe() -> None:
+    """A single case where lake_id and res_id is duplicated and the first is kept"""
+    gdf_lakes = gpd.GeoDataFrame(
+        geometry=[
+            Point(-2035500, 2088294),
+        ],
+        data={
+            "nhf_lake_id": [
+                1254387044031094,
+            ],
+            "lake_id": ["120053476"],
+        },
+    )
 
+    df_res_index = pd.DataFrame.from_records(
+        [
+            {
+                "lake_id": "120053476",
+                "site_no": "usgs-fake",
+                "da_type": 2,
+            },  # duplicated
+        ]
+    )
+    df_adhoc = pd.DataFrame.from_records(
+        [
+            {
+                "lake_id": "120053476",
+                "site_no": "usgs-fake-2",
+                "da_type": 2,
+            },  # duplicated lake_id and da_type
+        ]
+    )
+
+    expected = pd.DataFrame.from_records(
+        [
+            {
+                "nhf_lake_id": 1254387044031094,
+                "lake_id": "120053476",
+                "site_no": "usgs-fake",
+                "da_type": 2,
+            },  # first USGS
+        ]
+    )
+
+    output = _merge(gdf_lakes, df_list=[df_res_index, df_adhoc])
+
+    assert_frame_equal(output, expected)
 def test_read_adhoc() -> None:
     """Read an adhoc with one row and one null row"""
     gdf = gpd.GeoDataFrame(
