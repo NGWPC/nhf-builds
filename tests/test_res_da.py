@@ -269,6 +269,7 @@ def test_merge__index_dupe() -> None:
 
     assert_frame_equal(output, expected)
 
+
 def test_merge__true_dupe() -> None:
     """A single case where lake_id and res_id is duplicated and the first is kept"""
     gdf_lakes = gpd.GeoDataFrame(
@@ -316,6 +317,8 @@ def test_merge__true_dupe() -> None:
     output = _merge(gdf_lakes, df_list=[df_res_index, df_adhoc])
 
     assert_frame_equal(output, expected)
+
+
 def test_read_adhoc() -> None:
     """Read an adhoc with one row and one null row"""
     gdf = gpd.GeoDataFrame(
