@@ -1,15 +1,14 @@
 # hydrofabric-builds
 Building Hydrofabric &amp; Processing Ancillary Data
 
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/hydrofabric.png" alt="hydrofabric" width="40%" height="40%"/>
-
+![Schema](../img/hydrofabric.png)
 # About the Data
 ## Schema
 
 The following schema is the data model for NGWPC hydrofabric datasets produced by this repo.
 
 
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_v1.3.2_schema.png" alt="nhf_v1.3.2_schema.png" width="100%" height="100%"/>
+![Schema](../img/nhf_v1.3.2_schema.png)
 
 ## Flowpaths FACT Table
 
@@ -49,8 +48,7 @@ The `validate_hf` task in the pipeline produces a JSON report called `nhf_{versi
 
 
 ## Visual Diagram
-<img style="display: block; margin-left: auto; margin-right: auto;" src="docs/img/nhf_diagram.png" alt="NHF Diagram" width="100%" height="100%"/>
-
+![Schema](../img/nhf_diagram.png)
 
 # Development Commands
 
@@ -136,3 +134,5 @@ uv run pytest tests/test_graph.py::TestBuildGraphUnit::test_simple_linear_networ
 
 ### Development
 To ensure that hydrofabric-builds follows the specified structure, be sure to install the local dev dependencies and run `uv run pre-commit install`
+
+Note: This project was ended a year early. Documentation and code will reflect this.
