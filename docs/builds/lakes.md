@@ -2,9 +2,10 @@
 
 The NHF lakes layer integrates lakes and reservoir data from multiple sources. Hydraulic parameters for t-route are calculated.
 
+FOR COMPLETE INFORMATION ON FINAL LAKES DATA, SEE DOCUMENT: docs/reports/nhf_lakes.pdf
+
 ## Data sources
 ### Inputs
-s3: `s3://edfs-data/lakes/{domain}/inputs`
 local: `data/{domain}/lakes/input`
 
 #### Lake polygons:

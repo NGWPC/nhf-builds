@@ -11,3 +11,5 @@ The `schemas` folder contains the important `hydrofabric.py` which includes all 
 `src/hydrofabric_builds/config.py` contains the higher level Pydantic model for the overarching hydrofabric config file and the task selection list. Any new pipeline step should be added here.
 
 It is recommended to move all data needed to run the NHF to the `data` folder or use a symlink to do so. The config _should_ work with other root directories, but may require this set throughout different pipeline steps due to divering development over a short timeframe. Keeping the data all in `hydrofabric-builds/data` avoids this issue.
+
+Note that this project was ended a year early: the authors would have liked things in cleaner, finalized states but time did not allow.
