@@ -1,7 +1,5 @@
 # Divide Attributes Build
 
-NOTE: Th
-
 The divide attributes task calculates zonal statistics for divides from a number of rasters.
 
 To run:
